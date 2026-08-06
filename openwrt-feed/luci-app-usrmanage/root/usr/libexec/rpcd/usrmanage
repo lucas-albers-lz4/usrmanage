@@ -20,10 +20,6 @@ read_input() {
 
 json_get() {
 	_key=$1
-	command -v jsonfilter >/dev/null 2>&1 || {
-		printf '{"ok":false,"error":"jsonfilter_required"}\n'
-		exit 1
-	}
 	printf '%s' "$INPUT" | jsonfilter -e "@.${_key}" 2>/dev/null
 }
 
@@ -157,6 +153,10 @@ case "$1" in
 		;;
 	call)
 		METHOD=$2
+		command -v jsonfilter >/dev/null 2>&1 || {
+			printf '{"ok":false,"error":"jsonfilter_required"}\n'
+			exit 1
+		}
 		read_input "$@"
 		case "$METHOD" in
 			list)

@@ -103,6 +103,24 @@ um_validate_src() {
 	esac
 }
 
+# Sanitize a single audit token (no spaces/=/newlines) for log lines.
+um_audit_token() {
+	_tok=$1
+	_fallback=${2:--}
+	case "$_tok" in
+		''|*[!A-Za-z0-9._@:-]*)
+			printf '%s' "$_fallback"
+			return 0
+			;;
+	esac
+	_tlen=${#_tok}
+	if [ "$_tlen" -gt 64 ]; then
+		printf '%s' "$_fallback"
+		return 0
+	fi
+	printf '%s' "$_tok"
+}
+
 um_require_root() {
 	[ "$(id -u)" = "0" ] || um_die "error: manage commands require root"
 }
@@ -481,11 +499,13 @@ um_audit_rotate_if_needed() {
 
 um_audit() {
 	# um_audit <action> <user> <result> [reason] [role]
-	_action=$1
-	_auser=$2
-	_result=$3
-	_reason=${4:-}
-	_role=${5:-}
+	_action=$(um_audit_token "$1" "unknown")
+	_auser=$(um_audit_token "$2" "invalid")
+	_result=$(um_audit_token "$3" "fail")
+	_reason=
+	[ -n "${4:-}" ] && _reason=$(um_audit_token "$4" "")
+	_role=
+	[ -n "${5:-}" ] && _role=$(um_audit_token "$5" "")
 	um_validate_src
 	_actor=$(um_actor_resolve)
 	_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
