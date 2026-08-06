@@ -104,17 +104,28 @@ const PRESET_VALUES = {
 
 function hasWriteAcl() {
 	try {
-		if (typeof L.hasACLScope === 'function')
-			return L.hasACLScope('luci-app-usrmanage', 'write');
+		if (typeof L.hasACLScope === 'function') {
+			const scoped = L.hasACLScope('luci-app-usrmanage', 'write');
+			if (typeof scoped === 'boolean')
+				return scoped;
+		}
 	} catch (e) { /* ignore */ }
 	try {
-		const acls = L.env && L.env.acls;
-		if (acls && acls['luci-app-usrmanage'] && acls['luci-app-usrmanage'].write)
-			return true;
-		if (acls && acls['luci-app-usrmanage'] && !acls['luci-app-usrmanage'].write)
-			return false;
+		const acls = L.env && L.env.acls && L.env.acls['luci-app-usrmanage'];
+		if (acls) {
+			if (acls.write)
+				return true;
+			if (acls.read && !acls.write)
+				return false;
+		}
 	} catch (e2) { /* ignore */ }
-	return true;
+	/* Unknown client ACL shape — caller should fall back to get_policy success. */
+	return null;
+}
+
+/* Omit null/undefined so E() does not stringify them as the text "null". */
+function elChildren(kids) {
+	return (kids || []).filter(function(n) { return n != null; });
 }
 
 /* Surface CLI/rpcd error tokens in notifications (Zen MCR M8). */
@@ -256,7 +267,9 @@ return view.extend({
 		const policyFull = (data[4] && typeof data[4] === 'object' && data[4].min_length != null)
 			? Object.assign({}, PRESET_VALUES.openwrt, data[4])
 			: null;
-		const writeAcl = hasWriteAcl();
+		const writeAclHint = hasWriteAcl();
+		/* Prefer get_policy success as write signal when client ACL APIs are inconclusive (Zen MCR minor). */
+		const writeAcl = (writeAclHint === true) || (writeAclHint !== false && !!policyFull);
 		const manage = writeAcl;
 		const self = this;
 		/* Full policy for checklists; fall back to OpenWrt defaults if get_policy failed but write ACL is present. */
@@ -359,7 +372,7 @@ return view.extend({
 			])
 		]);
 
-		return E('div', { 'class': 'cbi-map' }, [
+		return E('div', { 'class': 'cbi-map' }, elChildren([
 			E('h2', {}, _('User Management')),
 			E('div', { 'class': 'cbi-map-descr' }, [
 				_('Manage local UNIX/SSH accounts on this device. LuCI web logins are configured separately (Administration / ACL).'),
@@ -381,7 +394,7 @@ return view.extend({
 			E('div', { 'class': 'cbi-section' }, eventNodes.length ? eventNodes : [
 				E('em', {}, _('No audit events yet.'))
 			])
-		]);
+		]));
 	},
 
 	togglePolicyEditor: function(wrap, policy) {
@@ -494,7 +507,7 @@ return view.extend({
 									return;
 								}
 								ui.addNotification(null, E('p', {}, _('Password policy saved')), 'info');
-								return self.renderContents();
+								return self.refreshView();
 							}).catch(function() {
 								ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 							});
@@ -517,7 +530,22 @@ return view.extend({
 	},
 
 	handleRefresh: function(ev) {
-		return this.renderContents();
+		return this.refreshView();
+	},
+
+	/* LuCI 24.10 View has no renderContents(); re-run load→render into #view. */
+	refreshView: function() {
+		const self = this;
+		return Promise.resolve(this.load()).then(function(data) {
+			return self.render(data);
+		}).then(function(nodes) {
+			const vp = document.getElementById('view');
+			if (!vp)
+				return;
+			dom.content(vp, nodes);
+			if (typeof self.addFooter === 'function')
+				dom.append(vp, self.addFooter());
+		});
 	},
 
 	handleAdd: function(policy, ev) {
@@ -560,9 +588,11 @@ return view.extend({
 					return;
 				}
 				ui.addNotification(null, E('p', {}, _('User added')), 'info');
-				return self.renderContents();
-			}).catch(function() {
+				return self.refreshView();
+			}).catch(function(err) {
 				ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
+				if (window && window.console)
+					console.error('usrmanage add', err);
 			});
 		});
 
@@ -618,7 +648,7 @@ return view.extend({
 								notifyMutatorFailure(res);
 								return;
 							}
-							return self.renderContents();
+							return self.refreshView();
 						}).catch(function() {
 							ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 						});
@@ -651,7 +681,7 @@ return view.extend({
 					return;
 				}
 				ui.addNotification(null, E('p', {}, _('Password updated')), 'info');
-				return self.renderContents();
+				return self.refreshView();
 			}).catch(function() {
 				ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 			});
@@ -696,7 +726,7 @@ return view.extend({
 								return;
 							}
 							ui.addNotification(null, E('p', {}, _('User removed')), 'info');
-							return self.renderContents();
+							return self.refreshView();
 						}).catch(function() {
 							ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 						});

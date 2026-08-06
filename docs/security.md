@@ -33,6 +33,8 @@ Example (device-side): ensure `logd` / `syslog-ng` / remote relay receives `usrm
 | Audit / syslog | Never contains password material |
 | Policy (factory default) | OpenWrt preset: min length 8, not equal to username. Stricter presets (Standard, Strict) and toggles apply after an operator saves a new policy |
 
+Passwords must be **single-line**. The CLI reads one line via `read -r` from the password fd (or TTY); an embedded newline truncates the value.
+
 Do **not** copy stock `luci setPassword` `echo \| passwd` shell interpolation patterns for new code.
 
 ## Sudo / wheel (intentional)

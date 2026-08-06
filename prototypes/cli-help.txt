@@ -8,7 +8,7 @@ View commands (any user; non-root cannot mutate):
 
 Manage commands (root only):
   add <user> --role readonly|admin [--password-fd N]
-  set-role <user> readonly|admin
+  set-role <user> --role readonly|admin
   passwd <user> [--password-fd N]
   del <user> [--purge-home]
 

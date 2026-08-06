@@ -12,7 +12,7 @@ usrmanage policy [--json] [--full]
 
 # Manage (root)
 usrmanage add <user> --role readonly|admin [--password-fd N] [--json]
-usrmanage set-role <user> readonly|admin [--json]
+usrmanage set-role <user> --role readonly|admin [--json]
 usrmanage passwd <user> [--password-fd N] [--json]
 usrmanage del <user> [--purge-home] [--json]
 usrmanage set-policy --preset openwrt|standard|strict|custom [options] [--json]
@@ -50,6 +50,8 @@ With `--json` (and all LuCI mutator calls), denials and failures print a structu
 ```
 
 The `error` field is the CLI token after the `error: ` prefix (no passwords). rpcd always returns that object as the ubus reply (CLI exit status is not treated as an RPC failure). LuCI notifications show `Failed: <error>`.
+
+Passwords on `--password-fd` / LuCI must be **single-line** (`read -r` stops at the first newline).
 
 Success shapes match [api-shapes.json](../prototype/api-shapes.json) (`ok: true` plus name/role as applicable).
 

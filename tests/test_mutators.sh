@@ -170,7 +170,8 @@ rm -f "$USRMANAGE_STUB_LOG"
 sh "$RPCD" call set_role '{"name":"ops","role":"readonly"}' >/dev/null
 grep -q 'arg1=set-role' "$USRMANAGE_STUB_LOG" && ok "rpcd set_role → set-role" || bad "rpcd set_role cmd"
 grep -q 'arg2=ops' "$USRMANAGE_STUB_LOG" && ok "rpcd set_role name" || bad "rpcd set_role name"
-grep -q 'arg3=readonly' "$USRMANAGE_STUB_LOG" && ok "rpcd set_role role" || bad "rpcd set_role role"
+grep -q 'arg3=--role' "$USRMANAGE_STUB_LOG" && ok "rpcd set_role --role" || bad "rpcd set_role --role: $(cat "$USRMANAGE_STUB_LOG")"
+grep -q 'arg4=readonly' "$USRMANAGE_STUB_LOG" && ok "rpcd set_role role value" || bad "rpcd set_role role value"
 
 rm -f "$USRMANAGE_STUB_LOG"
 sh "$RPCD" call add '{"name":"newuser","role":"readonly","password":"LabPass1!"}' >/dev/null

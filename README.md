@@ -30,7 +30,7 @@ echo "src-link usrmanage /absolute/path/to/usrmanage/openwrt-feed" >> feeds.conf
 ```text
 usrmanage list [--json] [--all]
 usrmanage add <user> --role readonly|admin [--password-fd N]
-usrmanage set-role <user> readonly|admin
+usrmanage set-role <user> --role readonly|admin
 usrmanage passwd <user> [--password-fd N]
 usrmanage del <user> [--purge-home]
 usrmanage audit [--json]
