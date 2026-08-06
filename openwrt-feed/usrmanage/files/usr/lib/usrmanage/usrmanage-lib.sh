@@ -841,7 +841,7 @@ um_doctor_checks() {
 	if [ "${1:-}" = "--json" ] || [ "${JSON_OUT:-0}" = "1" ]; then
 		_dok=true
 		[ "$_ok" = "1" ] || _dok=false
-		_pol=$(um_policy_json_full | tr -d '\n')
+		_pol=$(um_policy_json_name | tr -d '\n')
 		if [ -z "$_incomplete" ]; then
 			printf '{"ok":%s,"checks":[%s],"incomplete":[],"policy":%s}\n' "$_dok" "$_json_checks" "$_pol"
 		else

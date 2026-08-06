@@ -31,8 +31,13 @@ ok "usrmanage installed"
 # Ensure account tools exist (pulled by package deps after 0.1.0-r2; install if missing).
 if ! ssh_guest 'command -v useradd >/dev/null 2>&1'; then
 	echo "→ installing shadow account tools (guest missing useradd)" >&2
-	ssh_guest 'opkg install shadow-useradd shadow-userdel shadow-usermod shadow-chpasswd shadow-gpasswd' \
-		|| die "could not install shadow-* account tools"
+	if ssh_guest 'command -v apk >/dev/null 2>&1'; then
+		ssh_guest 'apk add shadow-useradd shadow-userdel shadow-usermod shadow-chpasswd shadow-gpasswd' \
+			|| die "could not install shadow-* account tools (apk)"
+	else
+		ssh_guest 'opkg install shadow-useradd shadow-userdel shadow-usermod shadow-chpasswd shadow-gpasswd' \
+			|| die "could not install shadow-* account tools (opkg)"
+	fi
 fi
 
 ssh_guest 'rm -f /etc/usrmanage/incomplete'
