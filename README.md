@@ -62,6 +62,22 @@ usrmanage doctor
 ./scripts/smoke-host.sh
 ```
 
+## QEMU lab (x86_64)
+
+Place an OpenWrt combined ext4 image at `lab/images/openwrt-x86-64-24.10.5.img`, then:
+
+```sh
+sudo OWRT_IMG=lab/images/openwrt-x86-64-24.10.5.img ./scripts/qemu-lab-prepare-image.sh
+./scripts/validate-feed-smoke.sh --version 24.10
+# or stepwise:
+#   OWRT_QEMU_DAEMON=1 OWRT_RELEASE=24.10.5 ./scripts/run-openwrt-x86-qemu.sh
+#   ./scripts/qemu-wait-guest.sh
+#   ./scripts/qemu-install-from-feed.sh --version 24.10
+./scripts/run-openwrt-x86-qemu.sh --stop
+```
+
+SSH `ssh -p 2222 root@localhost` · LuCI http://localhost:8080/cgi-bin/luci/
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).

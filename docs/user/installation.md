@@ -9,6 +9,11 @@ Install both:
 - `usrmanage` (CLI)
 - `luci-app-usrmanage` (web UI)
 
+`usrmanage` depends on `sudo` and the `shadow-useradd` / `shadow-userdel` /
+`shadow-usermod` / `shadow-chpasswd` / `shadow-gpasswd` packages (stock images
+often omit BusyBox account applets). `opkg` / `apk` pull these automatically
+from the OpenWrt base feeds.
+
 Then:
 
 ```sh

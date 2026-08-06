@@ -1,0 +1,8 @@
+config usrmanage 'policy'
+	option preset 'openwrt'
+	option min_length '8'
+	option reject_username '1'
+	option require_lower '0'
+	option require_upper '0'
+	option require_digit '0'
+	option require_special '0'

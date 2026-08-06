@@ -9,20 +9,50 @@ const callList = rpc.declare({
 	object: 'usrmanage',
 	method: 'list',
 	params: [ 'all' ],
-	expect: { users: [] }
+	expect: { '': { users: [] } }
 });
 
 const callAudit = rpc.declare({
 	object: 'usrmanage',
 	method: 'audit',
 	params: [ 'last' ],
-	expect: { events: [] }
+	expect: { '': { events: [] } }
 });
 
 const callDoctor = rpc.declare({
 	object: 'usrmanage',
 	method: 'doctor',
-	expect: { ok: false, checks: [], incomplete: [] }
+	expect: { '': { ok: true, checks: [], incomplete: [] } }
+});
+
+const callPolicyName = rpc.declare({
+	object: 'usrmanage',
+	method: 'policy',
+	expect: { '': { preset: 'openwrt', label: 'OpenWrt' } }
+});
+
+const callGetPolicy = rpc.declare({
+	object: 'usrmanage',
+	method: 'get_policy',
+	expect: { '': {
+		preset: 'openwrt',
+		label: 'OpenWrt',
+		min_length: 8,
+		reject_username: true,
+		require_lower: false,
+		require_upper: false,
+		require_digit: false,
+		require_special: false
+	} }
+});
+
+const callSetPolicy = rpc.declare({
+	object: 'usrmanage',
+	method: 'set_policy',
+	params: [
+		'preset', 'min_length', 'reject_username',
+		'require_lower', 'require_upper', 'require_digit', 'require_special'
+	]
 });
 
 const callAdd = rpc.declare({
@@ -49,8 +79,25 @@ const callPasswd = rpc.declare({
 	params: [ 'name', 'password' ]
 });
 
+const PRESET_VALUES = {
+	openwrt: {
+		preset: 'openwrt', label: 'OpenWrt', min_length: 8,
+		reject_username: true, require_lower: false, require_upper: false,
+		require_digit: false, require_special: false
+	},
+	standard: {
+		preset: 'standard', label: 'Standard', min_length: 10,
+		reject_username: true, require_lower: true, require_upper: true,
+		require_digit: true, require_special: false
+	},
+	strict: {
+		preset: 'strict', label: 'Strict', min_length: 12,
+		reject_username: true, require_lower: true, require_upper: true,
+		require_digit: true, require_special: true
+	}
+};
+
 function hasWriteAcl() {
-	/* Server ACL is authoritative; UI only hides controls when we can detect write. */
 	try {
 		if (typeof L.hasACLScope === 'function')
 			return L.hasACLScope('luci-app-usrmanage', 'write');
@@ -62,8 +109,107 @@ function hasWriteAcl() {
 		if (acls && acls['luci-app-usrmanage'] && !acls['luci-app-usrmanage'].write)
 			return false;
 	} catch (e2) { /* ignore */ }
-	/* Unknown ACL shape: show controls; write RPC still denied without write ACL. */
 	return true;
+}
+
+function detectPreset(p) {
+	const keys = [ 'openwrt', 'standard', 'strict' ];
+	for (let i = 0; i < keys.length; i++) {
+		const ref = PRESET_VALUES[keys[i]];
+		if (Number(p.min_length) === ref.min_length
+			&& !!p.reject_username === ref.reject_username
+			&& !!p.require_lower === ref.require_lower
+			&& !!p.require_upper === ref.require_upper
+			&& !!p.require_digit === ref.require_digit
+			&& !!p.require_special === ref.require_special)
+			return keys[i];
+	}
+	return 'custom';
+}
+
+function passwordChecks(policy, name, pass, pass2) {
+	const minLen = Number(policy.min_length) || 8;
+	const items = [];
+	items.push({
+		id: 'min_length',
+		ok: pass.length >= minLen,
+		label: _('At least %d characters').format(minLen)
+	});
+	if (policy.reject_username) {
+		items.push({
+			id: 'reject_username',
+			ok: !name || pass !== name,
+			label: _('Different from username')
+		});
+	}
+	if (policy.require_lower) {
+		items.push({
+			id: 'require_lower',
+			ok: /[a-z]/.test(pass),
+			label: _('Contains a lowercase letter')
+		});
+	}
+	if (policy.require_upper) {
+		items.push({
+			id: 'require_upper',
+			ok: /[A-Z]/.test(pass),
+			label: _('Contains an uppercase letter')
+		});
+	}
+	if (policy.require_digit) {
+		items.push({
+			id: 'require_digit',
+			ok: /[0-9]/.test(pass),
+			label: _('Contains a digit')
+		});
+	}
+	if (policy.require_special) {
+		items.push({
+			id: 'require_special',
+			ok: /[^A-Za-z0-9]/.test(pass),
+			label: _('Contains a special character')
+		});
+	}
+	items.push({
+		id: 'confirm',
+		ok: pass.length > 0 && pass === pass2,
+		label: _('Confirmation matches')
+	});
+	return items;
+}
+
+function passwordPolicyOk(policy, name, pass, pass2) {
+	return passwordChecks(policy, name, pass, pass2).every(function(c) { return c.ok; });
+}
+
+function buildPasswordPolicyUI(policy, getNameFn, passInput, pass2Input, submitBtn) {
+	const label = policy.label || policy.preset || 'OpenWrt';
+	const summary = E('p', { 'class': 'cbi-value-description' }, [
+		_('Password policy: %s').format(label)
+	]);
+	const list = E('ul', { 'class': 'cbi-value-description' });
+
+	const refresh = function() {
+		const name = getNameFn();
+		const pass = passInput.value || '';
+		const pass2 = pass2Input.value || '';
+		const checks = passwordChecks(policy, name, pass, pass2);
+		dom.content(list, checks.map(function(c) {
+			return E('li', {}, (c.ok ? '✓ ' : '○ ') + c.label);
+		}));
+		const ok = checks.every(function(c) { return c.ok; });
+		submitBtn.disabled = !ok;
+		if (ok)
+			submitBtn.classList.remove('cbi-button-disabled');
+		else
+			submitBtn.classList.add('cbi-button-disabled');
+	};
+
+	passInput.addEventListener('input', refresh);
+	pass2Input.addEventListener('input', refresh);
+
+	refresh();
+	return E('div', { 'class': 'cbi-section' }, [ summary, list ]);
 }
 
 return view.extend({
@@ -72,27 +218,48 @@ return view.extend({
 	handleReset: null,
 
 	load: function() {
-		return Promise.all([
+		const manage = hasWriteAcl();
+		const jobs = [
 			callList(false),
 			callAudit(50),
-			callDoctor()
-		]);
+			callDoctor(),
+			manage ? callGetPolicy() : callPolicyName()
+		];
+		return Promise.all(jobs);
 	},
 
 	render: function(data) {
 		const users = (data[0] && data[0].users) ? data[0].users : [];
 		const events = (data[1] && data[1].events) ? data[1].events : [];
-		const doctor = data[2] || { ok: true, checks: [], incomplete: [] };
+		const doctor = (data[2] && typeof data[2] === 'object')
+			? data[2]
+			: { ok: true, checks: [], incomplete: [] };
+		const policyIn = (data[3] && typeof data[3] === 'object') ? data[3] : { preset: 'openwrt', label: 'OpenWrt' };
 		const manage = hasWriteAcl();
 		const self = this;
+		const fullPolicy = manage ? Object.assign({}, PRESET_VALUES.openwrt, policyIn) : null;
 
-		const doctorBanner = [];
-		if (!doctor.ok) {
-			doctorBanner.push(E('div', { 'class': 'alert-message warning' }, [
-				_('User management self-check reported problems. Mutators may be fail-closed until sudo/wheel/registry are healthy.'),
-				E('pre', {}, JSON.stringify(doctor, null, 2))
-			]));
+		const doctorBanner = (doctor.ok !== false) ? null : E('div', { 'class': 'alert-message warning' }, [
+			_('User management self-check reported problems. Mutators may be fail-closed until sudo/wheel/registry are healthy.'),
+			E('pre', {}, JSON.stringify(doctor, null, 2))
+		]);
+
+		const policyLabel = policyIn.label || 'OpenWrt';
+		const editorWrap = E('div', { 'class': 'cbi-section', 'hidden': 'hidden' });
+		const stripKids = [
+			E('span', {}, _('Password policy: %s').format(policyLabel))
+		];
+		if (manage) {
+			stripKids.push(' ');
+			stripKids.push(E('button', {
+				'class': 'btn cbi-button',
+				'click': function(ev) {
+					ev.preventDefault();
+					self.togglePolicyEditor(editorWrap, fullPolicy);
+				}
+			}, _('Configure')));
 		}
+		const policyStrip = E('div', { 'class': 'cbi-section-node' }, stripKids);
 
 		const rows = users.map(function(u) {
 			const actions = [];
@@ -104,7 +271,7 @@ return view.extend({
 				actions.push(' ');
 				actions.push(E('button', {
 					'class': 'btn cbi-button',
-					'click': ui.createHandlerFn(self, 'handlePasswd', u.name)
+					'click': ui.createHandlerFn(self, 'handlePasswd', u.name, fullPolicy)
 				}, _('Password')));
 				actions.push(' ');
 				actions.push(E('button', {
@@ -143,13 +310,25 @@ return view.extend({
 			return E('div', { 'class': 'cbi-value-description' }, line);
 		});
 
-		const toolbar = [];
-		if (manage) {
-			toolbar.push(E('button', {
-				'class': 'btn cbi-button cbi-button-add',
-				'click': ui.createHandlerFn(self, 'handleAdd')
-			}, _('Add user')));
-		}
+		const addBtn = manage ? E('button', {
+			'class': 'btn cbi-button cbi-button-add',
+			'click': ui.createHandlerFn(self, 'handleAdd', fullPolicy)
+		}, _('Add user')) : null;
+
+		const tableBody = [
+			E('tr', { 'class': 'tr table-titles' }, [
+				E('th', { 'class': 'th' }, _('Username')),
+				E('th', { 'class': 'th' }, _('UID')),
+				E('th', { 'class': 'th' }, _('Role')),
+				E('th', { 'class': 'th' }, _('Shell')),
+				E('th', { 'class': 'th' }, _('Managed')),
+				E('th', { 'class': 'th' }, _('Actions'))
+			])
+		].concat(rows.length ? rows : [
+			E('tr', { 'class': 'tr' }, [
+				E('td', { 'class': 'td', 'colspan': 6 }, _('No managed users yet.'))
+			])
+		]);
 
 		return E('div', { 'class': 'cbi-map' }, [
 			E('h2', {}, _('User Management')),
@@ -159,21 +338,10 @@ return view.extend({
 				_('Admin role grants wheel + sudo (full root after password). Audit log is operational (local + syslog), not compliance-grade evidence.')
 			]),
 			doctorBanner,
-			E('div', { 'class': 'cbi-section-node' }, toolbar),
-			E('table', { 'class': 'table' }, [
-				E('tr', { 'class': 'tr table-titles' }, [
-					E('th', { 'class': 'th' }, _('Username')),
-					E('th', { 'class': 'th' }, _('UID')),
-					E('th', { 'class': 'th' }, _('Role')),
-					E('th', { 'class': 'th' }, _('Shell')),
-					E('th', { 'class': 'th' }, _('Managed')),
-					E('th', { 'class': 'th' }, _('Actions'))
-				])
-			].concat(rows.length ? rows : [
-				E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td', 'colspan': 6 }, _('No managed users yet.'))
-				])
-			])),
+			policyStrip,
+			editorWrap,
+			addBtn ? E('div', { 'class': 'cbi-section-node' }, [ addBtn ]) : null,
+			E('table', { 'class': 'table' }, tableBody),
 			E('h3', {}, _('Audit log')),
 			E('div', { 'class': 'cbi-section-node' }, [
 				E('button', {
@@ -187,11 +355,143 @@ return view.extend({
 		]);
 	},
 
+	togglePolicyEditor: function(wrap, policy) {
+		if (wrap.getAttribute('data-open') === '1') {
+			dom.content(wrap, []);
+			wrap.setAttribute('hidden', 'hidden');
+			wrap.removeAttribute('data-open');
+			return;
+		}
+		const self = this;
+		const draft = Object.assign({}, policy);
+		const presetSelect = E('select', { 'class': 'cbi-input-select' }, [
+			E('option', { 'value': 'openwrt' }, _('OpenWrt (default)')),
+			E('option', { 'value': 'standard' }, _('Standard')),
+			E('option', { 'value': 'strict' }, _('Strict')),
+			E('option', { 'value': 'custom' }, _('Custom'))
+		]);
+		presetSelect.value = draft.preset || detectPreset(draft);
+
+		const minSelect = E('select', { 'class': 'cbi-input-select' },
+			[ 8, 10, 12, 14, 16 ].map(function(n) {
+				return E('option', { 'value': String(n) }, String(n));
+			})
+		);
+		minSelect.value = String(draft.min_length || 8);
+
+		const mkCheck = function(key, title) {
+			const input = E('input', { 'type': 'checkbox' });
+			input.checked = !!draft[key];
+			input.addEventListener('change', function() {
+				draft[key] = input.checked;
+				draft.preset = 'custom';
+				presetSelect.value = 'custom';
+			});
+			return E('label', {}, [ input, ' ', title ]);
+		};
+
+		const rej = mkCheck('reject_username', _('Reject password equal to username'));
+		const low = mkCheck('require_lower', _('Require lowercase'));
+		const up = mkCheck('require_upper', _('Require uppercase'));
+		const dig = mkCheck('require_digit', _('Require digit'));
+		const spe = mkCheck('require_special', _('Require special character'));
+
+		minSelect.addEventListener('change', function() {
+			draft.min_length = Number(minSelect.value);
+			draft.preset = 'custom';
+			presetSelect.value = 'custom';
+		});
+
+		presetSelect.addEventListener('change', function() {
+			const v = presetSelect.value;
+			if (v !== 'custom' && PRESET_VALUES[v]) {
+				Object.assign(draft, PRESET_VALUES[v]);
+				minSelect.value = String(draft.min_length);
+				rej.querySelector('input').checked = draft.reject_username;
+				low.querySelector('input').checked = draft.require_lower;
+				up.querySelector('input').checked = draft.require_upper;
+				dig.querySelector('input').checked = draft.require_digit;
+				spe.querySelector('input').checked = draft.require_special;
+			}
+			else {
+				draft.preset = 'custom';
+			}
+		});
+
+		dom.content(wrap, [
+			E('div', { 'class': 'cbi-section' }, [
+				E('p', { 'class': 'cbi-value-description' },
+					_('Defaults match OpenWrt. Choose a stricter preset or adjust toggles, then Save.')),
+				E('div', { 'class': 'cbi-value' }, [
+					E('label', { 'class': 'cbi-value-title' }, _('Preset')),
+					E('div', { 'class': 'cbi-value-field' }, presetSelect)
+				]),
+				E('div', { 'class': 'cbi-value' }, [
+					E('label', { 'class': 'cbi-value-title' }, _('Minimum length')),
+					E('div', { 'class': 'cbi-value-field' }, minSelect)
+				]),
+				E('div', { 'class': 'cbi-value' }, [ rej ]),
+				E('div', { 'class': 'cbi-value' }, [ low ]),
+				E('div', { 'class': 'cbi-value' }, [ up ]),
+				E('div', { 'class': 'cbi-value' }, [ dig ]),
+				E('div', { 'class': 'cbi-value' }, [ spe ]),
+				E('div', { 'class': 'cbi-page-actions' }, [
+					E('button', {
+						'class': 'btn cbi-button-save',
+						'click': function() {
+							const preset = presetSelect.value;
+							const payload = preset === 'custom'
+								? {
+									preset: 'custom',
+									min_length: Number(minSelect.value),
+									reject_username: rej.querySelector('input').checked,
+									require_lower: low.querySelector('input').checked,
+									require_upper: up.querySelector('input').checked,
+									require_digit: dig.querySelector('input').checked,
+									require_special: spe.querySelector('input').checked
+								}
+								: Object.assign({}, PRESET_VALUES[preset]);
+							return callSetPolicy(
+								payload.preset,
+								payload.min_length,
+								payload.reject_username,
+								payload.require_lower,
+								payload.require_upper,
+								payload.require_digit,
+								payload.require_special
+							).then(function(res) {
+								if (res && res.ok === false) {
+									ui.addNotification(null, E('p', {}, _('Failed to save policy')), 'danger');
+									return;
+								}
+								ui.addNotification(null, E('p', {}, _('Password policy saved')), 'info');
+								return self.renderContents();
+							}).catch(function() {
+								ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
+							});
+						}
+					}, _('Save')),
+					' ',
+					E('button', {
+						'class': 'btn',
+						'click': function() {
+							dom.content(wrap, []);
+							wrap.setAttribute('hidden', 'hidden');
+							wrap.removeAttribute('data-open');
+						}
+					}, _('Cancel'))
+				])
+			])
+		]);
+		wrap.removeAttribute('hidden');
+		wrap.setAttribute('data-open', '1');
+	},
+
 	handleRefresh: function(ev) {
 		return this.renderContents();
 	},
 
-	handleAdd: function(ev) {
+	handleAdd: function(policy, ev) {
 		const self = this;
 		const nameInput = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'placeholder': _('username') });
 		const roleSelect = E('select', { 'class': 'cbi-input-select' }, [
@@ -200,6 +500,42 @@ return view.extend({
 		]);
 		const passInput = E('input', { 'type': 'password', 'class': 'cbi-input-text', 'autocomplete': 'new-password' });
 		const pass2Input = E('input', { 'type': 'password', 'class': 'cbi-input-text', 'autocomplete': 'new-password' });
+		const addBtn = E('button', { 'class': 'btn cbi-button-positive cbi-button-disabled', 'disabled': 'disabled' }, _('Add'));
+		const policyBox = buildPasswordPolicyUI(policy, function() {
+			return nameInput.value.trim();
+		}, passInput, pass2Input, addBtn);
+
+		nameInput.addEventListener('input', function() {
+			passInput.dispatchEvent(new Event('input'));
+		});
+
+		addBtn.addEventListener('click', function() {
+			const name = nameInput.value.trim();
+			const role = roleSelect.value;
+			const p1 = passInput.value;
+			const p2 = pass2Input.value;
+			if (!name) {
+				ui.addNotification(null, E('p', {}, _('Username required')), 'danger');
+				return;
+			}
+			if (!passwordPolicyOk(policy, name, p1, p2)) {
+				ui.addNotification(null, E('p', {}, _('Password does not meet the current policy')), 'danger');
+				return;
+			}
+			return callAdd(name, role, p1).then(function(res) {
+				passInput.value = '';
+				pass2Input.value = '';
+				ui.hideModal();
+				if (res && res.ok === false) {
+					ui.addNotification(null, E('p', {}, _('Failed: %s').format(res.error || 'error')), 'danger');
+					return;
+				}
+				ui.addNotification(null, E('p', {}, _('User added')), 'info');
+				return self.renderContents();
+			}).catch(function() {
+				ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
+			});
+		});
 
 		ui.showModal(_('Add user'), [
 			E('div', { 'class': 'cbi-map' }, [
@@ -218,48 +554,13 @@ return view.extend({
 				E('div', { 'class': 'cbi-value' }, [
 					E('label', { 'class': 'cbi-value-title' }, _('Confirm')),
 					E('div', { 'class': 'cbi-value-field' }, pass2Input)
-				])
+				]),
+				policyBox
 			]),
 			E('div', { 'class': 'right' }, [
-				E('button', {
-					'class': 'btn',
-					'click': ui.hideModal
-				}, _('Cancel')),
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
 				' ',
-				E('button', {
-					'class': 'btn cbi-button-positive',
-					'click': function() {
-						const name = nameInput.value.trim();
-						const role = roleSelect.value;
-						const p1 = passInput.value;
-						const p2 = pass2Input.value;
-						if (!name) {
-							ui.addNotification(null, E('p', {}, _('Username required')), 'danger');
-							return;
-						}
-						if (p1 !== p2) {
-							ui.addNotification(null, E('p', {}, _('Passwords do not match')), 'danger');
-							return;
-						}
-						if (p1.length < 8 || p1 === name) {
-							ui.addNotification(null, E('p', {}, _('Password must be at least 8 characters and not equal to the username')), 'danger');
-							return;
-						}
-						return callAdd(name, role, p1).then(function(res) {
-							passInput.value = '';
-							pass2Input.value = '';
-							ui.hideModal();
-							if (res && res.ok === false) {
-								ui.addNotification(null, E('p', {}, _('Failed: %s').format(res.error || 'error')), 'danger');
-								return;
-							}
-							ui.addNotification(null, E('p', {}, _('User added')), 'info');
-							return self.renderContents();
-						}).catch(function(err) {
-							ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
-						});
-					}
-				}, _('Add'))
+				addBtn
 			])
 		]);
 	},
@@ -296,10 +597,32 @@ return view.extend({
 		]);
 	},
 
-	handlePasswd: function(name, ev) {
+	handlePasswd: function(name, policy, ev) {
 		const self = this;
 		const passInput = E('input', { 'type': 'password', 'class': 'cbi-input-text', 'autocomplete': 'new-password' });
 		const pass2Input = E('input', { 'type': 'password', 'class': 'cbi-input-text', 'autocomplete': 'new-password' });
+		const changeBtn = E('button', { 'class': 'btn cbi-button-positive cbi-button-disabled', 'disabled': 'disabled' }, _('Change'));
+		const policyBox = buildPasswordPolicyUI(policy, function() { return name; }, passInput, pass2Input, changeBtn);
+
+		changeBtn.addEventListener('click', function() {
+			const p1 = passInput.value;
+			const p2 = pass2Input.value;
+			if (!passwordPolicyOk(policy, name, p1, p2)) {
+				ui.addNotification(null, E('p', {}, _('Password does not meet the current policy')), 'danger');
+				return;
+			}
+			return callPasswd(name, p1).then(function(res) {
+				passInput.value = '';
+				pass2Input.value = '';
+				ui.hideModal();
+				if (res && res.ok === false) {
+					ui.addNotification(null, E('p', {}, _('Failed: %s').format(res.error || 'error')), 'danger');
+					return;
+				}
+				ui.addNotification(null, E('p', {}, _('Password updated')), 'info');
+				return self.renderContents();
+			});
+		});
 
 		ui.showModal(_('Change password: %s').format(name), [
 			E('p', {}, _('Use HTTPS in hardened deployments. The password is not written to the audit log.')),
@@ -311,35 +634,11 @@ return view.extend({
 				E('label', { 'class': 'cbi-value-title' }, _('Confirm')),
 				E('div', { 'class': 'cbi-value-field' }, pass2Input)
 			]),
+			policyBox,
 			E('div', { 'class': 'right' }, [
 				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
 				' ',
-				E('button', {
-					'class': 'btn cbi-button-positive',
-					'click': function() {
-						const p1 = passInput.value;
-						const p2 = pass2Input.value;
-						if (p1 !== p2) {
-							ui.addNotification(null, E('p', {}, _('Passwords do not match')), 'danger');
-							return;
-						}
-						if (p1.length < 8 || p1 === name) {
-							ui.addNotification(null, E('p', {}, _('Password policy failed')), 'danger');
-							return;
-						}
-						return callPasswd(name, p1).then(function(res) {
-							passInput.value = '';
-							pass2Input.value = '';
-							ui.hideModal();
-							if (res && res.ok === false) {
-								ui.addNotification(null, E('p', {}, _('Failed: %s').format(res.error || 'error')), 'danger');
-								return;
-							}
-							ui.addNotification(null, E('p', {}, _('Password updated')), 'info');
-							return self.renderContents();
-						});
-					}
-				}, _('Change'))
+				changeBtn
 			])
 		]);
 	},

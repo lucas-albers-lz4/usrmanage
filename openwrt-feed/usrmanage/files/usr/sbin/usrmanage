@@ -42,12 +42,14 @@ View:
   show <user> [--json]
   audit [--json] [--last N]
   doctor [--json]
+  policy [--json] [--full]
 
 Manage (root):
   add <user> --role readonly|admin [--password-fd N] [--json]
   set-role <user> readonly|admin [--json]
   passwd <user> [--password-fd N] [--json]
   del <user> [--purge-home] [--json]
+  set-policy --preset openwrt|standard|strict|custom [options] [--json]
 
 Environment:
   USRMANAGE_ACTOR   Override audit actor (LuCI sets this)
@@ -65,6 +67,14 @@ LAST=50
 ALL=0
 POS1=
 POS2=
+POLICY_FULL=0
+SET_PRESET=
+SET_MIN=
+SET_REJ=
+SET_LOW=
+SET_UP=
+SET_DIG=
+SET_SPE=
 
 [ "$#" -ge 1 ] || { usage; exit 1; }
 CMD=$1
@@ -105,6 +115,45 @@ while [ "$#" -gt 0 ]; do
 		--last)
 			[ "$#" -ge 2 ] || um_die "error: --last needs a number"
 			LAST=$2
+			shift 2
+			;;
+		--full)
+			POLICY_FULL=1
+			shift
+			;;
+		--preset)
+			[ "$#" -ge 2 ] || um_die "error: --preset needs a value"
+			SET_PRESET=$2
+			shift 2
+			;;
+		--min-length)
+			[ "$#" -ge 2 ] || um_die "error: --min-length needs a value"
+			SET_MIN=$2
+			shift 2
+			;;
+		--reject-username)
+			[ "$#" -ge 2 ] || um_die "error: --reject-username needs 0|1"
+			SET_REJ=$2
+			shift 2
+			;;
+		--require-lower)
+			[ "$#" -ge 2 ] || um_die "error: --require-lower needs 0|1"
+			SET_LOW=$2
+			shift 2
+			;;
+		--require-upper)
+			[ "$#" -ge 2 ] || um_die "error: --require-upper needs 0|1"
+			SET_UP=$2
+			shift 2
+			;;
+		--require-digit)
+			[ "$#" -ge 2 ] || um_die "error: --require-digit needs 0|1"
+			SET_DIG=$2
+			shift 2
+			;;
+		--require-special)
+			[ "$#" -ge 2 ] || um_die "error: --require-special needs 0|1"
+			SET_SPE=$2
 			shift 2
 			;;
 		--actor)
@@ -166,6 +215,35 @@ case "$CMD" in
 			um_doctor_checks --json || true
 		else
 			um_doctor_checks || true
+		fi
+		;;
+	policy)
+		if [ "$JSON_OUT" = "1" ]; then
+			if [ "$POLICY_FULL" = "1" ]; then
+				um_policy_json_full
+			else
+				um_policy_json_name
+			fi
+		else
+			um_policy_load
+			printf 'preset=%s label=%s min_length=%s\n' \
+				"$UM_POL_PRESET" "$(um_policy_label "$UM_POL_PRESET")" "$UM_POL_MIN_LENGTH"
+		fi
+		;;
+	set-policy)
+		um_require_root
+		[ -n "$SET_PRESET" ] || um_die "usage: usrmanage set-policy --preset openwrt|standard|strict|custom ..."
+		if [ "$SET_PRESET" = "custom" ]; then
+			um_policy_set_fields custom "$SET_MIN" "$SET_REJ" "$SET_LOW" "$SET_UP" "$SET_DIG" "$SET_SPE" \
+				|| um_die "error: invalid_policy"
+		else
+			um_policy_set_fields "$SET_PRESET" || um_die "error: invalid_policy"
+		fi
+		um_policy_save || um_die "error: policy_save_failed"
+		if [ "$JSON_OUT" = "1" ]; then
+			um_policy_json_full
+		else
+			printf 'ok: policy preset=%s\n' "$UM_POL_PRESET"
 		fi
 		;;
 	add)

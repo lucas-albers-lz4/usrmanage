@@ -23,8 +23,8 @@ Usrmanage does **not** auto-create LuCI logins. Use **System → Administration*
    - Readonly web user → **read** only
    - Admin web user → **read + write**
 
-## Security notes
+## Password policy
 
-- Prefer HTTPS for password changes ([security.md](../security.md)).
-- Audit log is operational, not compliance evidence.
-- Do not grant session write access to `/etc/shadow` or sudoers files directly.
+Factory default is the **OpenWrt** preset (minimum 8 characters; password must not equal the username). Stricter presets (**Standard**, **Strict**) and individual toggles apply only after an operator opens **Configure** on User Management and clicks **Save**.
+
+Read-only LuCI sessions see the policy **name** only. Write sessions see the full editor and a live checklist in Add / Change password dialogs.

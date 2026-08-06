@@ -36,11 +36,9 @@ json_escape() {
 	}'
 }
 
-# Read ubus call JSON from stdin (rpcd convention for call).
 read_input() {
 	INPUT=
 	if [ -n "$3" ]; then
-		# Some rpcd versions pass JSON as $3
 		INPUT=$3
 	else
 		INPUT=$(cat)
@@ -48,12 +46,10 @@ read_input() {
 }
 
 json_get() {
-	# json_get <key> — from INPUT using jsonfilter if available
 	_key=$1
 	if command -v jsonfilter >/dev/null 2>&1; then
 		printf '%s' "$INPUT" | jsonfilter -e "@.${_key}" 2>/dev/null
 	else
-		# Minimal fallback: not for passwords with special chars in production
 		printf '%s' "$INPUT" | sed -n "s/.*\"${_key}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n1
 	fi
 }
@@ -67,8 +63,13 @@ json_get_bool() {
 	esac
 }
 
+json_get_num() {
+	_key=$1
+	_v=$(json_get "$_key")
+	printf '%s' "$_v"
+}
+
 session_actor() {
-	# Best-effort: UBUS_CALLER / environment from rpcd; never invent root.
 	if [ -n "${USRMANAGE_ACTOR:-}" ]; then
 		printf '%s' "$USRMANAGE_ACTOR"
 		return 0
@@ -77,7 +78,6 @@ session_actor() {
 		printf '%s' "$RPC_SESSION_USERNAME"
 		return 0
 	fi
-	# Try session object if session id present in env
 	if [ -n "${RPC_SESSION:-}" ] && command -v ubus >/dev/null 2>&1; then
 		_u=$(ubus call session get "{\"ubus_rpc_session\":\"${RPC_SESSION}\"}" 2>/dev/null \
 			| jsonfilter -e '@.values.username' 2>/dev/null) || _u=
@@ -96,7 +96,6 @@ run_view() {
 }
 
 run_manage_password() {
-	# Args after password on stdin to CLI via --password-fd 0
 	_name=$1
 	_role=$2
 	_pass=$(json_get password)
@@ -105,7 +104,6 @@ run_manage_password() {
 		printf '{"ok":false,"error":"password_required"}\n'
 		return 0
 	fi
-	# Pass password on stdin to usrmanage; never put in argv
 	printf '%s\n' "$_pass" | USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
 		"$USRMANAGE_BIN" add "$_name" --role "$_role" --password-fd 0 --json
 	_pass=
@@ -124,6 +122,37 @@ run_passwd() {
 	_pass=
 }
 
+run_set_policy() {
+	_preset=$(json_get preset)
+	_min=$(json_get_num min_length)
+	_rej=$(json_get_bool reject_username)
+	_low=$(json_get_bool require_lower)
+	_up=$(json_get_bool require_upper)
+	_dig=$(json_get_bool require_digit)
+	_spe=$(json_get_bool require_special)
+	_actor=$(session_actor)
+	case "$_preset" in
+		openwrt|standard|strict)
+			USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
+				"$USRMANAGE_BIN" set-policy --preset "$_preset" --json
+			;;
+		custom)
+			USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
+				"$USRMANAGE_BIN" set-policy --preset custom \
+				--min-length "$_min" \
+				--reject-username "$_rej" \
+				--require-lower "$_low" \
+				--require-upper "$_up" \
+				--require-digit "$_dig" \
+				--require-special "$_spe" \
+				--json
+			;;
+		*)
+			printf '{"ok":false,"error":"invalid_preset"}\n'
+			;;
+	esac
+}
+
 case "$1" in
 	list)
 		echo '{'
@@ -131,6 +160,9 @@ case "$1" in
 		echo '  "show": { "name": "" },'
 		echo '  "audit": { "last": 50 },'
 		echo '  "doctor": {},'
+		echo '  "policy": {},'
+		echo '  "get_policy": {},'
+		echo '  "set_policy": { "preset": "", "min_length": 8, "reject_username": true, "require_lower": false, "require_upper": false, "require_digit": false, "require_special": false },'
 		echo '  "add": { "name": "", "role": "", "password": "" },'
 		echo '  "del": { "name": "", "purge_home": false },'
 		echo '  "set_role": { "name": "", "role": "" },'
@@ -160,6 +192,16 @@ case "$1" in
 				;;
 			doctor)
 				run_view doctor --json
+				;;
+			policy)
+				# Read ACL: name / label only
+				run_view policy --json
+				;;
+			get_policy)
+				run_view policy --json --full
+				;;
+			set_policy)
+				run_set_policy
 				;;
 			add)
 				_name=$(json_get name)

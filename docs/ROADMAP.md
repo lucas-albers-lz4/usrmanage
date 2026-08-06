@@ -2,8 +2,11 @@
 
 ## After first feed publish (`v0.1.0`)
 
-- [ ] QEMU feed smoke on x86_64 and armsr-armv8 guests (23.05 / 24.10 / 25.12)
+- [x] QEMU feed smoke on x86_64 (24.10.5) — `scripts/validate-feed-smoke.sh`
+- [ ] QEMU feed smoke on armsr-armv8 + remaining release lines (23.05 / 25.12)
 - [ ] QEMU i18n / theme spotchecks
+- [x] Password policy presets + live checklist (OpenWrt default; Save to change)
+- [ ] Publish `0.1.0-r2` with `shadow-*` DEPENDS + password policy
 - [ ] Document observed BusyBox / sudo versions per release line
 - [ ] Optional: PR CI single-cell SDK compile (cost vs coverage)
 

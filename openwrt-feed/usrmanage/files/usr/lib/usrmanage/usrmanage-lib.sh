@@ -18,11 +18,22 @@
 : "${USRMANAGE_SUDOERS:=/etc/sudoers.d/usrmanage}"
 : "${USRMANAGE_UID_FLOOR:=1000}"
 : "${USRMANAGE_PASS_MINLEN:=8}"
+: "${USRMANAGE_UCI_POLICY:=usrmanage.policy}"
 : "${USRMANAGE_AUDIT_MAX_BYTES:=131072}"
 : "${USRMANAGE_SHELL:=/bin/ash}"
 : "${USRMANAGE_SRC:=cli}"
 : "${USRMANAGE_ACTOR:=}"
 : "${USRMANAGE_DRY_RUN:=0}"
+
+# Effective password policy (populated by um_policy_load)
+UM_POL_PRESET=openwrt
+UM_POL_MIN_LENGTH=8
+UM_POL_REJECT_USERNAME=1
+UM_POL_REQUIRE_LOWER=0
+UM_POL_REQUIRE_UPPER=0
+UM_POL_REQUIRE_DIGIT=0
+UM_POL_REQUIRE_SPECIAL=0
+UM_POL_FAIL_REASON=
 
 um_json_escape() {
 	# Escape for JSON string content (RFC 8259 C0 controls).
@@ -113,13 +124,231 @@ um_validate_role() {
 	esac
 }
 
+um_uci_bool() {
+	case "$1" in
+		1|true|yes|on) printf '1' ;;
+		*) printf '0' ;;
+	esac
+}
+
+um_policy_defaults_openwrt() {
+	UM_POL_PRESET=openwrt
+	UM_POL_MIN_LENGTH=8
+	UM_POL_REJECT_USERNAME=1
+	UM_POL_REQUIRE_LOWER=0
+	UM_POL_REQUIRE_UPPER=0
+	UM_POL_REQUIRE_DIGIT=0
+	UM_POL_REQUIRE_SPECIAL=0
+}
+
+um_policy_apply_preset_values() {
+	case "$1" in
+		openwrt)
+			um_policy_defaults_openwrt
+			;;
+		standard)
+			UM_POL_PRESET=standard
+			UM_POL_MIN_LENGTH=10
+			UM_POL_REJECT_USERNAME=1
+			UM_POL_REQUIRE_LOWER=1
+			UM_POL_REQUIRE_UPPER=1
+			UM_POL_REQUIRE_DIGIT=1
+			UM_POL_REQUIRE_SPECIAL=0
+			;;
+		strict)
+			UM_POL_PRESET=strict
+			UM_POL_MIN_LENGTH=12
+			UM_POL_REJECT_USERNAME=1
+			UM_POL_REQUIRE_LOWER=1
+			UM_POL_REQUIRE_UPPER=1
+			UM_POL_REQUIRE_DIGIT=1
+			UM_POL_REQUIRE_SPECIAL=1
+			;;
+		*)
+			return 1
+			;;
+	esac
+	return 0
+}
+
+um_policy_detect_preset() {
+	if [ "$UM_POL_MIN_LENGTH" = "8" ] && [ "$UM_POL_REJECT_USERNAME" = "1" ] \
+		&& [ "$UM_POL_REQUIRE_LOWER" = "0" ] && [ "$UM_POL_REQUIRE_UPPER" = "0" ] \
+		&& [ "$UM_POL_REQUIRE_DIGIT" = "0" ] && [ "$UM_POL_REQUIRE_SPECIAL" = "0" ]; then
+		printf 'openwrt'
+		return 0
+	fi
+	if [ "$UM_POL_MIN_LENGTH" = "10" ] && [ "$UM_POL_REJECT_USERNAME" = "1" ] \
+		&& [ "$UM_POL_REQUIRE_LOWER" = "1" ] && [ "$UM_POL_REQUIRE_UPPER" = "1" ] \
+		&& [ "$UM_POL_REQUIRE_DIGIT" = "1" ] && [ "$UM_POL_REQUIRE_SPECIAL" = "0" ]; then
+		printf 'standard'
+		return 0
+	fi
+	if [ "$UM_POL_MIN_LENGTH" = "12" ] && [ "$UM_POL_REJECT_USERNAME" = "1" ] \
+		&& [ "$UM_POL_REQUIRE_LOWER" = "1" ] && [ "$UM_POL_REQUIRE_UPPER" = "1" ] \
+		&& [ "$UM_POL_REQUIRE_DIGIT" = "1" ] && [ "$UM_POL_REQUIRE_SPECIAL" = "1" ]; then
+		printf 'strict'
+		return 0
+	fi
+	printf 'custom'
+}
+
+um_policy_label() {
+	_p=${1:-$UM_POL_PRESET}
+	case "$_p" in
+		openwrt) printf 'OpenWrt' ;;
+		standard) printf 'Standard' ;;
+		strict) printf 'Strict' ;;
+		*) printf 'Custom' ;;
+	esac
+}
+
+um_policy_load() {
+	um_policy_defaults_openwrt
+	_ml=
+	_ru=
+	_rl=
+	_ru2=
+	_rd=
+	_rs=
+	if command -v uci >/dev/null 2>&1; then
+		_ml=$(uci -q get usrmanage.policy.min_length 2>/dev/null) || _ml=
+		_ru=$(uci -q get usrmanage.policy.reject_username 2>/dev/null) || _ru=
+		_rl=$(uci -q get usrmanage.policy.require_lower 2>/dev/null) || _rl=
+		_ru2=$(uci -q get usrmanage.policy.require_upper 2>/dev/null) || _ru2=
+		_rd=$(uci -q get usrmanage.policy.require_digit 2>/dev/null) || _rd=
+		_rs=$(uci -q get usrmanage.policy.require_special 2>/dev/null) || _rs=
+	fi
+	[ -n "$_ml" ] && UM_POL_MIN_LENGTH=$_ml
+	[ -n "$_ru" ] && UM_POL_REJECT_USERNAME=$(um_uci_bool "$_ru")
+	[ -n "$_rl" ] && UM_POL_REQUIRE_LOWER=$(um_uci_bool "$_rl")
+	[ -n "$_ru2" ] && UM_POL_REQUIRE_UPPER=$(um_uci_bool "$_ru2")
+	[ -n "$_rd" ] && UM_POL_REQUIRE_DIGIT=$(um_uci_bool "$_rd")
+	[ -n "$_rs" ] && UM_POL_REQUIRE_SPECIAL=$(um_uci_bool "$_rs")
+	case "$UM_POL_MIN_LENGTH" in
+		8|10|12|14|16) ;;
+		*) UM_POL_MIN_LENGTH=8 ;;
+	esac
+	UM_POL_PRESET=$(um_policy_detect_preset)
+	USRMANAGE_PASS_MINLEN=$UM_POL_MIN_LENGTH
+}
+
+um_policy_save() {
+	command -v uci >/dev/null 2>&1 || return 1
+	uci -q set usrmanage.policy=usrmanage
+	uci -q set usrmanage.policy.preset="$UM_POL_PRESET"
+	uci -q set usrmanage.policy.min_length="$UM_POL_MIN_LENGTH"
+	uci -q set usrmanage.policy.reject_username="$UM_POL_REJECT_USERNAME"
+	uci -q set usrmanage.policy.require_lower="$UM_POL_REQUIRE_LOWER"
+	uci -q set usrmanage.policy.require_upper="$UM_POL_REQUIRE_UPPER"
+	uci -q set usrmanage.policy.require_digit="$UM_POL_REQUIRE_DIGIT"
+	uci -q set usrmanage.policy.require_special="$UM_POL_REQUIRE_SPECIAL"
+	uci -q commit usrmanage
+}
+
+um_policy_bool_json() {
+	[ "$1" = "1" ] && printf 'true' || printf 'false'
+}
+
+um_policy_set_fields() {
+	# preset min reject lower upper digit special
+	_preset=$1
+	_min=$2
+	_rej=$3
+	_low=$4
+	_up=$5
+	_dig=$6
+	_spe=$7
+	case "$_preset" in
+		openwrt|standard|strict)
+			um_policy_apply_preset_values "$_preset" || return 1
+			;;
+		custom)
+			case "$_min" in
+				8|10|12|14|16) UM_POL_MIN_LENGTH=$_min ;;
+				*) um_err "error: invalid min_length"; return 1 ;;
+			esac
+			UM_POL_REJECT_USERNAME=$(um_uci_bool "${_rej:-0}")
+			UM_POL_REQUIRE_LOWER=$(um_uci_bool "${_low:-0}")
+			UM_POL_REQUIRE_UPPER=$(um_uci_bool "${_up:-0}")
+			UM_POL_REQUIRE_DIGIT=$(um_uci_bool "${_dig:-0}")
+			UM_POL_REQUIRE_SPECIAL=$(um_uci_bool "${_spe:-0}")
+			UM_POL_PRESET=$(um_policy_detect_preset)
+			;;
+		*)
+			um_err "error: invalid preset"
+			return 1
+			;;
+	esac
+	USRMANAGE_PASS_MINLEN=$UM_POL_MIN_LENGTH
+	return 0
+}
+
+um_policy_json_name() {
+	um_policy_load
+	_lab=$(um_policy_label "$UM_POL_PRESET")
+	_pe=$(printf '%s' "$UM_POL_PRESET" | um_json_escape)
+	_le=$(printf '%s' "$_lab" | um_json_escape)
+	printf '{"preset":"%s","label":"%s"}\n' "$_pe" "$_le"
+}
+
+um_policy_json_full() {
+	um_policy_load
+	_lab=$(um_policy_label "$UM_POL_PRESET")
+	_pe=$(printf '%s' "$UM_POL_PRESET" | um_json_escape)
+	_le=$(printf '%s' "$_lab" | um_json_escape)
+	printf '{"preset":"%s","label":"%s","min_length":%s,"reject_username":%s,"require_lower":%s,"require_upper":%s,"require_digit":%s,"require_special":%s}\n' \
+		"$_pe" "$_le" "$UM_POL_MIN_LENGTH" \
+		"$(um_policy_bool_json "$UM_POL_REJECT_USERNAME")" \
+		"$(um_policy_bool_json "$UM_POL_REQUIRE_LOWER")" \
+		"$(um_policy_bool_json "$UM_POL_REQUIRE_UPPER")" \
+		"$(um_policy_bool_json "$UM_POL_REQUIRE_DIGIT")" \
+		"$(um_policy_bool_json "$UM_POL_REQUIRE_SPECIAL")"
+}
+
 um_validate_password() {
 	_user=$1
 	_pass=$2
-	[ -n "$_pass" ] || return 1
+	UM_POL_FAIL_REASON=
+	um_policy_load
+	[ -n "$_pass" ] || {
+		UM_POL_FAIL_REASON=empty
+		return 1
+	}
 	_plen=${#_pass}
-	[ "$_plen" -ge "$USRMANAGE_PASS_MINLEN" ] || return 1
-	[ "$_pass" != "$_user" ] || return 1
+	if [ "$_plen" -lt "$UM_POL_MIN_LENGTH" ]; then
+		UM_POL_FAIL_REASON=min_length
+		return 1
+	fi
+	if [ "$UM_POL_REJECT_USERNAME" = "1" ] && [ "$_pass" = "$_user" ]; then
+		UM_POL_FAIL_REASON=reject_username
+		return 1
+	fi
+	if [ "$UM_POL_REQUIRE_LOWER" = "1" ]; then
+		case "$_pass" in
+			*[a-z]*) ;;
+			*) UM_POL_FAIL_REASON=require_lower; return 1 ;;
+		esac
+	fi
+	if [ "$UM_POL_REQUIRE_UPPER" = "1" ]; then
+		case "$_pass" in
+			*[A-Z]*) ;;
+			*) UM_POL_FAIL_REASON=require_upper; return 1 ;;
+		esac
+	fi
+	if [ "$UM_POL_REQUIRE_DIGIT" = "1" ]; then
+		case "$_pass" in
+			*[0-9]*) ;;
+			*) UM_POL_FAIL_REASON=require_digit; return 1 ;;
+		esac
+	fi
+	if [ "$UM_POL_REQUIRE_SPECIAL" = "1" ]; then
+		_stripped=$(printf '%s' "$_pass" | tr -d 'A-Za-z0-9')
+		if [ -z "$_stripped" ]; then
+			UM_POL_FAIL_REASON=require_special
+			return 1
+		fi
+	fi
 	return 0
 }
 
@@ -416,7 +645,7 @@ um_set_password_prompt() {
 	um_validate_password "$_u" "$_p1" || {
 		_p1=
 		_p2=
-		um_err "error: password policy failed (min ${USRMANAGE_PASS_MINLEN}, not equal to username)"
+		um_err "error: password policy failed (${UM_POL_FAIL_REASON:-policy})"
 		return 1
 	}
 	_p2=
@@ -555,6 +784,18 @@ um_doctor_checks() {
 		_add_check sudo false "sudo missing"
 	fi
 
+	if command -v useradd >/dev/null 2>&1 || command -v adduser >/dev/null 2>&1; then
+		_add_check useradd true "useradd/adduser present"
+	else
+		_add_check useradd false "useradd/adduser missing (install shadow-useradd)"
+	fi
+
+	if command -v userdel >/dev/null 2>&1 || command -v deluser >/dev/null 2>&1; then
+		_add_check userdel true "userdel/deluser present"
+	else
+		_add_check userdel false "userdel/deluser missing (install shadow-userdel)"
+	fi
+
 	if grep -q '^wheel:' "$USRMANAGE_GROUP" 2>/dev/null; then
 		_add_check wheel true "wheel group present"
 	else
@@ -600,14 +841,16 @@ um_doctor_checks() {
 	if [ "${1:-}" = "--json" ] || [ "${JSON_OUT:-0}" = "1" ]; then
 		_dok=true
 		[ "$_ok" = "1" ] || _dok=false
+		_pol=$(um_policy_json_full | tr -d '\n')
 		if [ -z "$_incomplete" ]; then
-			printf '{"ok":%s,"checks":[%s],"incomplete":[]}\n' "$_dok" "$_json_checks"
+			printf '{"ok":%s,"checks":[%s],"incomplete":[],"policy":%s}\n' "$_dok" "$_json_checks" "$_pol"
 		else
-			printf '{"ok":%s,"checks":[%s],"incomplete":[%s]}\n' "$_dok" "$_json_checks" "$_incomplete"
+			printf '{"ok":%s,"checks":[%s],"incomplete":[%s],"policy":%s}\n' "$_dok" "$_json_checks" "$_incomplete" "$_pol"
 		fi
 	else
 		printf 'doctor ok=%s\n' "$_ok"
-		printf '%s\n' "$_json_checks" | tr '{}' '\n' >/dev/null 2>&1 || true
+		um_policy_load
+		printf 'policy=%s min_length=%s\n' "$UM_POL_PRESET" "$UM_POL_MIN_LENGTH"
 		[ ! -f "$USRMANAGE_INCOMPLETE" ] || um_err "incomplete: $(cat "$USRMANAGE_INCOMPLETE")"
 	fi
 	[ "$_ok" = "1" ]
@@ -790,14 +1033,14 @@ um_mut_add() {
 			um_delete_account "$_name" 1 || true
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
-			um_die "error: password_failed"
+			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	else
 		um_set_password_prompt "$_name" || {
 			um_delete_account "$_name" 1 || true
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
-			um_die "error: password_failed"
+			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	fi
 	um_registry_add "$_name"
@@ -862,13 +1105,13 @@ um_mut_passwd() {
 		um_set_password_from_fd "$_name" "$_pfd" || {
 			um_incomplete_clear
 			um_audit fail "$_name" fail password
-			um_die "error: password_failed"
+			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	else
 		um_set_password_prompt "$_name" || {
 			um_incomplete_clear
 			um_audit fail "$_name" fail password
-			um_die "error: password_failed"
+			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	fi
 	um_incomplete_clear
