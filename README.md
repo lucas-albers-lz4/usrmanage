@@ -1,5 +1,8 @@
 # usrmanage
 
+[![Tests](https://github.com/lucas-albers-lz4/usrmanage/actions/workflows/usrmanage-test.yml/badge.svg)](https://github.com/lucas-albers-lz4/usrmanage/actions/workflows/usrmanage-test.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 Hardened **local UNIX user management** for OpenWrt (CLI + LuCI): add/remove users, **readonly** vs **admin** (`wheel` + `sudo`), compact **operational audit log**.
 
 Designed for deployments **without** RADIUS/central auth. Supported: **OpenWrt 23.05 / 24.10 / 25.12**, arch-independent packages (ARM + x86_64).
