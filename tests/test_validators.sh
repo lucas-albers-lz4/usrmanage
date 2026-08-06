@@ -84,6 +84,15 @@ else
 	ok "injection username rejected on show"
 fi
 
+# JSON denial shape for --json (Zen MCR M8 / LuCI notifications)
+out=$("$BIN" show 'x;y' --json 2>/dev/null) || true
+echo "$out" | grep -q '"ok":false' && ok "show denial ok:false" || bad "show denial json: $out"
+echo "$out" | grep -q '"error":"invalid_username"' && ok "show denial error token" || bad "show denial error: $out"
+
+out=$("$BIN" add 'BadName' --role readonly --password-fd 0 --json 2>/dev/null) || true
+echo "$out" | grep -q '"ok":false' && ok "add denial ok:false" || bad "add denial json: $out"
+echo "$out" | grep -q '"error":"' && ok "add denial has error field" || bad "add denial error field: $out"
+
 # Wheel del must rewrite /etc/group and verify membership
 printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
 um_wheel_del_user ops || bad "wheel_del ops"
@@ -98,11 +107,9 @@ case "$_mode" in
 esac
 
 if [ "$(id -u)" != "0" ]; then
-	if "$BIN" add evil --role readonly --json 2>/dev/null; then
-		bad "non-root add allowed"
-	else
-		ok "non-root add denied"
-	fi
+	out=$("$BIN" add evil --role readonly --json 2>/dev/null) || true
+	echo "$out" | grep -q '"ok":false' && ok "non-root add json ok:false" || bad "non-root add json: $out"
+	echo "$out" | grep -q '"error":"manage commands require root"' && ok "non-root add error detail" || bad "non-root add error: $out"
 fi
 
 [ "$fail" = "0" ] || exit 1

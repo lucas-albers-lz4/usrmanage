@@ -76,8 +76,11 @@ session_actor() {
 
 run_cli() {
 	# Explicit argv only — never unquoted $* (Zen MCR C2).
+	# Always return 0 so ubus delivers CLI JSON (incl. ok:false) instead of
+	# treating a non-zero CLI exit as an RPC failure (Zen MCR M8).
 	_actor=$(session_actor)
-	USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" "$USRMANAGE_BIN" "$@"
+	USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" "$USRMANAGE_BIN" "$@" || true
+	return 0
 }
 
 run_manage_password() {
@@ -90,8 +93,9 @@ run_manage_password() {
 		return 0
 	fi
 	printf '%s\n' "$_pass" | USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
-		"$USRMANAGE_BIN" add "$_name" --role "$_role" --password-fd 0 --json
+		"$USRMANAGE_BIN" add "$_name" --role "$_role" --password-fd 0 --json || true
 	_pass=
+	return 0
 }
 
 run_passwd() {
@@ -103,8 +107,9 @@ run_passwd() {
 		return 0
 	fi
 	printf '%s\n' "$_pass" | USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
-		"$USRMANAGE_BIN" passwd "$_name" --password-fd 0 --json
+		"$USRMANAGE_BIN" passwd "$_name" --password-fd 0 --json || true
 	_pass=
+	return 0
 }
 
 run_set_policy() {

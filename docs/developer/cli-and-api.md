@@ -35,6 +35,19 @@ Environment:
 | `del` | write | `{ "name", "purge_home" }` |
 | `set_role` | write | `{ "name", "role" }` |
 | `passwd` | write | `{ "name", "password" }` |
+| `set_policy` | write | password policy presets / custom |
+
+## Mutator JSON replies
+
+With `--json` (and all LuCI mutator calls), denials and failures print a structured object on stdout and exit non-zero:
+
+```json
+{ "ok": false, "error": "last_admin" }
+```
+
+The `error` field is the CLI token after the `error: ` prefix (no passwords). rpcd always returns that object as the ubus reply (CLI exit status is not treated as an RPC failure). LuCI notifications show `Failed: <error>`.
+
+Success shapes match [api-shapes.json](../prototype/api-shapes.json) (`ok: true` plus name/role as applicable).
 
 ## Audit event schema
 

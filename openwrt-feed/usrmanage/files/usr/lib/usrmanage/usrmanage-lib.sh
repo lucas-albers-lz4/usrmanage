@@ -68,7 +68,18 @@ um_err() {
 }
 
 um_die() {
-	um_err "$*"
+	_msg=$*
+	# LuCI mutators expect structured JSON on stdout (Zen MCR M8).
+	# Keep stderr for CLI operators; exit 1 for shell scripts. rpcd ignores
+	# the CLI exit status and forwards stdout as the ubus reply.
+	if [ "${JSON_OUT:-0}" = "1" ]; then
+		_err=$_msg
+		case "$_err" in
+			error:\ *) _err=${_err#error: } ;;
+		esac
+		printf '{"ok":false,"error":"%s"}\n' "$(printf '%s' "$_err" | um_json_escape)"
+	fi
+	um_err "$_msg"
 	exit 1
 }
 
