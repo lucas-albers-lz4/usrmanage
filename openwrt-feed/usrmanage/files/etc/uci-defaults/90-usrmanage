@@ -18,7 +18,8 @@ if ! grep -q '^wheel:' /etc/group 2>/dev/null; then
 fi
 
 mkdir -p /var/log/usrmanage /var/lock /etc/usrmanage
-chmod 755 /var/log/usrmanage /etc/usrmanage
+chmod 750 /var/log/usrmanage
+chmod 755 /etc/usrmanage
 touch /var/log/usrmanage/audit.log
 chmod 0640 /var/log/usrmanage/audit.log
 touch /etc/usrmanage/users

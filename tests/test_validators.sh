@@ -66,11 +66,36 @@ echo "$out" | grep -q '"name":"ops"' && ok "list --json" || bad "list json: $out
 out=$("$BIN" audit --json --last 10)
 echo "$out" | grep -q '"events"' && ok "audit --json" || bad "audit json"
 
+if "$BIN" audit --json --last abc 2>/dev/null; then
+	bad "non-numeric --last accepted"
+else
+	ok "non-numeric --last rejected"
+fi
+
+if "$BIN" add nobody --role readonly --password-fd abc --json 2>/dev/null; then
+	bad "non-numeric --password-fd accepted"
+else
+	ok "non-numeric --password-fd rejected"
+fi
+
 if "$BIN" show 'x;y' --json 2>/dev/null; then
 	bad "injection username accepted on show"
 else
 	ok "injection username rejected on show"
 fi
+
+# Wheel del must rewrite /etc/group and verify membership
+printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
+um_wheel_del_user ops || bad "wheel_del ops"
+um_in_wheel ops && bad "ops still in wheel" || ok "ops removed from wheel"
+grep -q '^wheel:x:10:audit$' "$USRMANAGE_GROUP" && ok "wheel members rewritten" || bad "wheel members: $(cat "$USRMANAGE_GROUP")"
+
+um_ensure_dirs
+_mode=$(stat -c '%a' "$USRMANAGE_AUDIT_DIR" 2>/dev/null || stat -f '%OLp' "$USRMANAGE_AUDIT_DIR")
+case "$_mode" in
+	750|0750) ok "audit dir mode 750" ;;
+	*) bad "audit dir mode $_mode (want 750)" ;;
+esac
 
 if [ "$(id -u)" != "0" ]; then
 	if "$BIN" add evil --role readonly --json 2>/dev/null; then

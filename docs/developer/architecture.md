@@ -63,9 +63,10 @@ Only users listed in the registry are managed. Mutators refuse unmanaged targets
 1. Policy checks (managed, not last admin, not system)
 2. Lock account
 3. Terminate user processes (best-effort)
-4. Delete account (`userdel`; home kept unless `--purge-home`)
-5. Registry + wheel update
-6. Audit `remove` / `fail` / `denied`
+4. Remove from `wheel`
+5. Delete account (`userdel`; home kept unless `--purge-home`)
+6. Registry update
+7. Audit `remove` / `fail` / `denied`
 
 ## Passwords
 

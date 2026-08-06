@@ -12,7 +12,7 @@ Scope: `openwrt-feed/usrmanage`, `openwrt-feed/luci-app-usrmanage`, docs, host t
 | Managed-user registry | Pass — `/etc/usrmanage/users` |
 | Last managed admin guard | Pass — demote/delete |
 | Lock → kill → delete sequence | Pass — `um_mut_del` |
-| Exclusive op lock | Pass — `flock` / mkdir fallback |
+| Exclusive op lock | Pass — `flock` (BusyBox default; no mkdir fallback) |
 | Password not in argv | Pass — `--password-fd` / stdin |
 | Actor attribution | Pass — CLI id; LuCI session best-effort / `unknown` |
 | Operational audit claim documented | Pass — `docs/security.md` |
