@@ -9,6 +9,8 @@
 - [x] Zen MCR criticals C1–C7 (actor sanitize, rpcd argv, flock-only lock, jsonfilter, audit denials) — see #3 for remaining majors
 - [x] Zen MCR Fix-now majors M1–M3/M5/M7/M10 + audit `--last` / audit-dir mode (integrity PR)
 - [x] Publish `0.1.1` with `shadow-*` DEPENDS + password policy + security fixes
+- [ ] Zen MCR Later M8: LuCI mutator error detail (`ok:false` + `error` in notifications)
+- [ ] Zen MCR Later: M9 mutation/lock/rpcd tests; M4/M6 + minors (see #3)
 - [ ] Document observed BusyBox / sudo versions per release line
 - [ ] Optional: PR CI single-cell SDK compile (cost vs coverage)
 

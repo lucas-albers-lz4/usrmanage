@@ -52,31 +52,36 @@ const callSetPolicy = rpc.declare({
 	params: [
 		'preset', 'min_length', 'reject_username',
 		'require_lower', 'require_upper', 'require_digit', 'require_special'
-	]
+	],
+	expect: { '': { ok: true } }
 });
 
 const callAdd = rpc.declare({
 	object: 'usrmanage',
 	method: 'add',
-	params: [ 'name', 'role', 'password' ]
+	params: [ 'name', 'role', 'password' ],
+	expect: { '': { ok: true } }
 });
 
 const callDel = rpc.declare({
 	object: 'usrmanage',
 	method: 'del',
-	params: [ 'name', 'purge_home' ]
+	params: [ 'name', 'purge_home' ],
+	expect: { '': { ok: true } }
 });
 
 const callSetRole = rpc.declare({
 	object: 'usrmanage',
 	method: 'set_role',
-	params: [ 'name', 'role' ]
+	params: [ 'name', 'role' ],
+	expect: { '': { ok: true } }
 });
 
 const callPasswd = rpc.declare({
 	object: 'usrmanage',
 	method: 'passwd',
-	params: [ 'name', 'password' ]
+	params: [ 'name', 'password' ],
+	expect: { '': { ok: true } }
 });
 
 const PRESET_VALUES = {
@@ -110,6 +115,12 @@ function hasWriteAcl() {
 			return false;
 	} catch (e2) { /* ignore */ }
 	return true;
+}
+
+/* Surface CLI/rpcd error tokens in notifications (Zen MCR M8). */
+function notifyMutatorFailure(res) {
+	const detail = (res && res.error) ? String(res.error) : 'error';
+	ui.addNotification(null, E('p', {}, _('Failed: %s').format(detail)), 'danger');
 }
 
 function detectPreset(p) {
@@ -479,7 +490,7 @@ return view.extend({
 								payload.require_special
 							).then(function(res) {
 								if (res && res.ok === false) {
-									ui.addNotification(null, E('p', {}, _('Failed to save policy')), 'danger');
+									notifyMutatorFailure(res);
 									return;
 								}
 								ui.addNotification(null, E('p', {}, _('Password policy saved')), 'info');
@@ -545,7 +556,7 @@ return view.extend({
 				pass2Input.value = '';
 				ui.hideModal();
 				if (res && res.ok === false) {
-					ui.addNotification(null, E('p', {}, _('Failed: %s').format(res.error || 'error')), 'danger');
+					notifyMutatorFailure(res);
 					return;
 				}
 				ui.addNotification(null, E('p', {}, _('User added')), 'info');
@@ -604,10 +615,12 @@ return view.extend({
 						return callSetRole(name, roleSelect.value).then(function(res) {
 							ui.hideModal();
 							if (res && res.ok === false) {
-								ui.addNotification(null, E('p', {}, _('Failed: %s').format(res.error || 'error')), 'danger');
+								notifyMutatorFailure(res);
 								return;
 							}
 							return self.renderContents();
+						}).catch(function() {
+							ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 						});
 					}
 				}, _('Apply'))
@@ -634,11 +647,13 @@ return view.extend({
 				pass2Input.value = '';
 				ui.hideModal();
 				if (res && res.ok === false) {
-					ui.addNotification(null, E('p', {}, _('Failed: %s').format(res.error || 'error')), 'danger');
+					notifyMutatorFailure(res);
 					return;
 				}
 				ui.addNotification(null, E('p', {}, _('Password updated')), 'info');
 				return self.renderContents();
+			}).catch(function() {
+				ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 			});
 		});
 
@@ -677,11 +692,13 @@ return view.extend({
 						return callDel(name, purge.checked).then(function(res) {
 							ui.hideModal();
 							if (res && res.ok === false) {
-								ui.addNotification(null, E('p', {}, _('Failed: %s').format(res.error || 'error')), 'danger');
+								notifyMutatorFailure(res);
 								return;
 							}
 							ui.addNotification(null, E('p', {}, _('User removed')), 'info');
 							return self.renderContents();
+						}).catch(function() {
+							ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 						});
 					}
 				}, _('Remove'))
