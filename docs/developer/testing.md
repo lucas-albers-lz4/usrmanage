@@ -1,6 +1,6 @@
 # Testing
 
-How usrmanage is tested locally and in CI. Passwords never appear on argv, in audit logs, or in Playwright/MCP traces.
+How usrmanage is tested locally and in CI. Passwords never appear on argv, in audit logs, or in Playwright/MCP traces (e2e keeps `trace: 'off'` for this reason).
 
 ## Layers
 

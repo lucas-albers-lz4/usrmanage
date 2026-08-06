@@ -18,7 +18,8 @@ module.exports = defineConfig({
 	expect: { timeout: 15_000 },
 	use: {
 		baseURL,
-		trace: 'retain-on-failure',
+		// Never retain traces: LuCI mutator POSTs include password fields.
+		trace: 'off',
 		screenshot: 'only-on-failure',
 		video: 'off',
 		ignoreHTTPSErrors: true,
