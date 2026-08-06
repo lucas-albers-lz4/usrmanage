@@ -55,6 +55,7 @@ usrmanage doctor
 | [docs/supported-releases.md](docs/supported-releases.md) | 23.05 / 24.10 / 25.12 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Next steps |
 | [docs/upstream.md](docs/upstream.md) | Upstream OpenWrt path |
+| [docs/security-review.md](docs/security-review.md) | Pre-0.1.0 security review record |
 
 ## Host checks
 

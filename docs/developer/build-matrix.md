@@ -37,8 +37,4 @@ Double-builds on **x86-64** for 23.05 / 24.10 / 25.12; both packages must SHA-ma
 
 ## Feeds lock
 
-Pinned OpenWrt feed commits live under `scripts/feeds.lock/<patch>/feeds.conf` with:
-
-```text
-src-link usrmanage /work/usrmanage/openwrt-feed
-```
+Pinned OpenWrt feed commits live under `scripts/feeds.lock/<patch>/feeds.conf`. Each file pins `base`, `packages`, and `luci` to specific commits. The SDK build appends the local `src-link usrmanage` line at build time.

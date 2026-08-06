@@ -31,7 +31,7 @@ Example (device-side): ensure `logd` / `syslog-ng` / remote relay receives `usrm
 | CLI | TTY prompt or `--password-fd N` — never argv |
 | LuCI | Password field in ubus call → rpcd pipes to CLI `--password-fd 0` |
 | Audit / syslog | Never contains password material |
-| Policy (v1) | Min length 8, non-empty, not equal to username, confirm match |
+| Policy (factory default) | OpenWrt preset: min length 8, not equal to username. Stricter presets (Standard, Strict) and toggles apply after an operator saves a new policy |
 
 Do **not** copy stock `luci setPassword` `echo \| passwd` shell interpolation patterns for new code.
 
