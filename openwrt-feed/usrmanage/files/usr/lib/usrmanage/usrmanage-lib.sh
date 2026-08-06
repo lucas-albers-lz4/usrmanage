@@ -108,7 +108,7 @@ um_audit_token() {
 	_tok=$1
 	_fallback=${2:--}
 	case "$_tok" in
-		''|*[!A-Za-z0-9._@:-]*)
+		''|*[!A-Za-z0-9._@:=-]*)
 			printf '%s' "$_fallback"
 			return 0
 			;;
