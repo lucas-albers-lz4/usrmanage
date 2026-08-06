@@ -354,6 +354,7 @@ return view.extend({
 
 		const addBtn = manage ? E('button', {
 			'class': 'btn cbi-button cbi-button-add',
+			'data-testid': 'usrmanage-add-user',
 			'click': ui.createHandlerFn(self, 'handleAdd', policyForForms)
 		}, _('Add user')) : null;
 
@@ -550,14 +551,36 @@ return view.extend({
 
 	handleAdd: function(policy, ev) {
 		const self = this;
-		const nameInput = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'placeholder': _('username') });
-		const roleSelect = E('select', { 'class': 'cbi-input-select' }, [
+		const nameInput = E('input', {
+			'type': 'text',
+			'class': 'cbi-input-text',
+			'placeholder': _('username'),
+			'data-testid': 'usrmanage-add-username'
+		});
+		const roleSelect = E('select', {
+			'class': 'cbi-input-select',
+			'data-testid': 'usrmanage-add-role'
+		}, [
 			E('option', { 'value': 'readonly' }, _('readonly')),
 			E('option', { 'value': 'admin' }, _('admin'))
 		]);
-		const passInput = E('input', { 'type': 'password', 'class': 'cbi-input-text', 'autocomplete': 'new-password' });
-		const pass2Input = E('input', { 'type': 'password', 'class': 'cbi-input-text', 'autocomplete': 'new-password' });
-		const addBtn = E('button', { 'class': 'btn cbi-button-positive cbi-button-disabled', 'disabled': 'disabled' }, _('Add'));
+		const passInput = E('input', {
+			'type': 'password',
+			'class': 'cbi-input-text',
+			'autocomplete': 'new-password',
+			'data-testid': 'usrmanage-add-password'
+		});
+		const pass2Input = E('input', {
+			'type': 'password',
+			'class': 'cbi-input-text',
+			'autocomplete': 'new-password',
+			'data-testid': 'usrmanage-add-password-confirm'
+		});
+		const addBtn = E('button', {
+			'class': 'btn cbi-button-positive cbi-button-disabled',
+			'disabled': 'disabled',
+			'data-testid': 'usrmanage-add-submit'
+		}, _('Add'));
 		const policyBox = buildPasswordPolicyUI(policy, function() {
 			return nameInput.value.trim();
 		}, passInput, pass2Input, addBtn);

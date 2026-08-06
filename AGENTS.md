@@ -27,13 +27,29 @@ OpenWrt **local UNIX user management** (CLI + LuCI): managed users, readonly vs 
 - Audit denials (`denied`) on mutator validation failures, not only successes.
 - Known review backlog: GitHub issue **#3** (Zen MCR). Do not “clean up” pipeline-unrelated labeled work elsewhere without asking.
 
+## Testing
+
+Details: [docs/developer/testing.md](docs/developer/testing.md).
+
+- **PR CI / done gate:** `./scripts/smoke-host.sh` (shellcheck, layout, validators, mutators, theme, i18n). Host-only — no QEMU/Playwright in PR CI.
+- **QEMU lab:** SSH `127.0.0.1:2222`, LuCI `http://127.0.0.1:8080`, root empty password on prepared images. CLI/ubus smoke: `scripts/qemu-smoke-usrmanage.sh`. Fixture users (`umadmin`, `pwflow_*`) are **lab-only**, not product defaults.
+- **Playwright MCP:** `.cursor/mcp.json` — enable in Cursor Settings → MCP; use for interactive LuCI exploration when the guest is up. Never put passwords in MCP traces/logs.
+- **E2E:** `./scripts/playwright-luci.sh` (`tests/e2e/`) against a running lab; EN UI; unique usernames + SSH cleanup.
+- **Docs screenshots:** planned (#15) — WebP via Playwright; clean managed-user list (no stray smoke/e2e accounts) before capture.
+
+## Release / feed
+
+Details: [docs/release.md](docs/release.md), [docs/binary-feed.md](docs/binary-feed.md).
+
+- Version: bump **third octet** of `PKG_VERSION` in both Makefiles; keep `PKG_RELEASE:=1`; tag `v0.1.N` (not `v0.1.0-r2`).
+- Tag `v*` → `publish-packages` (6-cell SDK matrix → signed feed on Pages). Do not cut a release until lab acceptance when asked.
+- Feed: https://lucas-albers-lz4.github.io/usrmanage-packages/
+- Never commit secrets (`*.key`, feed signing material). `lab/` images are gitignored.
+
 ## Workflows
 
-- Host checks: `./scripts/smoke-host.sh`
-- QEMU (x86): prepare image → `validate-feed-smoke.sh` / stepwise scripts under `scripts/qemu-*.sh`
-- Feed: https://lucas-albers-lz4.github.io/usrmanage-packages/ — tag `v*` publishes
-- Prefer **one issue + one PR** for a feature; run Bugbot before merge when requested
-- Do not commit secrets (`*.key`, feed signing material). `lab/` images are gitignored
+- Prefer **one issue + one PR**; run Bugbot before merge when requested.
+- QEMU stepwise: `scripts/qemu-*.sh` / `validate-feed-smoke.sh`.
 
 ## Layout
 
@@ -41,6 +57,8 @@ OpenWrt **local UNIX user management** (CLI + LuCI): managed users, readonly vs 
 |------|------|
 | `openwrt-feed/usrmanage/` | CLI, lib, UCI, sudoers |
 | `openwrt-feed/luci-app-usrmanage/` | LuCI view, rpcd, ACL, po |
-| `docs/` | Architecture, security, user/install |
-| `scripts/` | Host smoke, SDK, publish, QEMU lab |
-| `tests/` | Validators, theme, i18n |
+| `docs/` | Architecture, security, user/install, testing, release |
+| `scripts/` | Host smoke, SDK, publish, QEMU lab, Playwright runner |
+| `tests/` | Validators, mutators, theme, i18n |
+| `tests/e2e/` | Playwright LuCI flows (QEMU lab) |
+| `.cursor/mcp.json` | Playwright MCP for agents |

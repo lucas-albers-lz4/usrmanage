@@ -32,3 +32,10 @@ fwlive-feed.rsa.pub
 
 # Node
 node_modules/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Cursor / Playwright MCP
+.cursor/browser-output/

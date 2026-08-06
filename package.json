@@ -1,0 +1,12 @@
+{
+  "name": "usrmanage",
+  "private": true,
+  "description": "Dev dependencies for usrmanage LuCI Playwright e2e (not shipped on router)",
+  "scripts": {
+    "test:host": "./scripts/smoke-host.sh",
+    "test:e2e": "./scripts/playwright-luci.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0"
+  }
+}

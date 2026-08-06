@@ -4,6 +4,7 @@
 
 - [x] QEMU feed smoke on x86_64 (24.10.5) — `scripts/validate-feed-smoke.sh`
 - [ ] QEMU feed smoke on armsr-armv8 + remaining release lines (23.05 / 25.12)
+- [x] LuCI Playwright e2e spotcheck (login + add user vs QEMU lab) — `scripts/playwright-luci.sh` / Playwright MCP
 - [ ] QEMU i18n / theme spotchecks
 - [x] Password policy presets + live checklist (OpenWrt default; Save to change)
 - [x] Zen MCR criticals C1–C7 (actor sanitize, rpcd argv, flock-only lock, jsonfilter, audit denials) — see #3 for remaining majors

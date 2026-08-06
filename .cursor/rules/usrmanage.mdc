@@ -1,5 +1,5 @@
 ---
-description: Follow usrmanage AGENTS.md product locks and security invariants
+description: Follow usrmanage AGENTS.md product locks, testing, and release invariants
 alwaysApply: true
 ---
 
@@ -7,4 +7,8 @@ alwaysApply: true
 
 Read and follow [AGENTS.md](AGENTS.md) for this repository.
 
-Key invariants: OpenWrt-default password policy until Save; passwords never on argv/logs; LuCI `expect: { '': {…} }`; no unquoted `$*` into privileged CLI; prefer flock for locks.
+Key invariants: OpenWrt-default password policy until Save; passwords never on argv/logs/MCP; LuCI `expect: { '': {…} }`; no unquoted `$*` into privileged CLI; prefer flock for locks.
+
+Testing: host `./scripts/smoke-host.sh` (PR CI); QEMU lab `:8080`/`:2222`; Playwright MCP (`.cursor/mcp.json`) + `./scripts/playwright-luci.sh` local only — see [docs/developer/testing.md](docs/developer/testing.md).
+
+Release: third-octet `PKG_VERSION`, tag `v*`, no secrets in git — see [docs/release.md](docs/release.md).
