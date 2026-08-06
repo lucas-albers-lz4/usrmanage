@@ -61,7 +61,7 @@ async function openUserManagement(page) {
  */
 function uniqueUsername(prefix = 'pwflow') {
 	const stamp = Date.now().toString(36).slice(-6);
-	const rand = Math.floor(Math.random() * 36).toString(36);
+	const rand = randomInt(0, 36).toString(36);
 	return `${prefix}_${stamp}${rand}`.slice(0, 31);
 }
 
