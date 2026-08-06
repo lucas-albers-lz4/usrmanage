@@ -245,8 +245,16 @@ return view.extend({
 		const policyFull = (data[4] && typeof data[4] === 'object' && data[4].min_length != null)
 			? Object.assign({}, PRESET_VALUES.openwrt, data[4])
 			: null;
-		const manage = !!policyFull;
+		const writeAcl = hasWriteAcl();
+		const manage = writeAcl;
 		const self = this;
+		/* Full policy for checklists; fall back to OpenWrt defaults if get_policy failed but write ACL is present. */
+		const policyForForms = policyFull || (writeAcl
+			? Object.assign({}, PRESET_VALUES.openwrt, {
+				preset: policyName.preset || 'openwrt',
+				label: policyName.label || 'OpenWrt'
+			})
+			: null);
 		const policyIn = policyFull || policyName;
 
 		const doctorBanner = (doctor.ok !== false) ? null : E('div', { 'class': 'alert-message warning' }, [
@@ -265,7 +273,7 @@ return view.extend({
 				'class': 'btn cbi-button',
 				'click': function(ev) {
 					ev.preventDefault();
-					self.togglePolicyEditor(editorWrap, policyFull);
+					self.togglePolicyEditor(editorWrap, policyForForms);
 				}
 			}, _('Configure')));
 		}
@@ -281,7 +289,7 @@ return view.extend({
 				actions.push(' ');
 				actions.push(E('button', {
 					'class': 'btn cbi-button',
-					'click': ui.createHandlerFn(self, 'handlePasswd', u.name, policyFull)
+					'click': ui.createHandlerFn(self, 'handlePasswd', u.name, policyForForms)
 				}, _('Password')));
 				actions.push(' ');
 				actions.push(E('button', {
@@ -322,7 +330,7 @@ return view.extend({
 
 		const addBtn = manage ? E('button', {
 			'class': 'btn cbi-button cbi-button-add',
-			'click': ui.createHandlerFn(self, 'handleAdd', policyFull)
+			'click': ui.createHandlerFn(self, 'handleAdd', policyForForms)
 		}, _('Add user')) : null;
 
 		const tableBody = [
