@@ -104,18 +104,28 @@ const PRESET_VALUES = {
 
 function hasWriteAcl() {
 	try {
-		if (typeof L.hasACLScope === 'function')
-			return L.hasACLScope('luci-app-usrmanage', 'write');
+		if (typeof L.hasACLScope === 'function') {
+			const scoped = L.hasACLScope('luci-app-usrmanage', 'write');
+			if (typeof scoped === 'boolean')
+				return scoped;
+		}
 	} catch (e) { /* ignore */ }
 	try {
-		const acls = L.env && L.env.acls;
-		if (acls && acls['luci-app-usrmanage'] && acls['luci-app-usrmanage'].write)
-			return true;
-		if (acls && acls['luci-app-usrmanage'] && !acls['luci-app-usrmanage'].write)
-			return false;
+		const acls = L.env && L.env.acls && L.env.acls['luci-app-usrmanage'];
+		if (acls) {
+			if (acls.write)
+				return true;
+			if (acls.read && !acls.write)
+				return false;
+		}
 	} catch (e2) { /* ignore */ }
-	/* Fail-closed UI when ACL shape is unknown (Zen MCR minor). Server ACL remains authoritative. */
-	return false;
+	/* Unknown client ACL shape — caller should fall back to get_policy success. */
+	return null;
+}
+
+/* Omit null/undefined so E() does not stringify them as the text "null". */
+function elChildren(kids) {
+	return (kids || []).filter(function(n) { return n != null; });
 }
 
 /* Surface CLI/rpcd error tokens in notifications (Zen MCR M8). */
@@ -257,7 +267,9 @@ return view.extend({
 		const policyFull = (data[4] && typeof data[4] === 'object' && data[4].min_length != null)
 			? Object.assign({}, PRESET_VALUES.openwrt, data[4])
 			: null;
-		const writeAcl = hasWriteAcl();
+		const writeAclHint = hasWriteAcl();
+		/* Prefer get_policy success as write signal when client ACL APIs are inconclusive (Zen MCR minor). */
+		const writeAcl = (writeAclHint === true) || (writeAclHint !== false && !!policyFull);
 		const manage = writeAcl;
 		const self = this;
 		/* Full policy for checklists; fall back to OpenWrt defaults if get_policy failed but write ACL is present. */
@@ -360,7 +372,7 @@ return view.extend({
 			])
 		]);
 
-		return E('div', { 'class': 'cbi-map' }, [
+		return E('div', { 'class': 'cbi-map' }, elChildren([
 			E('h2', {}, _('User Management')),
 			E('div', { 'class': 'cbi-map-descr' }, [
 				_('Manage local UNIX/SSH accounts on this device. LuCI web logins are configured separately (Administration / ACL).'),
@@ -382,7 +394,7 @@ return view.extend({
 			E('div', { 'class': 'cbi-section' }, eventNodes.length ? eventNodes : [
 				E('em', {}, _('No audit events yet.'))
 			])
-		]);
+		]));
 	},
 
 	togglePolicyEditor: function(wrap, policy) {
