@@ -118,7 +118,28 @@ sdk_matrix_feeds_setup() {
 		cp /work/usrmanage/scripts/feeds.lock/${SDK_MATRIX_VERSION_LABEL}/feeds.conf feeds.conf
 		grep -q '^src-link usrmanage' feeds.conf || echo 'src-link usrmanage /work/usrmanage/openwrt-feed' >> feeds.conf
 
-		./scripts/feeds update base luci packages
+		# Mitigate transient TLS drops from git remotes (curl 35 / shallow-info).
+		git config --global http.version HTTP/1.1
+		ok=0
+		i=1
+		while [ \"\$i\" -le 3 ]; do
+			if ./scripts/feeds update base luci packages \\
+				&& { [ -d feeds/base/.git ] || [ -d feeds/base_root/.git ]; } \\
+				&& [ -d feeds/packages/.git ] \\
+				&& [ -d feeds/luci/.git ]; then
+				ok=1
+				break
+			fi
+			echo \"feeds update failed (attempt \$i/3); wiping partial clones\" >&2
+			rm -rf feeds/base feeds/base_root feeds/packages feeds/luci
+			if [ \"\$i\" -eq 3 ]; then
+				break
+			fi
+			sleep \$((i * 5))
+			i=\$((i + 1))
+		done
+		[ \"\$ok\" -eq 1 ] || { echo 'feeds update failed after 3 attempts' >&2; exit 1; }
+
 		./scripts/feeds install -p base liblua libucode libubox libubus libuci rpcd
 		./scripts/feeds install luci-base
 		./scripts/feeds update usrmanage
