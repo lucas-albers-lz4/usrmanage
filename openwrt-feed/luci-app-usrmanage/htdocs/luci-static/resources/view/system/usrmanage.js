@@ -218,14 +218,19 @@ return view.extend({
 	handleReset: null,
 
 	load: function() {
-		const manage = hasWriteAcl();
-		const jobs = [
+		return Promise.all([
 			callList(false),
 			callAudit(50),
 			callDoctor(),
-			manage ? callGetPolicy() : callPolicyName()
-		];
-		return Promise.all(jobs);
+			callPolicyName()
+		]).then(function(base) {
+			/* Prefer full policy when write ACL allows; never fail the page for read-only. */
+			return callGetPolicy().then(function(full) {
+				return base.concat([ full ]);
+			}).catch(function() {
+				return base.concat([ null ]);
+			});
+		});
 	},
 
 	render: function(data) {
@@ -234,10 +239,15 @@ return view.extend({
 		const doctor = (data[2] && typeof data[2] === 'object')
 			? data[2]
 			: { ok: true, checks: [], incomplete: [] };
-		const policyIn = (data[3] && typeof data[3] === 'object') ? data[3] : { preset: 'openwrt', label: 'OpenWrt' };
-		const manage = hasWriteAcl();
+		const policyName = (data[3] && typeof data[3] === 'object')
+			? data[3]
+			: { preset: 'openwrt', label: 'OpenWrt' };
+		const policyFull = (data[4] && typeof data[4] === 'object' && data[4].min_length != null)
+			? Object.assign({}, PRESET_VALUES.openwrt, data[4])
+			: null;
+		const manage = !!policyFull;
 		const self = this;
-		const fullPolicy = manage ? Object.assign({}, PRESET_VALUES.openwrt, policyIn) : null;
+		const policyIn = policyFull || policyName;
 
 		const doctorBanner = (doctor.ok !== false) ? null : E('div', { 'class': 'alert-message warning' }, [
 			_('User management self-check reported problems. Mutators may be fail-closed until sudo/wheel/registry are healthy.'),
@@ -255,7 +265,7 @@ return view.extend({
 				'class': 'btn cbi-button',
 				'click': function(ev) {
 					ev.preventDefault();
-					self.togglePolicyEditor(editorWrap, fullPolicy);
+					self.togglePolicyEditor(editorWrap, policyFull);
 				}
 			}, _('Configure')));
 		}
@@ -271,7 +281,7 @@ return view.extend({
 				actions.push(' ');
 				actions.push(E('button', {
 					'class': 'btn cbi-button',
-					'click': ui.createHandlerFn(self, 'handlePasswd', u.name, fullPolicy)
+					'click': ui.createHandlerFn(self, 'handlePasswd', u.name, policyFull)
 				}, _('Password')));
 				actions.push(' ');
 				actions.push(E('button', {
@@ -312,7 +322,7 @@ return view.extend({
 
 		const addBtn = manage ? E('button', {
 			'class': 'btn cbi-button cbi-button-add',
-			'click': ui.createHandlerFn(self, 'handleAdd', fullPolicy)
+			'click': ui.createHandlerFn(self, 'handleAdd', policyFull)
 		}, _('Add user')) : null;
 
 		const tableBody = [
