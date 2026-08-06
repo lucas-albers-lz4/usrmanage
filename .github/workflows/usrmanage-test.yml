@@ -17,5 +17,5 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
-      - name: Host smoke (shellcheck, layout, validators, theme, i18n)
+      - name: Host smoke (shellcheck, layout, validators, mutators, theme, i18n)
         run: ./scripts/smoke-host.sh

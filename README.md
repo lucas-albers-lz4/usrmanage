@@ -44,6 +44,7 @@ usrmanage doctor
 | [docs/developer/architecture.md](docs/developer/architecture.md) | Architecture |
 | [docs/developer/cli-and-api.md](docs/developer/cli-and-api.md) | CLI / ubus / audit schema |
 | [docs/developer/luci-ux.md](docs/developer/luci-ux.md) | UI, themes, i18n |
+| [docs/developer/testing.md](docs/developer/testing.md) | Unit, integration, Playwright MCP / e2e |
 | [docs/developer/build-matrix.md](docs/developer/build-matrix.md) | SDK 6-cell matrix |
 | [docs/binary-feed.md](docs/binary-feed.md) | Signed opkg/apk feed |
 | [docs/release.md](docs/release.md) | Tag → publish |
@@ -62,6 +63,15 @@ usrmanage doctor
 ```sh
 ./scripts/smoke-host.sh
 ```
+
+With a running QEMU lab (LuCI on `:8080`), LuCI e2e:
+
+```sh
+npm install && npx playwright install chromium
+./scripts/playwright-luci.sh
+```
+
+See [docs/developer/testing.md](docs/developer/testing.md).
 
 ## Agent guidance
 
