@@ -1,0 +1,34 @@
+# Build / publish artifacts
+/out/
+/feed-staging/
+*.ipk
+*.apk
+Packages
+Packages.gz
+Packages.sig
+packages.adb
+
+# Signing keys (never commit)
+*.key
+*.rsa
+opkg-secret*
+apk-secret*
+public.key
+usrmanage-feed.rsa.pub
+fwlive-feed.rsa.pub
+
+# Local OpenWrt / SDK
+/openwrt/
+/lab/
+*.img
+*.img.gz
+
+# Editor / OS
+.DS_Store
+*~
+*.swp
+.idea/
+.vscode/
+
+# Node
+node_modules/

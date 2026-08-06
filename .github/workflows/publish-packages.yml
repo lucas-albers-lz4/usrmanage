@@ -1,0 +1,147 @@
+name: publish-packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build and publish (e.g. v0.1.0)'
+        required: true
+        type: string
+
+env:
+  USRMANAGE_FEED_BASE_URL: https://lucas-albers-lz4.github.io/usrmanage-packages
+  USRMANAGE_PACKAGES_REPO: lucas-albers-lz4/usrmanage-packages
+
+permissions:
+  contents: read
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Resolve release tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag="${{ github.event.inputs.tag }}"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "USRMANAGE_RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "Release tag: $tag"
+
+      - name: Set SOURCE_DATE_EPOCH from release tag
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - name: Host smoke
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          ./scripts/smoke-host.sh
+
+      - name: Write signing keys
+        env:
+          OPKG_SECRET: ${{ secrets.OPKG_FEED_SECRET_KEY }}
+          APK_SECRET: ${{ secrets.APK_FEED_SECRET_KEY }}
+          OPKG_PUB: ${{ secrets.OPKG_FEED_PUBLIC_KEY }}
+          APK_PUB: ${{ secrets.APK_FEED_PUBLIC_KEY }}
+        run: |
+          test -n "$OPKG_SECRET" && test -n "$APK_SECRET"
+          # shellcheck source=scripts/lib/feed-keys.sh
+          source ./scripts/lib/feed-keys.sh
+          feed_keys_write_from_env "$GITHUB_WORKSPACE"
+
+      - name: Validate signing keys
+        env:
+          OPKG_FEED_SECRET_KEY: ${{ github.workspace }}/opkg-secret.key
+          OPKG_FEED_PUBLIC_KEY: ${{ github.workspace }}/public.key
+          APK_FEED_SECRET_KEY: ${{ github.workspace }}/apk-secret.rsa
+          APK_FEED_PUBLIC_KEY: ${{ github.workspace }}/usrmanage-feed.rsa.pub
+        run: ./scripts/validate-feed-keys.sh
+
+      - name: Build packages (6 cells — x86-64 + armsr-armv8 × 23.05/24.10/25.12)
+        run: |
+          mkdir -p out
+          for ver in 23.05 24.10 25.12; do
+            for tgt in x86-64 armsr-armv8; do
+              echo "=== docker-sdk build: ${tgt} OpenWrt ${ver} ==="
+              ./scripts/docker-sdk.sh build --target "$tgt" --version "$ver"
+            done
+          done
+
+      - name: Verify reproducible builds (x86-64)
+        run: ./scripts/verify-reproducible-build.sh
+
+      - name: Stage signed feed
+        env:
+          OPKG_FEED_SECRET_KEY: ${{ github.workspace }}/opkg-secret.key
+          OPKG_FEED_PUBLIC_KEY: ${{ github.workspace }}/public.key
+          APK_FEED_SECRET_KEY: ${{ github.workspace }}/apk-secret.rsa
+          APK_FEED_PUBLIC_KEY: ${{ github.workspace }}/usrmanage-feed.rsa.pub
+          USRMANAGE_GIT_TAG: ${{ env.USRMANAGE_RELEASE_TAG }}
+        run: ./scripts/publish-packages.sh feed-staging
+
+      - name: Deploy to GitHub Pages (usrmanage-packages)
+        uses: peaceiris/actions-gh-pages@v4.1.0
+        with:
+          deploy_key: ${{ secrets.FEED_DEPLOY_KEY }}
+          external_repository: ${{ env.USRMANAGE_PACKAGES_REPO }}
+          publish_branch: gh-pages
+          publish_dir: feed-staging
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+
+      - name: Upload GitHub Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${USRMANAGE_RELEASE_TAG}"
+          staging="${RUNNER_TEMP}/usrmanage-release-assets"
+          # shellcheck source=scripts/lib/feed-publish.sh
+          source ./scripts/lib/feed-publish.sh
+          feed_publish_stage_release_assets "$staging"
+          mapfile -t assets < <(find "$staging" -type f | sort)
+          if ((${#assets[@]} == 0)); then
+            echo "No .ipk/.apk artifacts under out/x86_64/" >&2
+            exit 1
+          fi
+          printf 'Publishing %s release asset(s) for %s\n' "${#assets[@]}" "$tag"
+          printf '  %s\n' "${assets[@]##*/}"
+
+          publish_new() {
+            gh release create "$tag" "${assets[@]}" --title "$tag" --generate-notes
+          }
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            immutable="$(gh release view "$tag" --json isImmutable -q '.isImmutable' 2>/dev/null || echo false)"
+            draft="$(gh release view "$tag" --json isDraft -q '.isDraft')"
+            asset_count="$(gh release view "$tag" --json assets -q '.assets | length')"
+            if [[ "$immutable" == "true" && "$draft" == "false" ]]; then
+              if [[ "$asset_count" -gt 0 ]]; then
+                echo "Release $tag already published with ${asset_count} asset(s); skipping upload." >&2
+                exit 0
+              fi
+              echo "Release $tag is published (immutable) with no assets." >&2
+              exit 1
+            fi
+            if [[ "$asset_count" -eq 0 ]]; then
+              gh release delete "$tag" --yes
+              publish_new
+            else
+              gh release upload "$tag" "${assets[@]}" --clobber
+              if [[ "$draft" == "true" ]]; then
+                gh release edit "$tag" --draft=false
+              fi
+            fi
+          else
+            publish_new
+          fi

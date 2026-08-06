@@ -1,0 +1,198 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Lucas Albers <lucas.b.albers@gmail.com>
+#
+# rpcd plugin: ubus object "usrmanage"
+# Passwords are never accepted as ubus JSON string args for mutation methods
+# that set credentials — use the "password" field which is read and passed
+# to the CLI on stdin / password-fd only within this root process, never logged.
+
+USRMANAGE_BIN="${USRMANAGE_BIN:-/usr/sbin/usrmanage}"
+
+json_escape() {
+	awk 'BEGIN {
+		RS = ""; ORS = ""
+		for (n = 1; n < 128; n++)
+			ord[sprintf("%c", n)] = n
+	}
+	{
+		for (i = 1; i <= length($0); i++) {
+			c = substr($0, i, 1)
+			if (c == "\\") printf "\\\\"
+			else if (c == "\"") printf "\\\""
+			else if (c == "\t") printf "\\t"
+			else if (c == "\r") printf "\\r"
+			else if (c == "\n") printf "\\n"
+			else {
+				o = ord[c] + 0
+				if (o > 0 && o < 32)
+					printf "\\u%04x", o
+				else if (o == 127)
+					printf "\\u007f"
+				else
+					printf "%s", c
+			}
+		}
+	}'
+}
+
+# Read ubus call JSON from stdin (rpcd convention for call).
+read_input() {
+	INPUT=
+	if [ -n "$3" ]; then
+		# Some rpcd versions pass JSON as $3
+		INPUT=$3
+	else
+		INPUT=$(cat)
+	fi
+}
+
+json_get() {
+	# json_get <key> — from INPUT using jsonfilter if available
+	_key=$1
+	if command -v jsonfilter >/dev/null 2>&1; then
+		printf '%s' "$INPUT" | jsonfilter -e "@.${_key}" 2>/dev/null
+	else
+		# Minimal fallback: not for passwords with special chars in production
+		printf '%s' "$INPUT" | sed -n "s/.*\"${_key}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n1
+	fi
+}
+
+json_get_bool() {
+	_key=$1
+	_v=$(json_get "$_key")
+	case "$_v" in
+		true|1|yes) printf '1' ;;
+		*) printf '0' ;;
+	esac
+}
+
+session_actor() {
+	# Best-effort: UBUS_CALLER / environment from rpcd; never invent root.
+	if [ -n "${USRMANAGE_ACTOR:-}" ]; then
+		printf '%s' "$USRMANAGE_ACTOR"
+		return 0
+	fi
+	if [ -n "${RPC_SESSION_USERNAME:-}" ]; then
+		printf '%s' "$RPC_SESSION_USERNAME"
+		return 0
+	fi
+	# Try session object if session id present in env
+	if [ -n "${RPC_SESSION:-}" ] && command -v ubus >/dev/null 2>&1; then
+		_u=$(ubus call session get "{\"ubus_rpc_session\":\"${RPC_SESSION}\"}" 2>/dev/null \
+			| jsonfilter -e '@.values.username' 2>/dev/null) || _u=
+		if [ -n "$_u" ]; then
+			printf '%s' "$_u"
+			return 0
+		fi
+	fi
+	printf '%s' "unknown"
+}
+
+run_view() {
+	_args="$*"
+	# shellcheck disable=SC2086
+	USRMANAGE_SRC=luci USRMANAGE_ACTOR="$(session_actor)" "$USRMANAGE_BIN" $_args
+}
+
+run_manage_password() {
+	# Args after password on stdin to CLI via --password-fd 0
+	_name=$1
+	_role=$2
+	_pass=$(json_get password)
+	_actor=$(session_actor)
+	if [ -z "$_pass" ]; then
+		printf '{"ok":false,"error":"password_required"}\n'
+		return 0
+	fi
+	# Pass password on stdin to usrmanage; never put in argv
+	printf '%s\n' "$_pass" | USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
+		"$USRMANAGE_BIN" add "$_name" --role "$_role" --password-fd 0 --json
+	_pass=
+}
+
+run_passwd() {
+	_name=$1
+	_pass=$(json_get password)
+	_actor=$(session_actor)
+	if [ -z "$_pass" ]; then
+		printf '{"ok":false,"error":"password_required"}\n'
+		return 0
+	fi
+	printf '%s\n' "$_pass" | USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
+		"$USRMANAGE_BIN" passwd "$_name" --password-fd 0 --json
+	_pass=
+}
+
+case "$1" in
+	list)
+		echo '{'
+		echo '  "list": { "all": false },'
+		echo '  "show": { "name": "" },'
+		echo '  "audit": { "last": 50 },'
+		echo '  "doctor": {},'
+		echo '  "add": { "name": "", "role": "", "password": "" },'
+		echo '  "del": { "name": "", "purge_home": false },'
+		echo '  "set_role": { "name": "", "role": "" },'
+		echo '  "passwd": { "name": "", "password": "" }'
+		echo '}'
+		;;
+	call)
+		METHOD=$2
+		read_input "$@"
+		case "$METHOD" in
+			list)
+				_all=$(json_get_bool all)
+				if [ "$_all" = "1" ]; then
+					run_view list --json --all
+				else
+					run_view list --json
+				fi
+				;;
+			show)
+				_name=$(json_get name)
+				run_view show "$_name" --json
+				;;
+			audit)
+				_last=$(json_get last)
+				[ -n "$_last" ] || _last=50
+				run_view audit --json --last "$_last"
+				;;
+			doctor)
+				run_view doctor --json
+				;;
+			add)
+				_name=$(json_get name)
+				_role=$(json_get role)
+				run_manage_password "$_name" "$_role"
+				;;
+			del)
+				_name=$(json_get name)
+				_purge=$(json_get_bool purge_home)
+				_actor=$(session_actor)
+				if [ "$_purge" = "1" ]; then
+					USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
+						"$USRMANAGE_BIN" del "$_name" --purge-home --json
+				else
+					USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
+						"$USRMANAGE_BIN" del "$_name" --json
+				fi
+				;;
+			set_role)
+				_name=$(json_get name)
+				_role=$(json_get role)
+				_actor=$(session_actor)
+				USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
+					"$USRMANAGE_BIN" set-role "$_name" "$_role" --json
+				;;
+			passwd)
+				_name=$(json_get name)
+				run_passwd "$_name"
+				;;
+			*)
+				printf '{"error":"Method not found"}\n'
+				exit 1
+				;;
+		esac
+		;;
+esac

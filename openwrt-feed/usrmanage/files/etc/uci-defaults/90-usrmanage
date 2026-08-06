@@ -1,0 +1,33 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Create wheel group and runtime dirs for usrmanage.
+
+[ -f /etc/group ] || exit 0
+
+if ! grep -q '^wheel:' /etc/group 2>/dev/null; then
+	# Prefer groupadd when present; else append a free GID >= 100.
+	if command -v groupadd >/dev/null 2>&1; then
+		groupadd -r wheel 2>/dev/null || groupadd wheel 2>/dev/null || true
+	else
+		gid=100
+		while grep -q ":${gid}:" /etc/group 2>/dev/null; do
+			gid=$((gid + 1))
+		done
+		echo "wheel:x:${gid}:" >> /etc/group
+	fi
+fi
+
+mkdir -p /var/log/usrmanage /var/lock /etc/usrmanage
+chmod 755 /var/log/usrmanage /etc/usrmanage
+touch /var/log/usrmanage/audit.log
+chmod 0640 /var/log/usrmanage/audit.log
+touch /etc/usrmanage/users
+chmod 0640 /etc/usrmanage/users
+
+# Ensure sudoers fragment mode
+if [ -f /etc/sudoers.d/usrmanage ]; then
+	chmod 0440 /etc/sudoers.d/usrmanage
+	chown root:root /etc/sudoers.d/usrmanage 2>/dev/null || true
+fi
+
+exit 0

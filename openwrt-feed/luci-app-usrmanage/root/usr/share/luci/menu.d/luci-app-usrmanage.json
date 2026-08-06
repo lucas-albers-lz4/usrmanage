@@ -1,0 +1,13 @@
+{
+	"admin/system/usrmanage": {
+		"title": "User Management",
+		"order": 55,
+		"action": {
+			"type": "view",
+			"path": "system/usrmanage"
+		},
+		"depends": {
+			"acl": [ "luci-app-usrmanage" ]
+		}
+	}
+}

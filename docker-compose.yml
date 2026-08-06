@@ -1,0 +1,20 @@
+# OpenWrt SDK builds for usrmanage (Linux x86_64 host).
+# Use: ./scripts/docker-sdk.sh …
+
+volumes:
+  openwrt_sdk_armsr_armv8_25_12_0:
+  openwrt_sdk_armsr_armv8_24_10_5:
+  openwrt_sdk_armsr_armv8_23_05_5:
+  openwrt_sdk_x86_64_25_12_0:
+  openwrt_sdk_x86_64_24_10_5:
+  openwrt_sdk_x86_64_23_05_5:
+
+services:
+  sdk:
+    image: ${OWRT_SDK_IMAGE:-ghcr.io/openwrt/sdk:x86-64-24.10.5}
+    volumes:
+      - ${OWRT_SDK_VOLUME:-openwrt_sdk_x86_64_24_10_5}:/builder
+      - .:/work/usrmanage:ro
+    working_dir: /builder
+    environment:
+      - TERM=dumb

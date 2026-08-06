@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# usrmanage — intentional: members of group wheel may run any command as root
+# via sudo after authenticating with their own password (no NOPASSWD).
+Defaults:%wheel !lecture
+%wheel ALL=(ALL:ALL) ALL

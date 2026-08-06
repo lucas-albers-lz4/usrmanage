@@ -1,0 +1,2 @@
+# Managed users registry for usrmanage (one username per line).
+# Updated only by /usr/sbin/usrmanage under exclusive lock.

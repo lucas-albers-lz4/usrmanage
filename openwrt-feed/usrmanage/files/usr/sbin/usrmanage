@@ -1,0 +1,198 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Lucas Albers <lucas.b.albers@gmail.com>
+#
+# usrmanage — local UNIX user management for OpenWrt
+
+set -e
+
+LIB=
+for _p in \
+	"/usr/lib/usrmanage/usrmanage-lib.sh" \
+	"$(dirname "$0")/../lib/usrmanage/usrmanage-lib.sh"
+do
+	if [ -f "$_p" ]; then
+		LIB=$_p
+		break
+	fi
+done
+
+if [ -z "$LIB" ]; then
+	_here=$(cd "$(dirname "$0")" && pwd)
+	# Package source tree: .../files/usr/sbin → .../files/usr/lib/usrmanage
+	if [ -f "$_here/../lib/usrmanage/usrmanage-lib.sh" ]; then
+		LIB="$_here/../lib/usrmanage/usrmanage-lib.sh"
+	fi
+fi
+
+if [ -z "$LIB" ] || [ ! -f "$LIB" ]; then
+	echo "error: usrmanage-lib.sh not found" >&2
+	exit 1
+fi
+
+# shellcheck disable=SC1090
+. "$LIB"
+
+usage() {
+	cat <<'EOF'
+Usage: usrmanage <command> [options]
+
+View:
+  list [--json] [--all]
+  show <user> [--json]
+  audit [--json] [--last N]
+  doctor [--json]
+
+Manage (root):
+  add <user> --role readonly|admin [--password-fd N] [--json]
+  set-role <user> readonly|admin [--json]
+  passwd <user> [--password-fd N] [--json]
+  del <user> [--purge-home] [--json]
+
+Environment:
+  USRMANAGE_ACTOR   Override audit actor (LuCI sets this)
+  USRMANAGE_SRC     cli|luci (default cli)
+EOF
+}
+
+JSON_OUT=0
+CMD=
+PASS_FD=
+ROLE=
+PURGE=0
+NAME=
+LAST=50
+ALL=0
+POS1=
+POS2=
+
+[ "$#" -ge 1 ] || { usage; exit 1; }
+CMD=$1
+shift
+
+case "$CMD" in
+	-h|--help|help)
+		usage
+		exit 0
+		;;
+esac
+
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		--json)
+			JSON_OUT=1
+			export JSON_OUT
+			shift
+			;;
+		--all)
+			ALL=1
+			shift
+			;;
+		--purge-home)
+			PURGE=1
+			shift
+			;;
+		--password-fd)
+			[ "$#" -ge 2 ] || um_die "error: --password-fd needs a number"
+			PASS_FD=$2
+			shift 2
+			;;
+		--role)
+			[ "$#" -ge 2 ] || um_die "error: --role needs readonly|admin"
+			ROLE=$2
+			shift 2
+			;;
+		--last)
+			[ "$#" -ge 2 ] || um_die "error: --last needs a number"
+			LAST=$2
+			shift 2
+			;;
+		--actor)
+			[ "$#" -ge 2 ] || um_die "error: --actor needs a value"
+			USRMANAGE_ACTOR=$2
+			export USRMANAGE_ACTOR
+			shift 2
+			;;
+		--src)
+			[ "$#" -ge 2 ] || um_die "error: --src needs cli|luci"
+			USRMANAGE_SRC=$2
+			export USRMANAGE_SRC
+			shift 2
+			;;
+		-*)
+			um_die "error: unknown option: $1"
+			;;
+		*)
+			if [ -z "$POS1" ]; then
+				POS1=$1
+			elif [ -z "$POS2" ]; then
+				POS2=$1
+			else
+				um_die "error: unexpected argument: $1"
+			fi
+			shift
+			;;
+	esac
+done
+
+NAME=$POS1
+export JSON_OUT
+
+case "$CMD" in
+	list)
+		_list_args=
+		[ "$JSON_OUT" = "1" ] && _list_args="$_list_args --json"
+		[ "$ALL" = "1" ] && _list_args="$_list_args --all"
+		# shellcheck disable=SC2086
+		um_cmd_list $_list_args
+		;;
+	show)
+		[ -n "$NAME" ] || um_die "usage: usrmanage show <user> [--json]"
+		if [ "$JSON_OUT" = "1" ]; then
+			um_cmd_show --json "$NAME"
+		else
+			um_cmd_show "$NAME"
+		fi
+		;;
+	audit)
+		if [ "$JSON_OUT" = "1" ]; then
+			um_cmd_audit --json --last "$LAST"
+		else
+			um_cmd_audit --last "$LAST"
+		fi
+		;;
+	doctor)
+		if [ "$JSON_OUT" = "1" ]; then
+			um_doctor_checks --json || true
+		else
+			um_doctor_checks || true
+		fi
+		;;
+	add)
+		um_require_root
+		[ -n "$NAME" ] || um_die "usage: usrmanage add <user> --role readonly|admin"
+		[ -n "$ROLE" ] || um_die "usage: usrmanage add <user> --role readonly|admin"
+		um_with_lock um_mut_add "$NAME" "$ROLE" "$PASS_FD"
+		;;
+	set-role)
+		um_require_root
+		[ -n "$ROLE" ] || ROLE=$POS2
+		[ -n "$NAME" ] || um_die "usage: usrmanage set-role <user> readonly|admin"
+		[ -n "$ROLE" ] || um_die "usage: usrmanage set-role <user> readonly|admin"
+		um_with_lock um_mut_set_role "$NAME" "$ROLE"
+		;;
+	passwd)
+		um_require_root
+		[ -n "$NAME" ] || um_die "usage: usrmanage passwd <user>"
+		um_with_lock um_mut_passwd "$NAME" "$PASS_FD"
+		;;
+	del|delete|remove)
+		um_require_root
+		[ -n "$NAME" ] || um_die "usage: usrmanage del <user> [--purge-home]"
+		um_with_lock um_mut_del "$NAME" "$PURGE"
+		;;
+	*)
+		usage
+		exit 1
+		;;
+esac

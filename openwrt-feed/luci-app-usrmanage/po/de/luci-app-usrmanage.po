@@ -1,0 +1,140 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: de\n"
+
+msgid "Actions"
+msgstr ""
+
+msgid "Add"
+msgstr ""
+
+msgid "Add user"
+msgstr ""
+
+msgid "Admin role grants wheel + sudo (full root after password). Audit log is operational (local + syslog), not compliance-grade evidence."
+msgstr ""
+
+msgid "Apply"
+msgstr ""
+
+msgid "Audit log"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Change"
+msgstr ""
+
+msgid "Change password: %s"
+msgstr ""
+
+msgid "Confirm"
+msgstr ""
+
+msgid "Failed: %s"
+msgstr ""
+
+msgid "Locks the account, terminates sessions, then deletes the account. Home is kept unless purge is selected."
+msgstr ""
+
+msgid "Manage local UNIX/SSH accounts on this device. LuCI web logins are configured separately (Administration / ACL)."
+msgstr ""
+
+msgid "Managed"
+msgstr ""
+
+msgid "No audit events yet."
+msgstr ""
+
+msgid "No managed users yet."
+msgstr ""
+
+msgid "Password"
+msgstr ""
+
+msgid "Password must be at least 8 characters and not equal to the username"
+msgstr ""
+
+msgid "Password policy failed"
+msgstr ""
+
+msgid "Password updated"
+msgstr ""
+
+msgid "Passwords do not match"
+msgstr ""
+
+msgid "Purge home directory"
+msgstr ""
+
+msgid "Refresh"
+msgstr ""
+
+msgid "Remove"
+msgstr ""
+
+msgid "Remove user: %s"
+msgstr ""
+
+msgid "Request failed"
+msgstr ""
+
+msgid "Role"
+msgstr ""
+
+msgid "Set role"
+msgstr ""
+
+msgid "Set role: %s"
+msgstr ""
+
+msgid "Shell"
+msgstr ""
+
+msgid "UID"
+msgstr ""
+
+msgid "Use HTTPS in hardened deployments. The password is not written to the audit log."
+msgstr ""
+
+msgid "User Management"
+msgstr ""
+
+msgid "User added"
+msgstr ""
+
+msgid "User management self-check reported problems. Mutators may be fail-closed until sudo/wheel/registry are healthy."
+msgstr ""
+
+msgid "User removed"
+msgstr ""
+
+msgid "Username"
+msgstr ""
+
+msgid "Username required"
+msgstr ""
+
+msgid "admin"
+msgstr ""
+
+msgid "no"
+msgstr ""
+
+msgid "read only"
+msgstr ""
+
+msgid "readonly"
+msgstr ""
+
+msgid "unmanaged"
+msgstr ""
+
+msgid "username"
+msgstr ""
+
+msgid "yes"
+msgstr ""
+

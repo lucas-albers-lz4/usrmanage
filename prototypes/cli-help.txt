@@ -1,0 +1,26 @@
+Usage: usrmanage <command> [options]
+
+View commands (any user; non-root cannot mutate):
+  list [--json] [--all]              List managed users (or all with --all)
+  show <user> [--json]               Show one user
+  audit [--json] [--last N]          Show compact operational audit log
+  doctor [--json]                    Sanity checks / incomplete-op detection
+
+Manage commands (root only):
+  add <user> --role readonly|admin [--password-fd N]
+  set-role <user> readonly|admin
+  passwd <user> [--password-fd N]
+  del <user> [--purge-home]
+
+Password input:
+  Prefer --password-fd N or interactive TTY prompt.
+  Never pass passwords on the command line (visible in ps).
+
+Roles:
+  readonly  SSH/shell, not in wheel; view-only for this app when given LuCI read ACL
+  admin     wheel + sudo (password required); full root via sudo by design
+
+Notes:
+  Only usrmanage-tracked users are managed.
+  del locks the account, terminates sessions, then deletes (keeps home unless --purge-home).
+  Audit log is operational (local file + syslog), not compliance-grade evidence.

@@ -1,0 +1,103 @@
+{
+  "list": {
+    "request": { "all": false },
+    "response": {
+      "users": [
+        {
+          "name": "audit",
+          "uid": 1001,
+          "gid": 1001,
+          "role": "readonly",
+          "shell": "/bin/ash",
+          "home": "/home/audit",
+          "managed": true,
+          "locked": false
+        },
+        {
+          "name": "ops",
+          "uid": 1002,
+          "gid": 1002,
+          "role": "admin",
+          "shell": "/bin/ash",
+          "home": "/home/ops",
+          "managed": true,
+          "locked": false
+        }
+      ]
+    }
+  },
+  "show": {
+    "request": { "name": "ops" },
+    "response": {
+      "user": {
+        "name": "ops",
+        "uid": 1002,
+        "gid": 1002,
+        "role": "admin",
+        "shell": "/bin/ash",
+        "home": "/home/ops",
+        "managed": true,
+        "locked": false
+      }
+    }
+  },
+  "audit": {
+    "request": { "last": 50 },
+    "response": {
+      "events": [
+        {
+          "ts": "2026-08-05T23:16:10Z",
+          "action": "grant",
+          "user": "audit",
+          "role": "readonly",
+          "actor": "jdoe",
+          "src": "luci",
+          "result": "ok"
+        },
+        {
+          "ts": "2026-08-05T23:41:12Z",
+          "action": "remove",
+          "user": "audit",
+          "role": "readonly",
+          "actor": "jdoe",
+          "src": "luci",
+          "result": "ok"
+        }
+      ]
+    }
+  },
+  "add": {
+    "request": { "name": "ops", "role": "admin" },
+    "notes": "password on stdin to CLI, not in ubus JSON",
+    "response_ok": { "ok": true, "name": "ops", "role": "admin" },
+    "response_denied": { "ok": false, "error": "invalid_username" }
+  },
+  "del": {
+    "request": { "name": "audit", "purge_home": false },
+    "response_ok": { "ok": true, "name": "audit" },
+    "response_denied": { "ok": false, "error": "last_admin" }
+  },
+  "set_role": {
+    "request": { "name": "ops", "role": "readonly" },
+    "response_ok": { "ok": true, "name": "ops", "role": "readonly" }
+  },
+  "passwd": {
+    "request": { "name": "ops" },
+    "notes": "password on stdin",
+    "response_ok": { "ok": true, "name": "ops" }
+  },
+  "doctor": {
+    "response": {
+      "ok": true,
+      "checks": [
+        { "id": "sudo", "ok": true },
+        { "id": "wheel", "ok": true },
+        { "id": "sudoers", "ok": true },
+        { "id": "registry", "ok": true },
+        { "id": "audit", "ok": true },
+        { "id": "lock", "ok": true }
+      ],
+      "incomplete": []
+    }
+  }
+}

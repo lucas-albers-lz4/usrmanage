@@ -1,0 +1,15 @@
+{
+	"luci-app-usrmanage": {
+		"description": "Grant access to local UNIX user management",
+		"read": {
+			"ubus": {
+				"usrmanage": [ "list", "show", "audit", "doctor" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"usrmanage": [ "add", "del", "set_role", "passwd" ]
+			}
+		}
+	}
+}
