@@ -6,7 +6,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=usrmanage
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 PKG_LICENSE:=Apache-2.0
 PKG_MAINTAINER:=Lucas Albers <lucas.b.albers@gmail.com>
@@ -17,7 +17,10 @@ define Package/usrmanage
   SECTION:=admin
   CATEGORY:=Administration
   TITLE:=Local UNIX user management (CLI)
-  DEPENDS:=+sudo +jshn +jsonfilter
+  # Stock OpenWrt images often omit BusyBox adduser/useradd applets.
+  DEPENDS:=+sudo +jshn +jsonfilter \
+	+shadow-useradd +shadow-userdel +shadow-usermod \
+	+shadow-chpasswd +shadow-gpasswd
   PKGARCH:=all
 endef
 
@@ -28,6 +31,7 @@ define Package/usrmanage/description
 endef
 
 define Package/usrmanage/conffiles
+/etc/config/usrmanage
 /etc/sudoers.d/usrmanage
 /etc/usrmanage/users
 endef
@@ -57,6 +61,9 @@ define Package/usrmanage/install
 
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 	$(INSTALL_BIN) ./files/etc/uci-defaults/90-usrmanage $(1)/etc/uci-defaults/90-usrmanage
+
+	$(INSTALL_DIR) $(1)/etc/config
+	$(INSTALL_DATA) ./files/etc/config/usrmanage $(1)/etc/config/usrmanage
 endef
 
 $(eval $(call BuildPackage,usrmanage))

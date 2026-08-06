@@ -1,138 +1,278 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+#
 msgid ""
-msgstr "Content-Type: text/plain; charset=UTF-8\n"
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: \n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Actions"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Add"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Add user"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Admin role grants wheel + sudo (full root after password). Audit log is operational (local + syslog), not compliance-grade evidence."
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Apply"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "At least %d characters"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Audit log"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Cancel"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Change"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Change password: %s"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Configure"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Confirm"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Confirmation matches"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Contains a digit"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Contains a lowercase letter"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Contains a special character"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Contains an uppercase letter"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Custom"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Defaults match OpenWrt. Choose a stricter preset or adjust toggles, then Save."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Different from username"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Failed to save policy"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Failed: %s"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Locks the account, terminates sessions, then deletes the account. Home is kept unless purge is selected."
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Manage local UNIX/SSH accounts on this device. LuCI web logins are configured separately (Administration / ACL)."
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Managed"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Minimum length"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "No audit events yet."
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "No managed users yet."
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "OpenWrt (default)"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Password"
 msgstr ""
 
-msgid "Password must be at least 8 characters and not equal to the username"
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Password does not meet the current policy"
 msgstr ""
 
-msgid "Password policy failed"
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Password policy saved"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Password policy: %s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Password updated"
 msgstr ""
 
-msgid "Passwords do not match"
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Preset"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Purge home directory"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Refresh"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Reject password equal to username"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Remove"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Remove user: %s"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Request failed"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Require digit"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Require lowercase"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Require special character"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Require uppercase"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Role"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Save"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Set role"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Set role: %s"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Shell"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Standard"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Strict"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "UID"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Use HTTPS in hardened deployments. The password is not written to the audit log."
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "User Management"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "User added"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "User management self-check reported problems. Mutators may be fail-closed until sudo/wheel/registry are healthy."
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "User removed"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Username"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Username required"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "admin"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "no"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "read only"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "readonly"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "unmanaged"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "username"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "yes"
 msgstr ""
 

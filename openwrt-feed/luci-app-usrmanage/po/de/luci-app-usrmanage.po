@@ -1,7 +1,8 @@
+# German translations for luci-app-usrmanage.
 msgid ""
 msgstr ""
-"Content-Type: text/plain; charset=UTF-8\n"
 "Language: de\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 
 msgid "Actions"
 msgstr ""
@@ -18,6 +19,9 @@ msgstr ""
 msgid "Apply"
 msgstr ""
 
+msgid "At least %d characters"
+msgstr ""
+
 msgid "Audit log"
 msgstr ""
 
@@ -30,7 +34,37 @@ msgstr ""
 msgid "Change password: %s"
 msgstr ""
 
+msgid "Configure"
+msgstr ""
+
 msgid "Confirm"
+msgstr ""
+
+msgid "Confirmation matches"
+msgstr ""
+
+msgid "Contains a digit"
+msgstr ""
+
+msgid "Contains a lowercase letter"
+msgstr ""
+
+msgid "Contains a special character"
+msgstr ""
+
+msgid "Contains an uppercase letter"
+msgstr ""
+
+msgid "Custom"
+msgstr ""
+
+msgid "Defaults match OpenWrt. Choose a stricter preset or adjust toggles, then Save."
+msgstr ""
+
+msgid "Different from username"
+msgstr ""
+
+msgid "Failed to save policy"
 msgstr ""
 
 msgid "Failed: %s"
@@ -45,31 +79,43 @@ msgstr ""
 msgid "Managed"
 msgstr ""
 
+msgid "Minimum length"
+msgstr ""
+
 msgid "No audit events yet."
 msgstr ""
 
 msgid "No managed users yet."
 msgstr ""
 
+msgid "OpenWrt (default)"
+msgstr ""
+
 msgid "Password"
 msgstr ""
 
-msgid "Password must be at least 8 characters and not equal to the username"
+msgid "Password does not meet the current policy"
 msgstr ""
 
-msgid "Password policy failed"
+msgid "Password policy saved"
+msgstr ""
+
+msgid "Password policy: %s"
 msgstr ""
 
 msgid "Password updated"
 msgstr ""
 
-msgid "Passwords do not match"
+msgid "Preset"
 msgstr ""
 
 msgid "Purge home directory"
 msgstr ""
 
 msgid "Refresh"
+msgstr ""
+
+msgid "Reject password equal to username"
 msgstr ""
 
 msgid "Remove"
@@ -81,7 +127,22 @@ msgstr ""
 msgid "Request failed"
 msgstr ""
 
+msgid "Require digit"
+msgstr ""
+
+msgid "Require lowercase"
+msgstr ""
+
+msgid "Require special character"
+msgstr ""
+
+msgid "Require uppercase"
+msgstr ""
+
 msgid "Role"
+msgstr ""
+
+msgid "Save"
 msgstr ""
 
 msgid "Set role"
@@ -91,6 +152,12 @@ msgid "Set role: %s"
 msgstr ""
 
 msgid "Shell"
+msgstr ""
+
+msgid "Standard"
+msgstr ""
+
+msgid "Strict"
 msgstr ""
 
 msgid "UID"

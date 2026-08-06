@@ -3,12 +3,12 @@
 		"description": "Grant access to local UNIX user management",
 		"read": {
 			"ubus": {
-				"usrmanage": [ "list", "show", "audit", "doctor" ]
+				"usrmanage": [ "list", "show", "audit", "doctor", "policy" ]
 			}
 		},
 		"write": {
 			"ubus": {
-				"usrmanage": [ "add", "del", "set_role", "passwd" ]
+				"usrmanage": [ "add", "del", "set_role", "passwd", "get_policy", "set_policy" ]
 			}
 		}
 	}
