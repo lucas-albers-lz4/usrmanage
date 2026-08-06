@@ -8,7 +8,7 @@
 - [x] Password policy presets + live checklist (OpenWrt default; Save to change)
 - [x] Zen MCR criticals C1–C7 (actor sanitize, rpcd argv, flock-only lock, jsonfilter, audit denials) — see #3 for remaining majors
 - [x] Zen MCR Fix-now majors M1–M3/M5/M7/M10 + audit `--last` / audit-dir mode (integrity PR)
-- [ ] Publish `0.1.0-r2` with `shadow-*` DEPENDS + password policy + security fixes
+- [ ] Publish `0.1.1` with `shadow-*` DEPENDS + password policy + security fixes
 - [ ] Document observed BusyBox / sudo versions per release line
 - [ ] Optional: PR CI single-cell SDK compile (cost vs coverage)
 

@@ -1,13 +1,24 @@
 # Release process
 
+## Versioning
+
+Bump the **third octet** of `PKG_VERSION` for every publishable build (same approach as fwlive):
+
+- `0.1.0` → `0.1.1` → `0.1.2`
+- Keep `PKG_RELEASE:=1` unless you need an OpenWrt-only rebuild of the same upstream version
+- Set the same `PKG_VERSION` / `PKG_RELEASE` in both `openwrt-feed/usrmanage/Makefile` and `openwrt-feed/luci-app-usrmanage/Makefile`
+- Git tag matches `PKG_VERSION`: `v0.1.1` (do not use `v0.1.0-r2`-style tags)
+
+## Steps
+
 1. Ensure `./scripts/smoke-host.sh` passes locally.
-2. Bump `PKG_VERSION` / `LUCI` package versions if needed in both Makefiles.
+2. Bump `PKG_VERSION` (third octet) in both Makefiles as above.
 3. Commit and push to `main`.
 4. Create annotated tag:
 
 ```sh
-git tag -a v0.1.0 -m "usrmanage 0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "usrmanage 0.1.1"
+git push origin v0.1.1
 ```
 
 5. GitHub Actions `publish-packages`:

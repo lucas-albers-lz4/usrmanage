@@ -28,7 +28,7 @@ ok "guest ${ARCH} OpenWrt ${RELEASE}"
 ssh_guest 'command -v usrmanage >/dev/null' || die "usrmanage binary missing"
 ok "usrmanage installed"
 
-# Ensure account tools exist (pulled by package deps after 0.1.0-r2; install if missing).
+# Ensure account tools exist (pulled by package deps after 0.1.1; install if missing).
 if ! ssh_guest 'command -v useradd >/dev/null 2>&1'; then
 	echo "→ installing shadow account tools (guest missing useradd)" >&2
 	if ssh_guest 'command -v apk >/dev/null 2>&1'; then
