@@ -46,7 +46,7 @@ View:
 
 Manage (root):
   add <user> --role readonly|admin [--password-fd N] [--json]
-  set-role <user> readonly|admin [--json]
+  set-role <user> --role readonly|admin [--json]
   passwd <user> [--password-fd N] [--json]
   del <user> [--purge-home] [--json]
   set-policy --preset openwrt|standard|strict|custom [options] [--json]
@@ -264,9 +264,8 @@ case "$CMD" in
 		;;
 	set-role)
 		um_require_root
-		[ -n "$ROLE" ] || ROLE=$POS2
-		[ -n "$NAME" ] || um_die "usage: usrmanage set-role <user> readonly|admin"
-		[ -n "$ROLE" ] || um_die "usage: usrmanage set-role <user> readonly|admin"
+		[ -n "$NAME" ] || um_die "usage: usrmanage set-role <user> --role readonly|admin"
+		[ -n "$ROLE" ] || um_die "usage: usrmanage set-role <user> --role readonly|admin"
 		um_with_lock um_mut_set_role "$NAME" "$ROLE"
 		;;
 	passwd)

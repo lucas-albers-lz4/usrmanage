@@ -396,9 +396,20 @@ um_validate_password() {
 }
 
 um_ensure_dirs() {
+	# Soft: best-effort for audit/read paths (Zen MCR M4).
 	mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" 2>/dev/null || true
 	[ -f "$USRMANAGE_REGISTRY" ] || touch "$USRMANAGE_REGISTRY"
 	[ -f "$USRMANAGE_AUDIT" ] || touch "$USRMANAGE_AUDIT"
+	chmod 0750 "$USRMANAGE_AUDIT_DIR" 2>/dev/null || true
+	chmod 0640 "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT" 2>/dev/null || true
+}
+
+um_ensure_dirs_strict() {
+	# Hard-fail before mutators take the op lock (Zen MCR M4).
+	mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" \
+		|| um_die "error: dirs_failed"
+	[ -f "$USRMANAGE_REGISTRY" ] || touch "$USRMANAGE_REGISTRY" || um_die "error: dirs_failed"
+	[ -f "$USRMANAGE_AUDIT" ] || touch "$USRMANAGE_AUDIT" || um_die "error: dirs_failed"
 	chmod 0750 "$USRMANAGE_AUDIT_DIR" 2>/dev/null || true
 	chmod 0640 "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT" 2>/dev/null || true
 }
@@ -543,7 +554,7 @@ um_with_lock() {
 	# um_with_lock <shell function name> [args...]
 	# Requires flock (BusyBox or util-linux). No mkdir fallback — that path
 	# broke set -e and left stale locks on um_die (Zen MCR C3/C4).
-	um_ensure_dirs
+	um_ensure_dirs_strict
 	command -v flock >/dev/null 2>&1 || um_die "error: flock_required"
 	_fn=$1
 	shift

@@ -114,7 +114,8 @@ function hasWriteAcl() {
 		if (acls && acls['luci-app-usrmanage'] && !acls['luci-app-usrmanage'].write)
 			return false;
 	} catch (e2) { /* ignore */ }
-	return true;
+	/* Fail-closed UI when ACL shape is unknown (Zen MCR minor). Server ACL remains authoritative. */
+	return false;
 }
 
 /* Surface CLI/rpcd error tokens in notifications (Zen MCR M8). */

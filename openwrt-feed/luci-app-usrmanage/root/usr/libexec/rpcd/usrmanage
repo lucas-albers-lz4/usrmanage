@@ -212,7 +212,7 @@ case "$1" in
 			set_role)
 				_name=$(json_get name)
 				_role=$(json_get role)
-				run_cli set-role "$_name" "$_role" --json
+				run_cli set-role "$_name" --role "$_role" --json
 				;;
 			passwd)
 				_name=$(json_get name)

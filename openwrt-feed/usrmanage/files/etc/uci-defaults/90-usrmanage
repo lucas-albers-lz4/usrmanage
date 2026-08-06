@@ -1,21 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: Apache-2.0
-# Create wheel group and runtime dirs for usrmanage.
-
-[ -f /etc/group ] || exit 0
-
-if ! grep -q '^wheel:' /etc/group 2>/dev/null; then
-	# Prefer groupadd when present; else append a free GID >= 100.
-	if command -v groupadd >/dev/null 2>&1; then
-		groupadd -r wheel 2>/dev/null || groupadd wheel 2>/dev/null || true
-	else
-		gid=100
-		while grep -q ":${gid}:" /etc/group 2>/dev/null; do
-			gid=$((gid + 1))
-		done
-		echo "wheel:x:${gid}:" >> /etc/group
-	fi
-fi
+# Create runtime dirs for usrmanage. Wheel group is created on demand by
+# um_ensure_wheel_group in the CLI (single implementation — Zen MCR M6).
 
 mkdir -p /var/log/usrmanage /var/lock /etc/usrmanage
 chmod 750 /var/log/usrmanage

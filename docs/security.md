@@ -33,6 +33,8 @@ Example (device-side): ensure `logd` / `syslog-ng` / remote relay receives `usrm
 | Audit / syslog | Never contains password material |
 | Policy (v1) | Min length 8, non-empty, not equal to username, confirm match |
 
+Passwords must be **single-line**. The CLI reads one line via `read -r` from the password fd (or TTY); an embedded newline truncates the value.
+
 Do **not** copy stock `luci setPassword` `echo \| passwd` shell interpolation patterns for new code.
 
 ## Sudo / wheel (intentional)

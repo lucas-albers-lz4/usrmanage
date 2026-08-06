@@ -65,7 +65,7 @@ ok "readonly not in wheel"
 ssh_guest 'usrmanage show umsmoke --json' | grep -q umsmoke || die "show failed"
 ok "show umsmoke"
 
-ssh_guest 'usrmanage set-role umsmoke admin' || die "set-role admin failed"
+ssh_guest 'usrmanage set-role umsmoke --role admin' || die "set-role admin failed"
 ssh_guest 'id -nG umsmoke | tr " " "\n" | grep -qx wheel' || die "admin not in wheel"
 ok "set-role admin → wheel"
 
@@ -73,7 +73,7 @@ ssh_guest 'printf "LabPass2!\n" | usrmanage passwd umsmoke --password-fd 0' \
 	|| die "passwd failed"
 ok "passwd"
 
-ssh_guest 'usrmanage set-role umsmoke readonly' || die "set-role readonly failed"
+ssh_guest 'usrmanage set-role umsmoke --role readonly' || die "set-role readonly failed"
 ok "set-role back to readonly"
 
 ssh_guest 'usrmanage audit --last 20' | grep -q umsmoke || die "audit missing umsmoke events"
