@@ -388,6 +388,7 @@ um_ensure_dirs() {
 	mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" 2>/dev/null || true
 	[ -f "$USRMANAGE_REGISTRY" ] || touch "$USRMANAGE_REGISTRY"
 	[ -f "$USRMANAGE_AUDIT" ] || touch "$USRMANAGE_AUDIT"
+	chmod 0750 "$USRMANAGE_AUDIT_DIR" 2>/dev/null || true
 	chmod 0640 "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT" 2>/dev/null || true
 }
 
@@ -400,7 +401,7 @@ um_is_managed() {
 um_registry_add() {
 	_u=$1
 	um_is_managed "$_u" && return 0
-	printf '%s\n' "$_u" >> "$USRMANAGE_REGISTRY"
+	printf '%s\n' "$_u" >> "$USRMANAGE_REGISTRY" || return 1
 }
 
 um_registry_del() {
@@ -566,34 +567,41 @@ um_wheel_add_user() {
 		return 0
 	fi
 	if command -v gpasswd >/dev/null 2>&1; then
-		gpasswd -a "$_u" wheel >/dev/null 2>&1 && return 0
+		gpasswd -a "$_u" wheel >/dev/null 2>&1 && um_in_wheel "$_u" && return 0
 	fi
 	if command -v usermod >/dev/null 2>&1; then
-		usermod -a -G wheel "$_u" >/dev/null 2>&1 && return 0
+		usermod -a -G wheel "$_u" >/dev/null 2>&1 && um_in_wheel "$_u" && return 0
 	fi
 	# Manual append to wheel members
 	_tmp="${USRMANAGE_GROUP}.tmp.$$"
-	awk -v u="$_u" -F: '
+	if awk -v u="$_u" -F: '
 		BEGIN { OFS=":" }
 		$1=="wheel" {
 			if ($4 == "") $4 = u
 			else if (index("," $4 ",", "," u ",") == 0) $4 = $4 "," u
 		}
 		{ print }
-	' "$USRMANAGE_GROUP" > "$_tmp" && mv "$_tmp" "$USRMANAGE_GROUP"
+	' "$USRMANAGE_GROUP" > "$_tmp" && mv "$_tmp" "$USRMANAGE_GROUP"; then
+		um_in_wheel "$_u"
+		return $?
+	fi
+	rm -f "$_tmp"
+	return 1
 }
 
 um_wheel_del_user() {
 	_u=$1
+	if ! um_in_wheel "$_u"; then
+		return 0
+	fi
 	if command -v gpasswd >/dev/null 2>&1; then
 		gpasswd -d "$_u" wheel >/dev/null 2>&1 || true
-	fi
-	if command -v usermod >/dev/null 2>&1; then
-		# Best-effort; may fail if usermod cannot rewrite groups
-		true
+		if ! um_in_wheel "$_u"; then
+			return 0
+		fi
 	fi
 	_tmp="${USRMANAGE_GROUP}.tmp.$$"
-	awk -v u="$_u" -F: '
+	if awk -v u="$_u" -F: '
 		BEGIN { OFS=":" }
 		$1=="wheel" {
 			n = split($4, a, ",")
@@ -606,7 +614,14 @@ um_wheel_del_user() {
 			$4 = out
 		}
 		{ print }
-	' "$USRMANAGE_GROUP" > "$_tmp" && mv "$_tmp" "$USRMANAGE_GROUP"
+	' "$USRMANAGE_GROUP" > "$_tmp" && mv "$_tmp" "$USRMANAGE_GROUP"; then
+		if um_in_wheel "$_u"; then
+			return 1
+		fi
+		return 0
+	fi
+	rm -f "$_tmp"
+	return 1
 }
 
 um_set_password_from_fd() {
@@ -776,7 +791,10 @@ um_create_user() {
 		return 1
 	fi
 	if [ "$_role" = "admin" ]; then
-		um_wheel_add_user "$_u" || return 1
+		um_wheel_add_user "$_u" || {
+			um_delete_account "$_u" 1 || true
+			return 1
+		}
 	fi
 	return 0
 }
@@ -987,6 +1005,9 @@ um_cmd_audit() {
 		esac
 	done
 	um_ensure_dirs
+	case "$_last" in
+		''|*[!0-9]*) _last=50 ;;
+	esac
 	if [ "$_json" = "1" ]; then
 		printf '{"events":['
 		_first=1
@@ -1049,6 +1070,8 @@ um_mut_add() {
 	}
 	um_incomplete_set "add:${_name}"
 	if ! um_create_user "$_name" "$_role"; then
+		um_delete_account "$_name" 1 || true
+		um_incomplete_clear
 		um_audit fail "$_name" fail create "$_role"
 		um_die "error: create_failed"
 	fi
@@ -1067,7 +1090,12 @@ um_mut_add() {
 			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	fi
-	um_registry_add "$_name"
+	um_registry_add "$_name" || {
+		um_delete_account "$_name" 1 || true
+		um_incomplete_clear
+		um_audit fail "$_name" fail registry "$_role"
+		um_die "error: registry_failed"
+	}
 	um_incomplete_clear
 	um_audit grant "$_name" ok "" "$_role"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
@@ -1108,11 +1136,16 @@ um_mut_set_role() {
 	um_incomplete_set "set-role:${_name}:${_role}"
 	if [ "$_role" = "admin" ]; then
 		um_wheel_add_user "$_name" || {
+			um_incomplete_clear
 			um_audit fail "$_name" fail wheel_add "$_role"
 			um_die "error: wheel_add_failed"
 		}
 	else
-		um_wheel_del_user "$_name" || true
+		um_wheel_del_user "$_name" || {
+			um_incomplete_clear
+			um_audit fail "$_name" fail wheel_del "$_role"
+			um_die "error: wheel_del_failed"
+		}
 	fi
 	um_incomplete_clear
 	um_audit role "$_name" ok "from=${_cur}" "$_role"
@@ -1191,7 +1224,10 @@ um_mut_del() {
 		um_die "error: lock_failed"
 	}
 	um_kill_user_procs "$_name"
-	um_wheel_del_user "$_name" || true
+	um_wheel_del_user "$_name" || {
+		um_audit fail "$_name" fail wheel_del "$_role"
+		um_die "error: wheel_del_failed"
+	}
 	um_delete_account "$_name" "$_purge" || {
 		um_audit fail "$_name" fail delete "$_role"
 		um_die "error: delete_failed"
