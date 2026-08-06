@@ -8,12 +8,14 @@ usrmanage list [--json] [--all]
 usrmanage show <user> [--json]
 usrmanage audit [--json] [--last N]
 usrmanage doctor [--json]
+usrmanage policy [--json] [--full]
 
 # Manage (root)
 usrmanage add <user> --role readonly|admin [--password-fd N] [--json]
 usrmanage set-role <user> readonly|admin [--json]
 usrmanage passwd <user> [--password-fd N] [--json]
 usrmanage del <user> [--purge-home] [--json]
+usrmanage set-policy --preset openwrt|standard|strict|custom [options] [--json]
 ```
 
 Environment:
@@ -31,6 +33,8 @@ Environment:
 | `show` | read | `{ "name": "…" }` |
 | `audit` | read | `{ "last": 50 }` |
 | `doctor` | read | self-check |
+| `policy` | read | policy name only |
+| `get_policy` | read | full policy (preset + fields) |
 | `add` | write | `{ "name", "role", "password" }` → password to CLI via fd |
 | `del` | write | `{ "name", "purge_home" }` |
 | `set_role` | write | `{ "name", "role" }` |
@@ -82,7 +86,7 @@ Claim level: **operational audit** only — see [security.md](../security.md).
 ## Username / password policy
 
 - Username: `^[a-z_][a-z0-9_-]{0,31}$`, deny-list includes `root` and common system names
-- Password: length ≥ 8, not equal to username, confirm match (UI)
+- Password policy: the factory default is the **OpenWrt** preset. This preset sets a minimum of 8 characters. The password must not equal the username. Stricter presets (**Standard**, **Strict**) and individual toggles apply only after an operator saves a new policy. See [roles-and-acl](../user/roles-and-acl.md).
 
 ## Prototypes
 

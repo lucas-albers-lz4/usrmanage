@@ -1,3 +1,2 @@
 # Local example — wire after cloning this repo:
-# src-link usrmanage /absolute/path/to/usrmanage/openwrt-feed
-src-link usrmanage /home/lalbers/gitroot/usrmanage/openwrt-feed
+src-link usrmanage /absolute/path/to/usrmanage/openwrt-feed
