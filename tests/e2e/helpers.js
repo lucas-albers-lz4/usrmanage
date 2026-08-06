@@ -2,6 +2,7 @@
 'use strict';
 
 const { execFile } = require('node:child_process');
+const { randomInt } = require('node:crypto');
 const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
