@@ -62,6 +62,10 @@ usrmanage doctor
 ./scripts/smoke-host.sh
 ```
 
+## Agent guidance
+
+See **[AGENTS.md](AGENTS.md)** (and [CLAUDE.md](CLAUDE.md)) for product locks, LuCI/rpc conventions, and security invariants.
+
 ## QEMU lab (x86_64)
 
 Place an OpenWrt combined ext4 image at `lab/images/openwrt-x86-64-24.10.5.img`, then:

@@ -1,0 +1,10 @@
+---
+description: Follow usrmanage AGENTS.md product locks and security invariants
+alwaysApply: true
+---
+
+# usrmanage
+
+Read and follow [AGENTS.md](AGENTS.md) for this repository.
+
+Key invariants: OpenWrt-default password policy until Save; passwords never on argv/logs; LuCI `expect: { '': {…} }`; no unquoted `$*` into privileged CLI; prefer flock for locks.

@@ -73,20 +73,34 @@ um_die() {
 }
 
 um_actor_resolve() {
+	_raw=
 	if [ -n "$USRMANAGE_ACTOR" ]; then
-		printf '%s' "$USRMANAGE_ACTOR"
+		_raw=$USRMANAGE_ACTOR
+	elif [ -n "${USER:-}" ]; then
+		_raw=$USER
+	else
+		_raw=$(id -un 2>/dev/null) || _raw=
+	fi
+	# Whitelist: block audit field injection (spaces, =, newlines).
+	case "$_raw" in
+		''|*[!A-Za-z0-9._@-]*)
+			printf '%s' "unknown"
+			return 0
+			;;
+	esac
+	_alen=${#_raw}
+	if [ "$_alen" -lt 1 ] || [ "$_alen" -gt 64 ]; then
+		printf '%s' "unknown"
 		return 0
 	fi
-	if [ -n "${USER:-}" ]; then
-		printf '%s' "$USER"
-		return 0
-	fi
-	_id=$(id -un 2>/dev/null) || _id=
-	if [ -n "$_id" ]; then
-		printf '%s' "$_id"
-		return 0
-	fi
-	printf '%s' "unknown"
+	printf '%s' "$_raw"
+}
+
+um_validate_src() {
+	case "${USRMANAGE_SRC:-cli}" in
+		cli|luci) ;;
+		*) USRMANAGE_SRC=cli ;;
+	esac
 }
 
 um_require_root() {
@@ -466,12 +480,13 @@ um_audit_rotate_if_needed() {
 }
 
 um_audit() {
-	# um_audit <action> <user> <result> [reason] [role] [extra_kv...]
+	# um_audit <action> <user> <result> [reason] [role]
 	_action=$1
 	_auser=$2
 	_result=$3
 	_reason=${4:-}
 	_role=${5:-}
+	um_validate_src
 	_actor=$(um_actor_resolve)
 	_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
 	_line="${_ts} ${_action} user=${_auser}"
@@ -494,33 +509,16 @@ um_incomplete_clear() {
 
 um_with_lock() {
 	# um_with_lock <shell function name> [args...]
+	# Requires flock (BusyBox or util-linux). No mkdir fallback — that path
+	# broke set -e and left stale locks on um_die (Zen MCR C3/C4).
 	um_ensure_dirs
-	# shellcheck disable=SC2039
-	if command -v flock >/dev/null 2>&1; then
-		# Run body under flock via a subshell holding the FD
-		_fn=$1
-		shift
-		# Export args via positional in nested shell
-		(
-			flock -x 9 || exit 1
-			"$_fn" "$@"
-		) 9>"$USRMANAGE_LOCK"
-	else
-		# Fallback: mkdir-based lock
-		_lockdir="${USRMANAGE_LOCK}.d"
-		_i=0
-		while ! mkdir "$_lockdir" 2>/dev/null; do
-			_i=$((_i + 1))
-			[ "$_i" -lt 50 ] || um_die "error: could not acquire lock"
-			sleep 0.1 2>/dev/null || sleep 1
-		done
-		_fn=$1
-		shift
-		_rc=0
-		"$_fn" "$@" || _rc=$?
-		rmdir "$_lockdir" 2>/dev/null || true
-		return $_rc
-	fi
+	command -v flock >/dev/null 2>&1 || um_die "error: flock_required"
+	_fn=$1
+	shift
+	(
+		flock -x 9 || exit 1
+		"$_fn" "$@"
+	) 9>"$USRMANAGE_LOCK"
 }
 
 um_ensure_wheel_group() {
@@ -828,6 +826,12 @@ um_doctor_checks() {
 		_add_check audit false "audit dir missing"
 	fi
 
+	if command -v flock >/dev/null 2>&1; then
+		_add_check flock true "flock present"
+	else
+		_add_check flock false "flock missing (required for safe locks)"
+	fi
+
 	_add_check lock true "lock path $(dirname "$USRMANAGE_LOCK")"
 
 	_incomplete=
@@ -1057,13 +1061,22 @@ um_mut_add() {
 um_mut_set_role() {
 	_name=$1
 	_role=$2
-	um_validate_username "$_name" || um_die "error: invalid_username"
-	um_validate_role "$_role" || um_die "error: invalid_role"
+	um_validate_username "$_name" || {
+		um_audit denied "$_name" denied invalid_username "$_role"
+		um_die "error: invalid_username"
+	}
+	um_validate_role "$_role" || {
+		um_audit denied "$_name" denied invalid_role
+		um_die "error: invalid_role"
+	}
 	um_is_managed "$_name" || {
 		um_audit denied "$_name" denied unmanaged "$_role"
 		um_die "error: unmanaged"
 	}
-	um_user_exists "$_name" || um_die "error: not_found"
+	um_user_exists "$_name" || {
+		um_audit denied "$_name" denied not_found "$_role"
+		um_die "error: not_found"
+	}
 	_cur=$(um_role_of "$_name")
 	if [ "$_cur" = "admin" ] && [ "$_role" = "readonly" ]; then
 		_n=$(um_count_managed_admins)
@@ -1094,12 +1107,18 @@ um_mut_set_role() {
 um_mut_passwd() {
 	_name=$1
 	_pfd=$2
-	um_validate_username "$_name" || um_die "error: invalid_username"
+	um_validate_username "$_name" || {
+		um_audit denied "$_name" denied invalid_username
+		um_die "error: invalid_username"
+	}
 	um_is_managed "$_name" || {
 		um_audit denied "$_name" denied unmanaged
 		um_die "error: unmanaged"
 	}
-	um_user_exists "$_name" || um_die "error: not_found"
+	um_user_exists "$_name" || {
+		um_audit denied "$_name" denied not_found
+		um_die "error: not_found"
+	}
 	um_incomplete_set "passwd:${_name}"
 	if [ -n "$_pfd" ]; then
 		um_set_password_from_fd "$_name" "$_pfd" || {
@@ -1126,12 +1145,18 @@ um_mut_passwd() {
 um_mut_del() {
 	_name=$1
 	_purge=$2
-	um_validate_username "$_name" || um_die "error: invalid_username"
+	um_validate_username "$_name" || {
+		um_audit denied "$_name" denied invalid_username
+		um_die "error: invalid_username"
+	}
 	um_is_managed "$_name" || {
 		um_audit denied "$_name" denied unmanaged
 		um_die "error: unmanaged"
 	}
-	um_user_exists "$_name" || um_die "error: not_found"
+	um_user_exists "$_name" || {
+		um_audit denied "$_name" denied not_found
+		um_die "error: not_found"
+	}
 	_role=$(um_role_of "$_name")
 	if [ "$_role" = "admin" ]; then
 		_n=$(um_count_managed_admins)

@@ -160,11 +160,15 @@ while [ "$#" -gt 0 ]; do
 			[ "$#" -ge 2 ] || um_die "error: --actor needs a value"
 			USRMANAGE_ACTOR=$2
 			export USRMANAGE_ACTOR
+			# Validated at audit time via um_actor_resolve whitelist
 			shift 2
 			;;
 		--src)
 			[ "$#" -ge 2 ] || um_die "error: --src needs cli|luci"
-			USRMANAGE_SRC=$2
+			case "$2" in
+				cli|luci) USRMANAGE_SRC=$2 ;;
+				*) um_die "error: --src needs cli|luci" ;;
+			esac
 			export USRMANAGE_SRC
 			shift 2
 			;;
