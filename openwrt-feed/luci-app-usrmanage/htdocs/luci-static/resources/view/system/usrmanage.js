@@ -507,7 +507,7 @@ return view.extend({
 									return;
 								}
 								ui.addNotification(null, E('p', {}, _('Password policy saved')), 'info');
-								return self.renderContents();
+								return self.refreshView();
 							}).catch(function() {
 								ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 							});
@@ -530,7 +530,22 @@ return view.extend({
 	},
 
 	handleRefresh: function(ev) {
-		return this.renderContents();
+		return this.refreshView();
+	},
+
+	/* LuCI 24.10 View has no renderContents(); re-run load→render into #view. */
+	refreshView: function() {
+		const self = this;
+		return Promise.resolve(this.load()).then(function(data) {
+			return self.render(data);
+		}).then(function(nodes) {
+			const vp = document.getElementById('view');
+			if (!vp)
+				return;
+			dom.content(vp, nodes);
+			if (typeof self.addFooter === 'function')
+				dom.append(vp, self.addFooter());
+		});
 	},
 
 	handleAdd: function(policy, ev) {
@@ -573,9 +588,11 @@ return view.extend({
 					return;
 				}
 				ui.addNotification(null, E('p', {}, _('User added')), 'info');
-				return self.renderContents();
-			}).catch(function() {
+				return self.refreshView();
+			}).catch(function(err) {
 				ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
+				if (window && window.console)
+					console.error('usrmanage add', err);
 			});
 		});
 
@@ -631,7 +648,7 @@ return view.extend({
 								notifyMutatorFailure(res);
 								return;
 							}
-							return self.renderContents();
+							return self.refreshView();
 						}).catch(function() {
 							ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 						});
@@ -664,7 +681,7 @@ return view.extend({
 					return;
 				}
 				ui.addNotification(null, E('p', {}, _('Password updated')), 'info');
-				return self.renderContents();
+				return self.refreshView();
 			}).catch(function() {
 				ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 			});
@@ -709,7 +726,7 @@ return view.extend({
 								return;
 							}
 							ui.addNotification(null, E('p', {}, _('User removed')), 'info');
-							return self.renderContents();
+							return self.refreshView();
 						}).catch(function() {
 							ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
 						});
