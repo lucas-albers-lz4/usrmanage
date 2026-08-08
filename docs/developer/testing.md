@@ -7,7 +7,7 @@ How usrmanage is tested locally and in CI. Passwords never appear on argv, in au
 | Layer | What | Where | When |
 |-------|------|-------|------|
 | **Unit** | Validators, audit sanitize, theme (no hex), i18n POT coverage | `tests/test_validators.sh`, `tests/usrmanage-theme.test.js`, `tests/usrmanage-i18n.test.js` | PR via `./scripts/smoke-host.sh` |
-| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, rpcd argv (no password leak) | `tests/test_mutators.sh` | PR via `./scripts/smoke-host.sh` |
+| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, rpcd argv (no password leak) | `tests/test_mutators.sh`, `tests/test_mutators-busybox-fallback.sh` | PR via `./scripts/smoke-host.sh` |
 | **Device integration** | Real `useradd`/wheel/ubus/HTTP page on guest | `scripts/qemu-smoke-usrmanage.sh` | Local (QEMU lab); not PR CI |
 | **Playwright MCP** | Agent navigate/snapshot/click against live LuCI | `.cursor/mcp.json` → `@playwright/mcp` | Local with lab up |
 | **E2E UI** | Committed LuCI user flows | `tests/e2e/` + `./scripts/playwright-luci.sh` | Local with lab up; not PR CI |
@@ -73,3 +73,13 @@ Specs use unique usernames (`pwflow_*`) and clean up via SSH/`usrmanage del` whe
 - [luci-ux.md](luci-ux.md) — theme/i18n guards
 - [supported-releases.md](../supported-releases.md) — smoke expectations per release
 - [ROADMAP.md](../ROADMAP.md) — remaining QEMU matrix / i18n spotchecks
+
+## Z3 sanitation checks (#6 / #8)
+
+```sh
+sudo apt install python3-z3   # or pip install -r requirements-z3.txt
+python3 scripts/z3-verify.py --fast   # local / pre-commit
+python3 scripts/z3-verify.py --full   # CI job z3-verify
+```
+
+Optional hook: `ln -sf ../../scripts/hooks/pre-commit-z3-fast .git/hooks/pre-commit`

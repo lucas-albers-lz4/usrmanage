@@ -4,7 +4,7 @@ OpenWrt **local UNIX user management** (CLI + LuCI): managed users, readonly vs 
 
 ## Product locks (do not casually change)
 
-- Supported releases: **23.05 / 24.10 / 25.12** only (`PKGARCH:=all`).
+- Supported releases: **24.10 / 25.12** only (`PKGARCH:=all`). OpenWrt 23.05 users stay on v0.1.2.
 - Password policy factory default: **OpenWrt** (min 8, reject username). Stricter presets/toggles apply only after explicit LuCI **Save** (or CLI `set-policy`).
 - Read ACL: policy **name/label only**. Write ACL: `get_policy` / `set_policy` + mutators.
 - Passwords: never on argv or in audit/logs; LuCI → rpcd → `--password-fd` / stdin only.

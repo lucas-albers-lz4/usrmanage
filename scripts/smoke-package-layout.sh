@@ -39,4 +39,4 @@ grep -q "APP_VERSION = '$pkg_ver'" "$view_js" \
 	|| { echo "APP_VERSION mismatch in usrmanage.js (want $pkg_ver)" >&2; exit 1; }
 
 echo "package layout: ok (arch-independent all)"
-echo "matrix: 23.05/24.10/25.12 × x86-64 + armsr-armv8; feed stages x86_64 _all artifacts"
+echo "matrix: 24.10/25.12 × x86-64 + armsr-armv8; feed stages x86_64 _all artifacts"

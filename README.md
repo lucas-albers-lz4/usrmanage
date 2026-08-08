@@ -5,7 +5,7 @@
 
 Hardened **local UNIX user management** for OpenWrt (CLI + LuCI): add/remove users, **readonly** vs **admin** (`wheel` + `sudo`), compact **operational audit log**.
 
-Designed for deployments **without** RADIUS/central auth. Supported: **OpenWrt 23.05 / 24.10 / 25.12**, arch-independent packages (ARM + x86_64).
+Designed for deployments **without** RADIUS/central auth. Supported: **OpenWrt 24.10 / 25.12**, arch-independent packages (ARM + x86_64). (23.05: last release v0.1.2.)
 
 ## Packages
 
@@ -56,7 +56,7 @@ usrmanage doctor
 | [docs/user/roles-and-acl.md](docs/user/roles-and-acl.md) | Roles + LuCI ACL |
 | [docs/threat-model.md](docs/threat-model.md) | Threat model |
 | [docs/security.md](docs/security.md) | Security guidance |
-| [docs/supported-releases.md](docs/supported-releases.md) | 23.05 / 24.10 / 25.12 |
+| [docs/supported-releases.md](docs/supported-releases.md) | 24.10 / 25.12 (23.05 → v0.1.2) |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Next steps |
 | [docs/upstream.md](docs/upstream.md) | Upstream OpenWrt path |
 | [docs/security-review.md](docs/security-review.md) | Pre-0.1.0 security review record |

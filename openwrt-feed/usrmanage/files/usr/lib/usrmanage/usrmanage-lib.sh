@@ -1653,8 +1653,14 @@ um_mut_del() {
 		um_audit fail "$_name" fail delete "$_role"
 		um_die "error: delete_failed"
 	}
-	um_registry_del "$_name"
+	# Commit before registry_del: purge may have removed the home already, so
+	# EXIT rollback must not recreate passwd/shadow/group without a home.
 	um_tx_commit
+	um_registry_del "$_name" || {
+		um_incomplete_clear
+		um_audit fail "$_name" fail registry "$_role"
+		um_die "error: registry_failed"
+	}
 	um_incomplete_clear
 	um_audit remove "$_name" ok "" "$_role"
 	if [ "${JSON_OUT:-0}" = "1" ]; then

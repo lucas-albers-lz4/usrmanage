@@ -3,7 +3,7 @@
 ## Supported Versions
 
 Security fixes are applied to the latest release on `main` for currently
-supported OpenWrt targets (23.05 / 24.10 / 25.12).
+supported OpenWrt targets (24.10 / 25.12). OpenWrt 23.05 remains on the last published v0.1.2 feed.
 
 ## Reporting a Vulnerability
 

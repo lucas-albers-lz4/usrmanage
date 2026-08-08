@@ -1,0 +1,4 @@
+# Optional host dependency for scripts/z3-verify.py (#6/#8).
+# Ubuntu: sudo apt install python3-z3
+# Or: pip install 'z3-solver>=4.8.12'
+z3-solver>=4.8.12
