@@ -20,6 +20,7 @@ fwlive-feed.rsa.pub
 # Local OpenWrt / SDK
 /openwrt/
 /lab/
+.ci-sdk-cache/
 *.img
 *.img.gz
 
