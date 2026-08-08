@@ -990,18 +990,15 @@ um_home_create() {
 		um_err "error: home_is_symlink"
 		return 1
 	fi
+	# Match useradd -m: do not take over an existing path (incl. root-owned).
 	if [ -e "$_home" ]; then
-		[ -d "$_home" ] || return 1
-		# Refuse to take over a non-empty foreign home
-		# shellcheck disable=SC2012
-		_own=$(ls -ldn "$_home" 2>/dev/null | awk '{print $3}')
-		[ "$_own" = "0" ] || [ "$_own" = "$_uid" ] || return 1
-	else
-		mkdir -p "$_home" || return 1
-		if [ -L "$_home" ]; then
-			um_err "error: home_is_symlink"
-			return 1
-		fi
+		um_err "error: home_exists"
+		return 1
+	fi
+	mkdir -p "$_home" || return 1
+	if [ -L "$_home" ]; then
+		um_err "error: home_is_symlink"
+		return 1
 	fi
 	chmod 0750 "$_home" || return 1
 	chown "${_uid}:${_gid}" "$_home" 2>/dev/null || chown "0:${_gid}" "$_home" 2>/dev/null || true
