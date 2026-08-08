@@ -14,8 +14,9 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 if command -v node >/dev/null 2>&1; then
 	node "$ROOT/tests/usrmanage-theme.test.js"
 	node "$ROOT/tests/usrmanage-i18n.test.js"
+	node "$ROOT/tests/usrmanage-parity.test.js"
 else
-	echo "warn: node not found; skipping theme/i18n tests" >&2
+	echo "warn: node not found; skipping theme/i18n/parity tests" >&2
 fi
 
 echo ""
