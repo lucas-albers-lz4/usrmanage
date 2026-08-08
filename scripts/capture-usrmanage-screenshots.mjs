@@ -2,7 +2,7 @@
 /**
  * Capture WebP screenshots of LuCI User Management for docs (#15).
  * Requires a running QEMU lab with luci-app-usrmanage and a CLEAN managed-user
- * table (no umadmin / pwflow_* / smoke leftovers).
+ * table (no umadmin / umsmoke / pwflow_* / smoke leftovers).
  *
  *   USRMANAGE_LUCI_URL=http://127.0.0.1:8080 node scripts/capture-usrmanage-screenshots.mjs
  */
@@ -29,13 +29,34 @@ async function luciLogin() {
 		await page.click('button[type="submit"], input[type="submit"]');
 		await page.waitForLoadState('networkidle');
 	}
+	// Successful login leaves the login form; fail fast if still on login.
+	const stillLogin = await page.locator(passSel).count();
+	if (stillLogin > 0 && page.url().includes('luci')) {
+		const onLogin = await page.locator('form').filter({ has: page.locator(passSel) }).count();
+		if (onLogin > 0) {
+			console.error('LuCI login did not succeed (still on login form).');
+			process.exit(1);
+		}
+	}
 }
 
 await luciLogin();
 await page.goto(`${base}/cgi-bin/luci/admin/system/usrmanage`, { waitUntil: 'networkidle' });
+// Wait for User Management view chrome (version footer and/or audit heading).
+await page.waitForSelector('#usrmanage-build, h2, h3', { timeout: 30000 });
+const ready = await page.locator('#usrmanage-build').count();
+if (!ready) {
+	// Fall back: page title / heading containing User Management
+	const text = await page.locator('body').innerText();
+	if (!/user management/i.test(text)) {
+		console.error('User Management view did not become ready.');
+		process.exit(1);
+	}
+}
+
 // Refuse capture if known fixture names are visible
 const body = await page.locator('body').innerText();
-for (const bad of ['umadmin', 'pwflow_', 'mtx', 'm2410', 'm2512']) {
+for (const bad of ['umadmin', 'umsmoke', 'pwflow_', 'mtx', 'm2410', 'm2512']) {
 	if (body.includes(bad)) {
 		console.error(`Refusing capture: stray account marker "${bad}" visible. Clean the managed-user table first.`);
 		process.exit(2);

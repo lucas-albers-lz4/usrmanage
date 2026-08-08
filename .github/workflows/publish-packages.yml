@@ -97,6 +97,8 @@ jobs:
           external_repository: ${{ env.USRMANAGE_PACKAGES_REPO }}
           publish_branch: gh-pages
           publish_dir: feed-staging
+          # Preserve historical feed dirs (e.g. 23.05/) not rebuilt by this matrix.
+          keep_files: true
           user_name: github-actions[bot]
           user_email: github-actions[bot]@users.noreply.github.com
 
