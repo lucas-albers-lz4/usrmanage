@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SDK_MATRIX_TARGETS=(armsr-armv8 x86-64)
-SDK_MATRIX_VERSIONS=(25.12 24.10 23.05)
+SDK_MATRIX_VERSIONS=(25.12 24.10)
 
 sdk_matrix_root() {
 	local here
@@ -16,7 +16,6 @@ sdk_matrix_version_patch() {
 	case "$1" in
 		25.12 | 25.12.*) printf '%s' '25.12.0' ;;
 		24.10 | 24.10.*) printf '%s' '24.10.5' ;;
-		23.05 | 23.05.*) printf '%s' '23.05.5' ;;
 		*) printf '%s' "$1" ;;
 	esac
 }
@@ -73,7 +72,7 @@ sdk_matrix_validate_version() {
 		[[ "$1" == "$v" || "$1" == "$(sdk_matrix_version_patch "$1")" ]] && return 0
 	done
 	case "$1" in
-		25.12.* | 24.10.* | 23.05.*) return 0 ;;
+		25.12.* | 24.10.*) return 0 ;;
 	esac
 	echo "invalid --version $1 (choose: ${SDK_MATRIX_VERSIONS[*]})" >&2
 	return 1
@@ -238,13 +237,10 @@ sdk_matrix_copy_out() {
 	root="$(sdk_matrix_root)"
 	out_mount="${root}/out"
 	mkdir -p "${out_mount}/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}"
-	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL"
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
 		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
-		OWRT_SDK_DL_CACHE="$SDK_MATRIX_DL_CACHE" \
-		OWRT_SDK_FEEDS_CACHE="$SDK_MATRIX_FEEDS_CACHE" \
 		docker compose run --rm --user root -v "${out_mount}:/out" sdk sh -ec "
 			dest=/out/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}
 			mkdir -p \"\$dest\"
