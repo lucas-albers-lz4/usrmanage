@@ -1,13 +1,13 @@
 # Wave #44 lab acceptance (F1–F6 / v0.1.4)
 
-Date: 2026-08-08. Packages from git tree via `ssh cat` (post-merge `49af90a` + Playwright tour branch).
+Date: 2026-08-08. Packages from git tree via `ssh cat` (post-merge hardening `49af90a` + Playwright tour).
 
 ## QEMU no-shadow CLI
 
 | Release | result | notes |
 |---------|--------|-------|
 | 24.10.8 | PASS | aging min/max `0 99999` after add + passwd |
-| 25.12.0 | (pending below) | |
+| 25.12.0 | PASS | aging min/max `0 99999` after add + passwd |
 
 ## Playwright product tour
 
