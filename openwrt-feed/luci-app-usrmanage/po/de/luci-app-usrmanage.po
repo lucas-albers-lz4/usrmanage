@@ -7,7 +7,13 @@ msgstr ""
 "Language: de\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 
+msgid "Action"
+msgstr ""
+
 msgid "Actions"
+msgstr ""
+
+msgid "Actor"
 msgstr ""
 
 msgid "Add"
@@ -118,6 +124,9 @@ msgstr ""
 msgid "Refresh"
 msgstr ""
 
+msgid "Reason"
+msgstr ""
+
 msgid "Reject password equal to username"
 msgstr ""
 
@@ -128,6 +137,9 @@ msgid "Remove user: %s"
 msgstr ""
 
 msgid "Request failed"
+msgstr ""
+
+msgid "Result"
 msgstr ""
 
 msgid "Require digit"
@@ -157,10 +169,16 @@ msgstr ""
 msgid "Shell"
 msgstr ""
 
+msgid "Source"
+msgstr ""
+
 msgid "Standard"
 msgstr ""
 
 msgid "Strict"
+msgstr ""
+
+msgid "Time"
 msgstr ""
 
 msgid "UID"

@@ -32,5 +32,11 @@ grep -q '%wheel' "$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json'))"
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/luci-app-usrmanage.json'))"
 
+# LuCI APP_VERSION must match luci-app Makefile PKG_VERSION (fwlive-style)
+pkg_ver=$(sed -n 's/^PKG_VERSION:=//p' "$FEED/luci-app-usrmanage/Makefile" | head -1)
+view_js="$FEED/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js"
+grep -q "APP_VERSION = '$pkg_ver'" "$view_js" \
+	|| { echo "APP_VERSION mismatch in usrmanage.js (want $pkg_ver)" >&2; exit 1; }
+
 echo "package layout: ok (arch-independent all)"
 echo "matrix: 23.05/24.10/25.12 × x86-64 + armsr-armv8; feed stages x86_64 _all artifacts"

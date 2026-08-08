@@ -5,6 +5,9 @@
 'require dom';
 'require poll';
 
+/* Keep in sync with openwrt-feed/luci-app-usrmanage/Makefile PKG_VERSION */
+const APP_VERSION = '0.1.2';
+
 const callList = rpc.declare({
 	object: 'usrmanage',
 	method: 'list',
@@ -338,18 +341,17 @@ return view.extend({
 			]);
 		});
 
-		const eventNodes = events.map(function(ev) {
-			const line = [
-				ev.ts || '',
-				ev.action || '',
-				'user=' + (ev.user || ''),
-				ev.role ? ('role=' + ev.role) : '',
-				'actor=' + (ev.actor || ''),
-				'src=' + (ev.src || ''),
-				'result=' + (ev.result || ''),
-				ev.reason ? ('reason=' + ev.reason) : ''
-			].filter(Boolean).join(' ');
-			return E('div', { 'class': 'cbi-value-description' }, line);
+		const eventRows = events.map(function(ev) {
+			return E('tr', { 'class': 'tr' }, [
+				E('td', { 'class': 'td' }, ev.ts || ''),
+				E('td', { 'class': 'td' }, ev.action || ''),
+				E('td', { 'class': 'td' }, ev.user || ''),
+				E('td', { 'class': 'td' }, ev.role || ''),
+				E('td', { 'class': 'td' }, ev.actor || ''),
+				E('td', { 'class': 'td' }, ev.src || ''),
+				E('td', { 'class': 'td' }, ev.result || ''),
+				E('td', { 'class': 'td' }, ev.reason || '')
+			]);
 		});
 
 		const addBtn = manage ? E('button', {
@@ -373,6 +375,23 @@ return view.extend({
 			])
 		]);
 
+		const auditBody = [
+			E('tr', { 'class': 'tr table-titles' }, [
+				E('th', { 'class': 'th' }, _('Time')),
+				E('th', { 'class': 'th' }, _('Action')),
+				E('th', { 'class': 'th' }, _('Username')),
+				E('th', { 'class': 'th' }, _('Role')),
+				E('th', { 'class': 'th' }, _('Actor')),
+				E('th', { 'class': 'th' }, _('Source')),
+				E('th', { 'class': 'th' }, _('Result')),
+				E('th', { 'class': 'th' }, _('Reason'))
+			])
+		].concat(eventRows.length ? eventRows : [
+			E('tr', { 'class': 'tr' }, [
+				E('td', { 'class': 'td', 'colspan': 8 }, _('No audit events yet.'))
+			])
+		]);
+
 		return E('div', { 'class': 'cbi-map' }, elChildren([
 			E('h2', {}, _('User Management')),
 			E('div', { 'class': 'cbi-map-descr' }, [
@@ -392,9 +411,13 @@ return view.extend({
 					'click': ui.createHandlerFn(self, 'handleRefresh')
 				}, _('Refresh'))
 			]),
-			E('div', { 'class': 'cbi-section' }, eventNodes.length ? eventNodes : [
-				E('em', {}, _('No audit events yet.'))
-			])
+			E('table', { 'class': 'table cbi-section-table' }, auditBody),
+			E('div', {
+				'class': 'cbi-value-description',
+				'id': 'usrmanage-build',
+				'data-testid': 'usrmanage-build',
+				'title': 'luci-app-usrmanage'
+			}, 'v' + APP_VERSION)
 		]));
 	},
 
