@@ -1292,21 +1292,32 @@ um_doctor_checks() {
 	_add_check lock true "lock path $(dirname "$USRMANAGE_LOCK")"
 
 	# Orphaned tx snapdirs (partial restore kept them for recovery; tmpfs).
+	# Skip while the op lock is held — in-flight mutators keep a live snapdir.
 	_tx_orphan_msg=
 	_tx_orphan_count=0
-	for _tx_d in "${TMPDIR:-/tmp}"/usrmanage-tx.*; do
-		[ -d "$_tx_d" ] || continue
-		_tx_orphan_count=$((_tx_orphan_count + 1))
-		if [ -z "$_tx_orphan_msg" ]; then
-			_tx_orphan_msg=$_tx_d
-		else
-			_tx_orphan_msg="${_tx_orphan_msg} ${_tx_d}"
+	_tx_lock_busy=0
+	if command -v flock >/dev/null 2>&1; then
+		if ! ( flock -n 9 || exit 1 ) 9>"$USRMANAGE_LOCK"; then
+			_tx_lock_busy=1
 		fi
-	done
-	if [ "$_tx_orphan_count" -eq 0 ]; then
-		_add_check tx_snapdirs true "no orphaned tx snapdirs"
+	fi
+	if [ "$_tx_lock_busy" = "1" ]; then
+		_add_check tx_snapdirs true "tx lock held; snapdir scan skipped"
 	else
-		_add_check tx_snapdirs false "orphaned tx snapdirs: ${_tx_orphan_msg}"
+		for _tx_d in "${TMPDIR:-/tmp}"/usrmanage-tx.*; do
+			[ -d "$_tx_d" ] || continue
+			_tx_orphan_count=$((_tx_orphan_count + 1))
+			if [ -z "$_tx_orphan_msg" ]; then
+				_tx_orphan_msg=$_tx_d
+			else
+				_tx_orphan_msg="${_tx_orphan_msg} ${_tx_d}"
+			fi
+		done
+		if [ "$_tx_orphan_count" -eq 0 ]; then
+			_add_check tx_snapdirs true "no orphaned tx snapdirs"
+		else
+			_add_check tx_snapdirs false "orphaned tx snapdirs: ${_tx_orphan_msg}"
+		fi
 	fi
 
 	_incomplete=
