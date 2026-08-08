@@ -12,9 +12,9 @@
 
 ## Next wave ([#52](https://github.com/lucas-albers-lz4/usrmanage/issues/52))
 
-- [ ] #50 follow-up hardening (F2 recovery path, tx-begin leak, E2E policy reset, lock timeout)
-- [ ] #51 parity gates (actor sanitize, preset tables, APP_VERSION)
-- [ ] #47 Fowler refactor pass (after #50)
+- [x] #50 follow-up hardening (F2 recovery path, tx-begin leak, E2E policy reset, lock timeout)
+- [x] #51 parity gates (actor sanitize, preset tables, APP_VERSION)
+- [x] #47 Fowler refactor pass (after #50)
 - [ ] #15 docs WebP screenshots (clean lab; WIP branch `feat/15-docs-screenshots`)
 - [ ] Release tag after lab acceptance (`docs/release.md`)
 
