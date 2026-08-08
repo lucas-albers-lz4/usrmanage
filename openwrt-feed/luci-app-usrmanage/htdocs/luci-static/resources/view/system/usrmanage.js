@@ -299,6 +299,7 @@ return view.extend({
 			stripKids.push(' ');
 			stripKids.push(E('button', {
 				'class': 'btn cbi-button',
+				'data-testid': 'usrmanage-configure-policy',
 				'click': function(ev) {
 					ev.preventDefault();
 					self.togglePolicyEditor(editorWrap, policyForForms);
@@ -312,16 +313,19 @@ return view.extend({
 			if (manage && u.managed) {
 				actions.push(E('button', {
 					'class': 'btn cbi-button',
+					'data-testid': 'usrmanage-set-role',
 					'click': ui.createHandlerFn(self, 'handleSetRole', u.name, u.role)
 				}, _('Set role')));
 				actions.push(' ');
 				actions.push(E('button', {
 					'class': 'btn cbi-button',
+					'data-testid': 'usrmanage-passwd',
 					'click': ui.createHandlerFn(self, 'handlePasswd', u.name, policyForForms)
 				}, _('Password')));
 				actions.push(' ');
 				actions.push(E('button', {
 					'class': 'btn cbi-button cbi-button-remove',
+					'data-testid': 'usrmanage-remove',
 					'click': ui.createHandlerFn(self, 'handleRemove', u.name)
 				}, _('Remove')));
 			}
@@ -332,7 +336,7 @@ return view.extend({
 				actions.push(E('em', {}, _('unmanaged')));
 			}
 
-			return E('tr', { 'class': 'tr' }, [
+			return E('tr', { 'class': 'tr', 'data-testid': 'usrmanage-row-' + (u.name || '') }, [
 				E('td', { 'class': 'td' }, u.name || ''),
 				E('td', { 'class': 'td' }, String(u.uid != null ? u.uid : '')),
 				E('td', { 'class': 'td' }, u.role || ''),
@@ -431,7 +435,10 @@ return view.extend({
 		}
 		const self = this;
 		const draft = Object.assign({}, policy);
-		const presetSelect = E('select', { 'class': 'cbi-input-select' }, [
+		const presetSelect = E('select', {
+			'class': 'cbi-input-select',
+			'data-testid': 'usrmanage-policy-preset'
+		}, [
 			E('option', { 'value': 'openwrt' }, _('OpenWrt (default)')),
 			E('option', { 'value': 'standard' }, _('Standard')),
 			E('option', { 'value': 'strict' }, _('Strict')),
@@ -505,6 +512,7 @@ return view.extend({
 				E('div', { 'class': 'cbi-page-actions' }, [
 					E('button', {
 						'class': 'btn cbi-button-save',
+						'data-testid': 'usrmanage-policy-save',
 						'click': function() {
 							const preset = presetSelect.value;
 							const payload = preset === 'custom'
@@ -673,7 +681,10 @@ return view.extend({
 
 	handleSetRole: function(name, current, ev) {
 		const self = this;
-		const roleSelect = E('select', { 'class': 'cbi-input-select' }, [
+		const roleSelect = E('select', {
+			'class': 'cbi-input-select',
+			'data-testid': 'usrmanage-set-role-select'
+		}, [
 			E('option', { 'value': 'readonly', 'selected': current === 'readonly' ? 'selected' : null }, _('readonly')),
 			E('option', { 'value': 'admin', 'selected': current === 'admin' ? 'selected' : null }, _('admin'))
 		]);
@@ -688,6 +699,7 @@ return view.extend({
 				' ',
 				E('button', {
 					'class': 'btn cbi-button-positive',
+					'data-testid': 'usrmanage-set-role-apply',
 					'click': function() {
 						return callSetRole(name, roleSelect.value).then(function(res) {
 							ui.hideModal();
@@ -707,9 +719,23 @@ return view.extend({
 
 	handlePasswd: function(name, policy, ev) {
 		const self = this;
-		const passInput = E('input', { 'type': 'password', 'class': 'cbi-input-text', 'autocomplete': 'new-password' });
-		const pass2Input = E('input', { 'type': 'password', 'class': 'cbi-input-text', 'autocomplete': 'new-password' });
-		const changeBtn = E('button', { 'class': 'btn cbi-button-positive cbi-button-disabled', 'disabled': 'disabled' }, _('Change'));
+		const passInput = E('input', {
+			'type': 'password',
+			'class': 'cbi-input-text',
+			'autocomplete': 'new-password',
+			'data-testid': 'usrmanage-passwd-password'
+		});
+		const pass2Input = E('input', {
+			'type': 'password',
+			'class': 'cbi-input-text',
+			'autocomplete': 'new-password',
+			'data-testid': 'usrmanage-passwd-confirm'
+		});
+		const changeBtn = E('button', {
+			'class': 'btn cbi-button-positive cbi-button-disabled',
+			'disabled': 'disabled',
+			'data-testid': 'usrmanage-passwd-submit'
+		}, _('Change'));
 		const policyBox = buildPasswordPolicyUI(policy, function() { return name; }, passInput, pass2Input, changeBtn);
 
 		changeBtn.addEventListener('click', function() {
@@ -765,6 +791,7 @@ return view.extend({
 				' ',
 				E('button', {
 					'class': 'btn cbi-button-negative',
+					'data-testid': 'usrmanage-remove-confirm',
 					'click': function() {
 						return callDel(name, purge.checked).then(function(res) {
 							ui.hideModal();
