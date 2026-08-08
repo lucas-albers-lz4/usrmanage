@@ -1,5 +1,5 @@
 #!/bin/sh
-# Host tests for mutators under lock + rpcd argv (Zen MCR M9).
+# Host tests for mutators under lock + rpcd argv (issue #3 M9).
 # Uses USRMANAGE_DRY_RUN=1 — no real useradd/chpasswd.
 set -e
 

@@ -12,4 +12,4 @@ Quick reminders:
 - Done gate: `./scripts/smoke-host.sh`. Lab e2e: `./scripts/playwright-luci.sh`. MCP: `.cursor/mcp.json`.
 - Lab: `:2222` SSH / `:8080` LuCI; fixture users are not product defaults. Docs screenshots (#15): clean table, WebP.
 - Release: third-octet `PKG_VERSION`, tag `v*`, Pages feed — see [docs/release.md](docs/release.md).
-- Security backlog: issue #3 (Zen MCR).
+- Security backlog: issue #3.

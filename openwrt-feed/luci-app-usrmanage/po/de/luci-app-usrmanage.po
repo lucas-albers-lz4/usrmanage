@@ -1,6 +1,6 @@
 # German translations for luci-app-usrmanage.
 #
-# Scaffold only until real translations land (Zen MCR minor). Empty msgstr
+# Scaffold only until real translations land (issue #3 minor). Empty msgstr
 # means LuCI falls back to the English msgid at runtime.
 msgid ""
 msgstr ""

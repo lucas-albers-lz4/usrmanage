@@ -84,7 +84,7 @@ else
 	ok "injection username rejected on show"
 fi
 
-# set-role requires --role (documented; positional role removed — Zen MCR minor)
+# set-role requires --role (documented; positional role removed — issue #3 minor)
 "$BIN" --help | grep -q 'set-role <user> --role' && ok "set-role help requires --role" || bad "set-role help"
 # Non-root hits um_require_root first; still ensure positional form is not the advertised API
 if "$BIN" --help | grep -E 'set-role <user> readonly\|admin' >/dev/null; then
@@ -93,7 +93,7 @@ else
 	ok "set-role help has no positional role"
 fi
 
-# JSON denial shape for --json (Zen MCR M8 / LuCI notifications)
+# JSON denial shape for --json (issue #3 M8 / LuCI notifications)
 out=$("$BIN" show 'x;y' --json 2>/dev/null) || true
 echo "$out" | grep -q '"ok":false' && ok "show denial ok:false" || bad "show denial json: $out"
 echo "$out" | grep -q '"error":"invalid_username"' && ok "show denial error token" || bad "show denial error: $out"
