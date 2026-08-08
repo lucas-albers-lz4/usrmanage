@@ -5,6 +5,7 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
 "$ROOT/scripts/shellcheck.sh"
+"$ROOT/scripts/usrmanage-linkcheck.sh"
 "$ROOT/scripts/smoke-package-layout.sh"
 "$ROOT/tests/test_validators.sh"
 "$ROOT/tests/test_mutators.sh"
