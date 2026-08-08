@@ -735,14 +735,14 @@ um_with_lock() {
 	# um_with_lock <shell function name> [args...]
 	# Requires flock (BusyBox or util-linux). No mkdir fallback — that path
 	# broke set -e and left stale locks on um_die (issue #3 C3/C4).
-	# flock -w 30: fail rather than block forever if a holder is stuck
-	# (BusyBox and util-linux both support -w on 24.10/25.12).
+	# BusyBox flock on OpenWrt 24.10/25.12 has no -w timeout (only -sxun);
+	# a stuck holder therefore blocks concurrent callers indefinitely.
 	um_ensure_dirs_strict
 	command -v flock >/dev/null 2>&1 || um_die "error: flock_required"
 	_fn=$1
 	shift
 	(
-		flock -w 30 -x 9 || exit 1
+		flock -x 9 || exit 1
 		"$_fn" "$@"
 	) 9>"$USRMANAGE_LOCK"
 }

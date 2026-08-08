@@ -47,9 +47,12 @@ rm -f "$TMP/lock_ran"
 um_with_lock _mark_touch
 [ -f "$TMP/lock_ran" ] && ok "um_with_lock runs body" || bad "um_with_lock body"
 [ -f "$USRMANAGE_LOCK" ] && ok "lock file created" || bad "lock file missing"
-grep -q 'flock -w 30' "$LIB" \
-	&& ok "um_with_lock uses flock -w 30" \
-	|| bad "um_with_lock missing flock -w 30"
+# BusyBox flock lacks -w; pin the indefinite-block assumption in source.
+grep -q 'blocks concurrent callers indefinitely' "$LIB" \
+	&& ok "um_with_lock documents indefinite flock wait" \
+	|| bad "um_with_lock missing indefinite-wait note"
+grep -q 'flock -w' "$LIB" && bad "um_with_lock must not use flock -w (BusyBox)" \
+	|| ok "um_with_lock avoids flock -w"
 
 # flock required when flock not on PATH
 mkdir -p "$TMP/emptybin"
