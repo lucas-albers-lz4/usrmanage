@@ -32,12 +32,6 @@ json_get_bool() {
 	esac
 }
 
-json_get_num() {
-	_key=$1
-	_v=$(json_get "$_key")
-	printf '%s' "$_v"
-}
-
 sanitize_actor() {
 	_raw=$1
 	case "$_raw" in
@@ -83,9 +77,8 @@ run_cli() {
 	return 0
 }
 
-run_manage_password() {
-	_name=$1
-	_role=$2
+run_password_cli() {
+	# Shared: read password, resolve actor, reject empty, pipe to CLI on fd 0, scrub.
 	_pass=$(json_get password)
 	_actor=$(session_actor)
 	if [ -z "$_pass" ]; then
@@ -93,28 +86,25 @@ run_manage_password() {
 		return 0
 	fi
 	printf '%s\n' "$_pass" | USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
-		"$USRMANAGE_BIN" add "$_name" --role "$_role" --password-fd 0 --json || true
+		"$USRMANAGE_BIN" "$@" --password-fd 0 --json || true
 	_pass=
 	return 0
+}
+
+run_manage_password() {
+	_name=$1
+	_role=$2
+	run_password_cli add "$_name" --role "$_role"
 }
 
 run_passwd() {
 	_name=$1
-	_pass=$(json_get password)
-	_actor=$(session_actor)
-	if [ -z "$_pass" ]; then
-		printf '{"ok":false,"error":"password_required"}\n'
-		return 0
-	fi
-	printf '%s\n' "$_pass" | USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \
-		"$USRMANAGE_BIN" passwd "$_name" --password-fd 0 --json || true
-	_pass=
-	return 0
+	run_password_cli passwd "$_name"
 }
 
 run_set_policy() {
 	_preset=$(json_get preset)
-	_min=$(json_get_num min_length)
+	_min=$(json_get min_length)
 	_rej=$(json_get_bool reject_username)
 	_low=$(json_get_bool require_lower)
 	_up=$(json_get_bool require_upper)

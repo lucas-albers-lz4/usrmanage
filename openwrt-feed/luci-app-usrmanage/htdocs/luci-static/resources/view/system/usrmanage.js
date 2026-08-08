@@ -138,6 +138,22 @@ function notifyMutatorFailure(res) {
 	ui.addNotification(null, E('p', {}, _('Failed: %s').format(detail)), 'danger');
 }
 
+function notifyRequestFailed() {
+	ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
+}
+
+/* Shared mutator result handling: close modal, surface failure, toast + refresh on success. */
+function finishMutator(res, successMsg, view) {
+	ui.hideModal();
+	if (res && res.ok === false) {
+		notifyMutatorFailure(res);
+		return;
+	}
+	if (successMsg)
+		ui.addNotification(null, E('p', {}, successMsg), 'info');
+	return view.refreshView();
+}
+
 function detectPreset(p) {
 	const keys = [ 'openwrt', 'standard', 'strict' ];
 	for (let i = 0; i < keys.length; i++) {
@@ -637,15 +653,9 @@ return view.extend({
 			return callAdd(name, role, p1).then(function(res) {
 				passInput.value = '';
 				pass2Input.value = '';
-				ui.hideModal();
-				if (res && res.ok === false) {
-					notifyMutatorFailure(res);
-					return;
-				}
-				ui.addNotification(null, E('p', {}, _('User added')), 'info');
-				return self.refreshView();
+				return finishMutator(res, _('User added'), self);
 			}).catch(function(err) {
-				ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
+				notifyRequestFailed();
 				if (window && window.console)
 					console.error('usrmanage add', err);
 			});
@@ -702,15 +712,8 @@ return view.extend({
 					'data-testid': 'usrmanage-set-role-apply',
 					'click': function() {
 						return callSetRole(name, roleSelect.value).then(function(res) {
-							ui.hideModal();
-							if (res && res.ok === false) {
-								notifyMutatorFailure(res);
-								return;
-							}
-							return self.refreshView();
-						}).catch(function() {
-							ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
-						});
+							return finishMutator(res, null, self);
+						}).catch(notifyRequestFailed);
 					}
 				}, _('Apply'))
 			])
@@ -748,16 +751,8 @@ return view.extend({
 			return callPasswd(name, p1).then(function(res) {
 				passInput.value = '';
 				pass2Input.value = '';
-				ui.hideModal();
-				if (res && res.ok === false) {
-					notifyMutatorFailure(res);
-					return;
-				}
-				ui.addNotification(null, E('p', {}, _('Password updated')), 'info');
-				return self.refreshView();
-			}).catch(function() {
-				ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
-			});
+				return finishMutator(res, _('Password updated'), self);
+			}).catch(notifyRequestFailed);
 		});
 
 		ui.showModal(_('Change password: %s').format(name), [
@@ -794,16 +789,8 @@ return view.extend({
 					'data-testid': 'usrmanage-remove-confirm',
 					'click': function() {
 						return callDel(name, purge.checked).then(function(res) {
-							ui.hideModal();
-							if (res && res.ok === false) {
-								notifyMutatorFailure(res);
-								return;
-							}
-							ui.addNotification(null, E('p', {}, _('User removed')), 'info');
-							return self.refreshView();
-						}).catch(function() {
-							ui.addNotification(null, E('p', {}, _('Request failed')), 'danger');
-						});
+							return finishMutator(res, _('User removed'), self);
+						}).catch(notifyRequestFailed);
 					}
 				}, _('Remove'))
 			])
