@@ -25,7 +25,7 @@ OpenWrt **local UNIX user management** (CLI + LuCI): managed users, readonly vs 
 - rpcd: call CLI with explicit quoted argv per method; require `jsonfilter` (no sed JSON for passwords).
 - Prefer `flock` for the op lock; do not leave stale locks on `um_die`.
 - Audit denials (`denied`) on mutator validation failures, not only successes.
-- Known review backlog: GitHub issue **#3** (Zen MCR). Do not “clean up” pipeline-unrelated labeled work elsewhere without asking.
+- Known review backlog: GitHub issue **#3**. Do not “clean up” pipeline-unrelated labeled work elsewhere without asking.
 
 ## Testing
 
@@ -48,7 +48,7 @@ Details: [docs/release.md](docs/release.md), [docs/binary-feed.md](docs/binary-f
 
 ## Workflows
 
-- Prefer **one issue + one PR**; run Bugbot before merge when requested.
+- Prefer **one issue + one PR**; run automated review before merge when requested.
 - QEMU stepwise: `scripts/qemu-*.sh` / `validate-feed-smoke.sh`.
 
 ## Layout

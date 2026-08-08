@@ -75,9 +75,9 @@ session_actor() {
 }
 
 run_cli() {
-	# Explicit argv only — never unquoted $* (Zen MCR C2).
+	# Explicit argv only — never unquoted $* (issue #3 C2).
 	# Always return 0 so ubus delivers CLI JSON (incl. ok:false) instead of
-	# treating a non-zero CLI exit as an RPC failure (Zen MCR M8).
+	# treating a non-zero CLI exit as an RPC failure (issue #3 M8).
 	_actor=$(session_actor)
 	USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" "$USRMANAGE_BIN" "$@" || true
 	return 0

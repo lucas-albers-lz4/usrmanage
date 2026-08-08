@@ -69,7 +69,7 @@ um_err() {
 
 um_die() {
 	_msg=$*
-	# LuCI mutators expect structured JSON on stdout (Zen MCR M8).
+	# LuCI mutators expect structured JSON on stdout (issue #3 M8).
 	# Keep stderr for CLI operators; exit 1 for shell scripts. rpcd ignores
 	# the CLI exit status and forwards stdout as the ubus reply.
 	if [ "${JSON_OUT:-0}" = "1" ]; then
@@ -396,7 +396,7 @@ um_validate_password() {
 }
 
 um_ensure_dirs() {
-	# Soft: best-effort for audit/read paths (Zen MCR M4).
+	# Soft: best-effort for audit/read paths (issue #3 M4).
 	mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" 2>/dev/null || true
 	[ -f "$USRMANAGE_REGISTRY" ] || touch "$USRMANAGE_REGISTRY"
 	[ -f "$USRMANAGE_AUDIT" ] || touch "$USRMANAGE_AUDIT"
@@ -405,7 +405,7 @@ um_ensure_dirs() {
 }
 
 um_ensure_dirs_strict() {
-	# Hard-fail before mutators take the op lock (Zen MCR M4).
+	# Hard-fail before mutators take the op lock (issue #3 M4).
 	mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" \
 		|| um_die "error: dirs_failed"
 	[ -f "$USRMANAGE_REGISTRY" ] || touch "$USRMANAGE_REGISTRY" || um_die "error: dirs_failed"
@@ -553,7 +553,7 @@ um_incomplete_clear() {
 um_with_lock() {
 	# um_with_lock <shell function name> [args...]
 	# Requires flock (BusyBox or util-linux). No mkdir fallback — that path
-	# broke set -e and left stale locks on um_die (Zen MCR C3/C4).
+	# broke set -e and left stale locks on um_die (issue #3 C3/C4).
 	um_ensure_dirs_strict
 	command -v flock >/dev/null 2>&1 || um_die "error: flock_required"
 	_fn=$1

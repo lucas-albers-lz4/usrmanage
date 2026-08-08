@@ -128,7 +128,7 @@ function elChildren(kids) {
 	return (kids || []).filter(function(n) { return n != null; });
 }
 
-/* Surface CLI/rpcd error tokens in notifications (Zen MCR M8). */
+/* Surface CLI/rpcd error tokens in notifications (issue #3 M8). */
 function notifyMutatorFailure(res) {
 	const detail = (res && res.error) ? String(res.error) : 'error';
 	ui.addNotification(null, E('p', {}, _('Failed: %s').format(detail)), 'danger');
@@ -268,7 +268,7 @@ return view.extend({
 			? Object.assign({}, PRESET_VALUES.openwrt, data[4])
 			: null;
 		const writeAclHint = hasWriteAcl();
-		/* Prefer get_policy success as write signal when client ACL APIs are inconclusive (Zen MCR minor). */
+		/* Prefer get_policy success as write signal when client ACL APIs are inconclusive (issue #3 minor). */
 		const writeAcl = (writeAclHint === true) || (writeAclHint !== false && !!policyFull);
 		const manage = writeAcl;
 		const self = this;
