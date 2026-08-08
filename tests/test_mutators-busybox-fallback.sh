@@ -38,6 +38,13 @@ _mode=$(stat -c '%a' "$USRMANAGE_SHADOW"); [ "$_mode" = "600" ] && ok "shadow mo
 _mode=$(stat -c '%a' "$USRMANAGE_PASSWD"); [ "$_mode" = "644" ] && ok "passwd mode 0644" || bad "passwd mode $_mode"
 um_registry_add bob || bad "registry_add bob"
 _mode=$(stat -c '%a' "$USRMANAGE_REGISTRY"); [ "$_mode" = "640" ] && ok "registry mode 0640" || bad "registry mode $_mode"
+_own=$(stat -c '%u %g' "$USRMANAGE_REGISTRY" 2>/dev/null \
+	|| ls -ldn "$USRMANAGE_REGISTRY" | awk '{print $3,$4}')
+if [ "$(id -u)" = "0" ]; then
+	[ "$_own" = "0 0" ] && ok "registry owner 0:0 after add" || bad "registry owner after add: $_own"
+else
+	ok "registry ownership skip (non-root; chown 0:0 no-op)"
+fi
 grep -q 'passwd -a sha512' "$LIB" && ok "passwd -a sha512 pinned" || bad "sha512 pin missing"
 # shellcheck disable=SC2016
 um_atomic_edit "$USRMANAGE_SHADOW" 0600 -v u=bob -F: 'BEGIN{OFS=":"} $1==u{$2="$6$testsalt$testhash"} {print}'

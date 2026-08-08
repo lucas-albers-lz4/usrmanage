@@ -14,6 +14,7 @@ usrmanage from git tree via `ssh cat` on fresh EFI images. 2026-08-08.
 no_useradd
 PASS_2410_no_shadow
 ```
+Aging after add + passwd (`awk -F: '$1==u{print $4,$5}' /etc/shadow`): `0 99999`
 
 ### 25.12.0
 ```
@@ -25,6 +26,7 @@ ok: password updated for m2512b
 ok: removed m2512b
 PASS_2512_no_shadow
 ```
+Aging after add + passwd (`awk -F: '$1==u{print $4,$5}' /etc/shadow`): `0 99999`
 
 ## With-shadow
 

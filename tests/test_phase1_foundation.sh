@@ -131,15 +131,56 @@ grep -q "tx_restore_failed path=$_snap_keep" "$_rb_err" \
 # Cleanup leftover recovery snapdir from this test
 rm -rf "$_snap_keep"
 
+# mid-begin snap failure must not leave orphaned snapdirs (EXIT hook + aborted-begin cleanup)
+_tx_tmp=$TMP/tx_begin_fail
+mkdir -p "$_tx_tmp"
+_snaps_before=0
+for _d in "$_tx_tmp"/usrmanage-tx.*; do
+	[ -d "$_d" ] || continue
+	_snaps_before=$((_snaps_before + 1))
+done
+if (
+	TMPDIR=$_tx_tmp
+	export TMPDIR
+	um_tx_snap_one() { return 1; }
+	um_tx_begin
+) >/dev/null 2>&1; then
+	bad "um_tx_begin should fail when snap fails"
+else
+	ok "um_tx_begin fails when snap fails"
+fi
+_snaps_after=0
+for _d in "$_tx_tmp"/usrmanage-tx.*; do
+	[ -d "$_d" ] || continue
+	_snaps_after=$((_snaps_after + 1))
+done
+[ "$_snaps_after" -eq "$_snaps_before" ] \
+	&& ok "no orphan snapdir on begin failure" \
+	|| bad "orphaned snapdir after begin failure (before=$_snaps_before after=$_snaps_after)"
+
 # --- registry D3 modes ---
 printf 'ops\n' > "$USRMANAGE_REGISTRY"
 chmod 0640 "$USRMANAGE_REGISTRY"
 um_registry_add alice
 _mode=$(stat -c '%a' "$USRMANAGE_REGISTRY")
 [ "$_mode" = "640" ] && ok "registry mode 0640 after add" || bad "registry mode after add: $_mode"
+_own=$(stat -c '%u %g' "$USRMANAGE_REGISTRY" 2>/dev/null \
+	|| ls -ldn "$USRMANAGE_REGISTRY" | awk '{print $3,$4}')
+if [ "$(id -u)" = "0" ]; then
+	[ "$_own" = "0 0" ] && ok "registry owner 0:0 after add" || bad "registry owner after add: $_own"
+else
+	ok "registry ownership skip (non-root; chown 0:0 no-op)"
+fi
 um_registry_del alice
 _mode=$(stat -c '%a' "$USRMANAGE_REGISTRY")
 [ "$_mode" = "640" ] && ok "registry mode 0640 after del" || bad "registry mode after del: $_mode"
+_own=$(stat -c '%u %g' "$USRMANAGE_REGISTRY" 2>/dev/null \
+	|| ls -ldn "$USRMANAGE_REGISTRY" | awk '{print $3,$4}')
+if [ "$(id -u)" = "0" ]; then
+	[ "$_own" = "0 0" ] && ok "registry owner 0:0 after del" || bad "registry owner after del: $_own"
+else
+	ok "registry ownership skip after del (non-root)"
+fi
 grep -qx 'alice' "$USRMANAGE_REGISTRY" && bad "alice still in registry" || ok "registry_del removed alice"
 if [ "$fail" -ne 0 ]; then
 	echo "phase1 foundation tests FAILED" >&2

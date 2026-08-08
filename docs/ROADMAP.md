@@ -1,29 +1,36 @@
-- [x] Shadow-free stock installs (v0.1.3 busybox fallbacks)
 # Roadmap
 
-## After first feed publish (`v0.1.0`)
+## Shipped
 
-- [x] QEMU feed smoke on x86_64 (24.10.5) — `scripts/validate-feed-smoke.sh`
-- [ ] QEMU feed smoke on armsr-armv8 + remaining release lines (25.12)
-- [x] LuCI Playwright e2e spotcheck (login + add user vs QEMU lab) — `scripts/playwright-luci.sh` / Playwright MCP
-- [ ] QEMU i18n / theme spotchecks
+- [x] Shadow-free stock installs (v0.1.3 busybox fallbacks; v0.1.4 hardening)
+- [x] QEMU feed smoke on x86_64 (24.10) — `scripts/validate-feed-smoke.sh`
+- [x] LuCI Playwright e2e (login + product tour vs QEMU lab) — `scripts/playwright-luci.sh`
 - [x] Password policy presets + live checklist (OpenWrt default; Save to change)
-- [x] issue #3 criticals C1–C7 (actor sanitize, rpcd argv, flock-only lock, jsonfilter, audit denials) — see #3 for remaining majors
-- [x] issue #3 Fix-now majors M1–M3/M5/M7/M10 + audit `--last` / audit-dir mode (integrity PR)
-- [x] Publish `0.1.1` with `shadow-*` DEPENDS + password policy + security fixes
-- [x] issue #3 Later M8: LuCI mutator error detail (`ok:false` + `error` in notifications)
-- [ ] issue #3 Later: M9 mutation/lock/rpcd tests; M4/M6 + minors (see #3)
-- [ ] Document observed BusyBox / sudo versions per release line
-- [ ] Optional: PR CI single-cell SDK compile (cost vs coverage)
+- [x] issue #3 criticals C1–C7 + Fix-now majors; LuCI mutator error detail (M8)
+- [x] Host mutator/lock/rpcd tests (M9) via `tests/test_mutators.sh` + busybox-fallback
+- [x] OpenWrt 23.05 deprecated; support matrix 24.10 / 25.12 only
+
+## Next wave ([#52](https://github.com/lucas-albers-lz4/usrmanage/issues/52))
+
+- [ ] #50 follow-up hardening (F2 recovery path, tx-begin leak, E2E policy reset, lock timeout)
+- [ ] #51 parity gates (actor sanitize, preset tables, APP_VERSION)
+- [ ] #47 Fowler refactor pass (after #50)
+- [ ] #15 docs WebP screenshots (clean lab; WIP branch `feat/15-docs-screenshots`)
+- [ ] Release tag after lab acceptance (`docs/release.md`)
 
 ## Later
 
+- [ ] QEMU feed smoke on armsr-armv8 + remaining release lines
+- [ ] QEMU i18n / theme spotchecks
+- [ ] With-shadow QEMU combos (needs feed package index)
+- [ ] Document observed BusyBox / sudo versions per release line
+- [ ] Optional: PR CI single-cell SDK compile (cost vs coverage)
 - [ ] Optional `--luci-login` helper (still prefer explicit `luci-app-acl` on hardened boxes)
 - [ ] Upstream PRs to `openwrt/packages` + `openwrt/luci` ([upstream.md](upstream.md))
 - [ ] Remote syslog deployment examples for audit retention
 
 ## Explicitly not planned soon
 
-- OpenWrt 21.02 / 22.03
+- OpenWrt 21.02 / 22.03 / 23.05
 - Cryptographic signing of the local audit file
 - RADIUS / LDAP / TACACS+

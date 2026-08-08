@@ -576,7 +576,6 @@ um_incomplete_clear() {
 UM_TX_SNAPDIR=
 UM_TX_COMMITTED=0
 UM_TX_ACTIVE=0
-UM_TX_HOOK_INSTALLED=0
 
 um_tx_exit_hook() {
 	_tx_rc=$?
@@ -587,8 +586,8 @@ um_tx_exit_hook() {
 }
 
 um_tx_ensure_exit_hook() {
-	[ "${UM_TX_HOOK_INSTALLED:-0}" = "1" ] && return 0
-	UM_TX_HOOK_INSTALLED=1
+	# Always install in this shell — EXIT traps are not inherited across
+	# subshells, so a once-only flag would skip install after the parent ran.
 	trap 'um_tx_exit_hook' EXIT
 }
 
@@ -606,18 +605,22 @@ um_tx_snap_one() {
 
 um_tx_begin() {
 	# Snapshot passwd/shadow/group/registry for rollback on failure.
+	# Install EXIT hook + ACTIVE before the snap loop so a mid-begin
+	# um_die still cleans the snapdir (via rollback incomplete-begin path).
 	if [ "${UM_TX_ACTIVE:-0}" = "1" ]; then
 		um_die "error: tx_nested"
 	fi
 	UM_TX_COMMITTED=0
 	UM_TX_SNAPDIR=$(mktemp -d "${TMPDIR:-/tmp}/usrmanage-tx.XXXXXX") \
 		|| um_die "error: tx_snapshot_failed"
+	um_tx_ensure_exit_hook
+	UM_TX_ACTIVE=1
 	um_tx_snap_one "$USRMANAGE_PASSWD" passwd || um_die "error: tx_snapshot_failed"
 	um_tx_snap_one "$USRMANAGE_SHADOW" shadow || um_die "error: tx_snapshot_failed"
 	um_tx_snap_one "$USRMANAGE_GROUP" group || um_die "error: tx_snapshot_failed"
 	um_tx_snap_one "$USRMANAGE_REGISTRY" registry || um_die "error: tx_snapshot_failed"
-	um_tx_ensure_exit_hook
-	UM_TX_ACTIVE=1
+	# Marker: rollback treats missing .complete as aborted begin (discard snapdir).
+	touch "${UM_TX_SNAPDIR}/.complete" || um_die "error: tx_snapshot_failed"
 }
 
 um_tx_restore_one() {
@@ -645,6 +648,13 @@ um_tx_rollback() {
 		UM_TX_ACTIVE=0
 		return 0
 	}
+	# Aborted begin (never reached .complete): live files untouched; discard.
+	if [ ! -f "${UM_TX_SNAPDIR}/.complete" ]; then
+		UM_TX_ACTIVE=0
+		rm -rf "$UM_TX_SNAPDIR"
+		UM_TX_SNAPDIR=
+		return 0
+	fi
 	_ok=1
 	um_tx_restore_one "$USRMANAGE_PASSWD" passwd || _ok=0
 	um_tx_restore_one "$USRMANAGE_SHADOW" shadow || _ok=0
@@ -652,7 +662,9 @@ um_tx_rollback() {
 	um_tx_restore_one "$USRMANAGE_REGISTRY" registry || _ok=0
 	UM_TX_ACTIVE=0
 	if [ "$_ok" != "1" ]; then
-		# Keep snapdir for operator/doctor recovery; surface path in the error.
+		# Keep snapdir for CLI/doctor recovery (tmpfs until reboot).
+		# Callers must pass path= into um_die so JSON/LuCI see it (stdout);
+		# um_err covers CLI stderr. Doctor scans for orphaned usrmanage-tx.*.
 		um_err "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 		return 1
 	fi
@@ -723,6 +735,8 @@ um_with_lock() {
 	# um_with_lock <shell function name> [args...]
 	# Requires flock (BusyBox or util-linux). No mkdir fallback — that path
 	# broke set -e and left stale locks on um_die (issue #3 C3/C4).
+	# BusyBox flock on OpenWrt 24.10/25.12 has no -w timeout (only -sxun);
+	# a stuck holder therefore blocks concurrent callers indefinitely.
 	um_ensure_dirs_strict
 	command -v flock >/dev/null 2>&1 || um_die "error: flock_required"
 	_fn=$1
@@ -1277,6 +1291,35 @@ um_doctor_checks() {
 
 	_add_check lock true "lock path $(dirname "$USRMANAGE_LOCK")"
 
+	# Orphaned tx snapdirs (partial restore kept them for recovery; tmpfs).
+	# Skip while the op lock is held — in-flight mutators keep a live snapdir.
+	_tx_orphan_msg=
+	_tx_orphan_count=0
+	_tx_lock_busy=0
+	if command -v flock >/dev/null 2>&1; then
+		if ! ( flock -n 9 || exit 1 ) 9>"$USRMANAGE_LOCK"; then
+			_tx_lock_busy=1
+		fi
+	fi
+	if [ "$_tx_lock_busy" = "1" ]; then
+		_add_check tx_snapdirs true "tx lock held; snapdir scan skipped"
+	else
+		for _tx_d in "${TMPDIR:-/tmp}"/usrmanage-tx.*; do
+			[ -d "$_tx_d" ] || continue
+			_tx_orphan_count=$((_tx_orphan_count + 1))
+			if [ -z "$_tx_orphan_msg" ]; then
+				_tx_orphan_msg=$_tx_d
+			else
+				_tx_orphan_msg="${_tx_orphan_msg} ${_tx_d}"
+			fi
+		done
+		if [ "$_tx_orphan_count" -eq 0 ]; then
+			_add_check tx_snapdirs true "no orphaned tx snapdirs"
+		else
+			_add_check tx_snapdirs false "orphaned tx snapdirs: ${_tx_orphan_msg}"
+		fi
+	fi
+
 	_incomplete=
 	if [ -f "$USRMANAGE_INCOMPLETE" ]; then
 		_inc=$(cat "$USRMANAGE_INCOMPLETE" 2>/dev/null)
@@ -1483,7 +1526,7 @@ um_mut_add() {
 		if [ "$_home_existed" = "0" ]; then
 			um_home_remove "$_home" 2>/dev/null || true
 		fi
-		um_tx_rollback || um_die "error: tx_restore_failed"
+		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 		um_incomplete_clear
 		um_audit fail "$_name" fail create "$_role"
 		um_die "error: create_failed"
@@ -1493,7 +1536,7 @@ um_mut_add() {
 			if [ "$_home_existed" = "0" ]; then
 				um_home_remove "$_home" 2>/dev/null || true
 			fi
-			um_tx_rollback || um_die "error: tx_restore_failed"
+			um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
 			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
@@ -1503,7 +1546,7 @@ um_mut_add() {
 			if [ "$_home_existed" = "0" ]; then
 				um_home_remove "$_home" 2>/dev/null || true
 			fi
-			um_tx_rollback || um_die "error: tx_restore_failed"
+			um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
 			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
@@ -1513,7 +1556,7 @@ um_mut_add() {
 		if [ "$_home_existed" = "0" ]; then
 			um_home_remove "$_home" 2>/dev/null || true
 		fi
-		um_tx_rollback || um_die "error: tx_restore_failed"
+		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 		um_incomplete_clear
 		um_audit fail "$_name" fail registry "$_role"
 		um_die "error: registry_failed"
@@ -1644,20 +1687,20 @@ um_mut_del() {
 	um_tx_begin
 	um_incomplete_set "del:${_name}"
 	um_lock_account "$_name" || {
-		um_tx_rollback || um_die "error: tx_restore_failed"
+		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 		um_incomplete_clear
 		um_audit fail "$_name" fail lock "$_role"
 		um_die "error: lock_failed"
 	}
 	um_kill_user_procs "$_name"
 	um_wheel_del_user "$_name" || {
-		um_tx_rollback || um_die "error: tx_restore_failed"
+		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 		um_incomplete_clear
 		um_audit fail "$_name" fail wheel_del "$_role"
 		um_die "error: wheel_del_failed"
 	}
 	um_delete_account "$_name" "$_purge" || {
-		um_tx_rollback || um_die "error: tx_restore_failed"
+		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 		um_incomplete_clear
 		um_audit fail "$_name" fail delete "$_role"
 		um_die "error: delete_failed"

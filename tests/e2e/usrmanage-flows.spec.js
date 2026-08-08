@@ -18,6 +18,8 @@ test.describe('LuCI User Management', () => {
 			const name = created.pop();
 			if (name) await sshDelUser(name);
 		}
+		// Always restore OpenWrt policy — tour may Save Standard before failing.
+		await sshResetPolicyOpenWrt();
 	});
 
 	test('login and open User Management without null litter', async ({ page }) => {
@@ -116,7 +118,5 @@ test.describe('LuCI User Management', () => {
 		await expect(page.getByText('User removed')).toBeVisible({ timeout: 30_000 });
 		await expect(row()).toHaveCount(0);
 		await expect(page.getByText('Request failed')).toHaveCount(0);
-
-		await sshResetPolicyOpenWrt();
 	});
 });
