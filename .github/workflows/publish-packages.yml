@@ -68,6 +68,24 @@ jobs:
           APK_FEED_PUBLIC_KEY: ${{ github.workspace }}/usrmanage-feed.rsa.pub
         run: ./scripts/validate-feed-keys.sh
 
+      - name: Restore SDK dl/feeds cache
+        uses: actions/cache/restore@v4
+        id: sdk-cache
+        with:
+          path: |
+            .ci-sdk-cache/dl
+            .ci-sdk-cache/feeds
+          # Exact lock hash only — no restore-keys prefix (avoids stale pins).
+          key: sdk-dl-feeds-${{ hashFiles('scripts/feeds.lock/**') }}
+
+      - name: Prepare SDK cache dirs
+        run: |
+          mkdir -p .ci-sdk-cache/dl
+          for v in 24.10.5 25.12.0; do
+            mkdir -p ".ci-sdk-cache/feeds/$v"
+          done
+          chmod -R a+rwX .ci-sdk-cache
+
       - name: Build packages (4 cells — x86-64 + armsr-armv8 × 24.10/25.12)
         run: |
           mkdir -p out
@@ -80,6 +98,19 @@ jobs:
 
       - name: Verify reproducible builds (x86-64)
         run: ./scripts/verify-reproducible-build.sh
+
+      - name: Fix SDK cache permissions
+        if: always()
+        run: sudo chmod -R a+rwX .ci-sdk-cache || chmod -R a+rwX .ci-sdk-cache
+
+      - name: Save SDK dl/feeds cache
+        if: success() && steps.sdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .ci-sdk-cache/dl
+            .ci-sdk-cache/feeds
+          key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
 
       - name: Stage signed feed
         env:

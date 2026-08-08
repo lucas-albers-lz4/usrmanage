@@ -78,13 +78,25 @@ sdk_matrix_validate_version() {
 	return 1
 }
 
+sdk_matrix_cache_dirs() {
+	local root="$1" version_label="$2"
+	SDK_MATRIX_DL_CACHE="${OWRT_SDK_DL_CACHE:-${root}/.ci-sdk-cache/dl}"
+	SDK_MATRIX_FEEDS_CACHE="${OWRT_SDK_FEEDS_CACHE:-${root}/.ci-sdk-cache/feeds/${version_label}}"
+	mkdir -p "$SDK_MATRIX_DL_CACHE" "$SDK_MATRIX_FEEDS_CACHE"
+	# buildbot (uid 1000) must write bind mounts; Actions runner is often 1001.
+	chmod -R a+rwX "$SDK_MATRIX_DL_CACHE" "$SDK_MATRIX_FEEDS_CACHE" 2>/dev/null || true
+}
+
 sdk_matrix_compose_run() {
 	local root
 	root="$(sdk_matrix_root)"
+	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL"
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
 		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
+		OWRT_SDK_DL_CACHE="$SDK_MATRIX_DL_CACHE" \
+		OWRT_SDK_FEEDS_CACHE="$SDK_MATRIX_FEEDS_CACHE" \
 		docker compose run --rm sdk "$@"
 	)
 }
@@ -96,9 +108,18 @@ sdk_matrix_feeds_lock_path() {
 }
 
 sdk_matrix_feeds_ready() {
-	sdk_matrix_compose_run sh -c \
-		'test -f /builder/.config && find -L /builder/feeds -maxdepth 8 \( -path "*/luci-app-usrmanage/Makefile" -o -path "*/usrmanage/Makefile" \) 2>/dev/null | grep -q .' \
-		2>/dev/null
+	# Require .config, package feeds present, and lock stamp matching the pinned
+	# feeds.conf so a restored cache cannot skip refresh after pin changes.
+	sdk_matrix_compose_run sh -c "
+		test -f /builder/.config || exit 1
+		lock=/work/usrmanage/scripts/feeds.lock/${SDK_MATRIX_VERSION_LABEL}/feeds.conf
+		stamp=/builder/feeds/.usrmanage-feeds.lock.sha
+		test -f \"\$lock\" && test -f \"\$stamp\" || exit 1
+		cur=\$(sha256sum \"\$lock\" | awk '{print \$1}')
+		old=\$(cat \"\$stamp\")
+		[ -n \"\$cur\" ] && [ \"\$cur\" = \"\$old\" ] || exit 1
+		find -L /builder/feeds -maxdepth 8 \\( -path '*/luci-app-usrmanage/Makefile' -o -path '*/usrmanage/Makefile' \\) 2>/dev/null | grep -q .
+	" 2>/dev/null
 }
 
 sdk_matrix_feeds_setup() {
@@ -145,6 +166,8 @@ sdk_matrix_feeds_setup() {
 		./scripts/feeds install usrmanage luci-app-usrmanage
 		rm -rf tmp
 		make defconfig
+		sha256sum /work/usrmanage/scripts/feeds.lock/${SDK_MATRIX_VERSION_LABEL}/feeds.conf \
+			| awk '{print \$1}' > feeds/.usrmanage-feeds.lock.sha
 	"
 }
 
