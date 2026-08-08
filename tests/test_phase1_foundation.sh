@@ -105,6 +105,24 @@ grep -qx 'changed' "$USRMANAGE_REGISTRY" && ok "tx commit keeps changes" || bad 
 um_tx_rollback
 grep -qx 'changed' "$USRMANAGE_REGISTRY" && ok "tx rollback after commit is no-op" || bad "commit undone"
 
+# nested begin must fail
+um_tx_begin
+if ( um_tx_begin ) >/dev/null 2>&1; then
+	bad "nested um_tx_begin should fail"
+else
+	ok "nested um_tx_begin rejected"
+fi
+um_tx_commit
+
+# partial restore must fail the rollback (not return success)
+um_tx_begin
+rm -f "$UM_TX_SNAPDIR/passwd" "$UM_TX_SNAPDIR/passwd.missing"
+if um_tx_rollback; then
+	bad "tx rollback should fail when snapshot incomplete"
+else
+	ok "tx rollback fails on incomplete snapshot"
+fi
+
 if [ "$fail" -ne 0 ]; then
 	echo "phase1 foundation tests FAILED" >&2
 	exit 1

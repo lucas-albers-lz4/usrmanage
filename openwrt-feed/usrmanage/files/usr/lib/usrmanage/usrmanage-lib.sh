@@ -552,23 +552,56 @@ um_incomplete_clear() {
 
 # Multi-file transaction snapshots (shadow-free create/delete). Restored on
 # EXIT unless um_tx_commit runs. Paths honor USRMANAGE_*.
+# EXIT hook is installed once and chains any prior EXIT trap (ash has no trap -p).
 UM_TX_SNAPDIR=
 UM_TX_COMMITTED=0
+UM_TX_ACTIVE=0
+UM_TX_HOOK_INSTALLED=0
+UM_TX_OUTER_EXIT=
+
+um_tx_exit_hook() {
+	_tx_rc=$?
+	if [ "${UM_TX_ACTIVE:-0}" = "1" ] && [ "${UM_TX_COMMITTED:-0}" != "1" ]; then
+		um_tx_rollback || _tx_rc=1
+	fi
+	if [ -n "${UM_TX_OUTER_EXIT:-}" ]; then
+		# Prior EXIT body captured from `trap` listing (dash/ash/bash).
+		eval "$UM_TX_OUTER_EXIT" || true
+	fi
+	[ "$_tx_rc" -eq 0 ] || exit "$_tx_rc"
+}
+
+um_tx_ensure_exit_hook() {
+	[ "${UM_TX_HOOK_INSTALLED:-0}" = "1" ] && return 0
+	UM_TX_OUTER_EXIT=
+	_tx_line=$(trap 2>/dev/null | grep ' EXIT$' | head -1) || true
+	case "$_tx_line" in
+		"trap -- '"*"' EXIT")
+			UM_TX_OUTER_EXIT=${_tx_line#trap -- \'}
+			UM_TX_OUTER_EXIT=${UM_TX_OUTER_EXIT%\' EXIT}
+			;;
+	esac
+	UM_TX_HOOK_INSTALLED=1
+	trap 'um_tx_exit_hook' EXIT
+}
 
 um_tx_snap_one() {
-	_src=$1
-	_name=$2
+	_tx_src=$1
+	_tx_label=$2
 	[ -n "$UM_TX_SNAPDIR" ] || return 1
-	if [ -f "$_src" ]; then
-		cp "$_src" "${UM_TX_SNAPDIR}/${_name}" || return 1
+	if [ -f "$_tx_src" ]; then
+		cp "$_tx_src" "${UM_TX_SNAPDIR}/${_tx_label}" || return 1
 	else
-		printf 'missing\n' > "${UM_TX_SNAPDIR}/${_name}.missing"
+		printf 'missing\n' > "${UM_TX_SNAPDIR}/${_tx_label}.missing"
 	fi
 	return 0
 }
 
 um_tx_begin() {
 	# Snapshot passwd/shadow/group/registry for rollback on failure.
+	if [ "${UM_TX_ACTIVE:-0}" = "1" ]; then
+		um_die "error: tx_nested"
+	fi
 	UM_TX_COMMITTED=0
 	UM_TX_SNAPDIR=$(mktemp -d "${TMPDIR:-/tmp}/usrmanage-tx.XXXXXX") \
 		|| um_die "error: tx_snapshot_failed"
@@ -576,32 +609,35 @@ um_tx_begin() {
 	um_tx_snap_one "$USRMANAGE_SHADOW" shadow || um_die "error: tx_snapshot_failed"
 	um_tx_snap_one "$USRMANAGE_GROUP" group || um_die "error: tx_snapshot_failed"
 	um_tx_snap_one "$USRMANAGE_REGISTRY" registry || um_die "error: tx_snapshot_failed"
-	# shellcheck disable=SC2064
-	trap 'um_tx_rollback' EXIT
+	um_tx_ensure_exit_hook
+	UM_TX_ACTIVE=1
 }
 
 um_tx_restore_one() {
-	_dst=$1
-	_name=$2
+	_tx_dst=$1
+	_tx_label=$2
 	[ -n "$UM_TX_SNAPDIR" ] || return 1
-	if [ -f "${UM_TX_SNAPDIR}/${_name}.missing" ]; then
-		rm -f "$_dst"
+	if [ -f "${UM_TX_SNAPDIR}/${_tx_label}.missing" ]; then
+		rm -f "$_tx_dst"
 		return 0
 	fi
-	[ -f "${UM_TX_SNAPDIR}/${_name}" ] || return 1
-	cp "${UM_TX_SNAPDIR}/${_name}" "$_dst" || return 1
-	case "$_name" in
-		shadow) chmod 0600 "$_dst" 2>/dev/null || true ;;
-		passwd|group) chmod 0644 "$_dst" 2>/dev/null || true ;;
-		registry) chmod 0640 "$_dst" 2>/dev/null || true ;;
+	[ -f "${UM_TX_SNAPDIR}/${_tx_label}" ] || return 1
+	cp "${UM_TX_SNAPDIR}/${_tx_label}" "$_tx_dst" || return 1
+	case "$_tx_label" in
+		shadow) chmod 0600 "$_tx_dst" 2>/dev/null || true ;;
+		passwd|group) chmod 0644 "$_tx_dst" 2>/dev/null || true ;;
+		registry) chmod 0640 "$_tx_dst" 2>/dev/null || true ;;
 	esac
-	chown 0:0 "$_dst" 2>/dev/null || true
+	chown 0:0 "$_tx_dst" 2>/dev/null || true
 	return 0
 }
 
 um_tx_rollback() {
 	[ "${UM_TX_COMMITTED:-0}" = "1" ] && return 0
-	[ -n "${UM_TX_SNAPDIR:-}" ] || return 0
+	[ -n "${UM_TX_SNAPDIR:-}" ] || {
+		UM_TX_ACTIVE=0
+		return 0
+	}
 	_ok=1
 	um_tx_restore_one "$USRMANAGE_PASSWD" passwd || _ok=0
 	um_tx_restore_one "$USRMANAGE_SHADOW" shadow || _ok=0
@@ -609,14 +645,17 @@ um_tx_rollback() {
 	um_tx_restore_one "$USRMANAGE_REGISTRY" registry || _ok=0
 	rm -rf "$UM_TX_SNAPDIR"
 	UM_TX_SNAPDIR=
-	trap - EXIT
-	[ "$_ok" = "1" ] || um_err "error: tx_restore_failed"
+	UM_TX_ACTIVE=0
+	if [ "$_ok" != "1" ]; then
+		um_err "error: tx_restore_failed"
+		return 1
+	fi
 	return 0
 }
 
 um_tx_commit() {
 	UM_TX_COMMITTED=1
-	trap - EXIT
+	UM_TX_ACTIVE=0
 	[ -n "${UM_TX_SNAPDIR:-}" ] && rm -rf "$UM_TX_SNAPDIR"
 	UM_TX_SNAPDIR=
 }
