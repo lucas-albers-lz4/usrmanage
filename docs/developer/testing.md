@@ -7,7 +7,7 @@ How usrmanage is tested locally and in CI. Passwords never appear on argv, in au
 | Layer | What | Where | When |
 |-------|------|-------|------|
 | **Unit** | Validators, audit sanitize, theme (no hex), i18n POT coverage | `tests/test_validators.sh`, `tests/usrmanage-theme.test.js`, `tests/usrmanage-i18n.test.js` | PR via `./scripts/smoke-host.sh` |
-| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, rpcd argv (no password leak) | `tests/test_mutators.sh` | PR via `./scripts/smoke-host.sh` |
+| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, rpcd argv (no password leak) | `tests/test_mutators.sh`, `tests/test_mutators-busybox-fallback.sh` | PR via `./scripts/smoke-host.sh` |
 | **Device integration** | Real `useradd`/wheel/ubus/HTTP page on guest | `scripts/qemu-smoke-usrmanage.sh` | Local (QEMU lab); not PR CI |
 | **Playwright MCP** | Agent navigate/snapshot/click against live LuCI | `.cursor/mcp.json` → `@playwright/mcp` | Local with lab up |
 | **E2E UI** | Committed LuCI user flows | `tests/e2e/` + `./scripts/playwright-luci.sh` | Local with lab up; not PR CI |

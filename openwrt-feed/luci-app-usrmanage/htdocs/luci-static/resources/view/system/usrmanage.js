@@ -1,4 +1,6 @@
 'use strict';
+
+const APP_VERSION = '0.1.3';
 'require view';
 'require rpc';
 'require ui';
@@ -394,7 +396,8 @@ return view.extend({
 			]),
 			E('div', { 'class': 'cbi-section' }, eventNodes.length ? eventNodes : [
 				E('em', {}, _('No audit events yet.'))
-			])
+			]),
+			E('div', { 'class': 'cbi-value-description', 'id': 'usrmanage-build', 'title': 'luci-app-usrmanage' }, 'v' + APP_VERSION)
 		]));
 	},
 

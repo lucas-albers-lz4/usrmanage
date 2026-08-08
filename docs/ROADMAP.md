@@ -1,3 +1,4 @@
+- [x] Shadow-free stock installs (v0.1.3 busybox fallbacks)
 # Roadmap
 
 ## After first feed publish (`v0.1.0`)

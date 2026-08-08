@@ -61,3 +61,8 @@ Use `luci-app-acl` / `rpcd` login with `$p$username` for UNIX shadow passwords:
 - Upgrade must not delete managed users or remove `wheel`.
 - `/etc/sudoers.d/usrmanage` and `/etc/usrmanage/users` are **conffiles**.
 - Uninstall does not purge managed users by default.
+
+
+## Account file write safety (v0.1.3+)
+
+Mutations run under `flock`. Multi-file create/delete snapshots passwd/shadow/group/registry and restores on failure. Atomic replaces use `umask 077` temps, then fixed modes (`shadow` 0600, `passwd`/`group` 0644) and `chown 0:0` before `mv`. Interactive `passwd` prompts may echo if `stty` is absent on stock images; prefer `--password-fd`.
