@@ -1471,7 +1471,9 @@ um_mut_add() {
 	um_incomplete_set "add:${_name}"
 	if ! um_create_user "$_name" "$_role"; then
 		# Never rm -rf a pre-existing home (home_exists / foreign path).
-		[ "$_home_existed" = "0" ] && um_home_remove "$_home" 2>/dev/null || true
+		if [ "$_home_existed" = "0" ]; then
+			um_home_remove "$_home" 2>/dev/null || true
+		fi
 		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail create "$_role"
@@ -1479,7 +1481,9 @@ um_mut_add() {
 	fi
 	if [ -n "$_pfd" ]; then
 		um_set_password_from_fd "$_name" "$_pfd" || {
-			[ "$_home_existed" = "0" ] && um_home_remove "$_home" 2>/dev/null || true
+			if [ "$_home_existed" = "0" ]; then
+				um_home_remove "$_home" 2>/dev/null || true
+			fi
 			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
@@ -1487,7 +1491,9 @@ um_mut_add() {
 		}
 	else
 		um_set_password_prompt "$_name" || {
-			[ "$_home_existed" = "0" ] && um_home_remove "$_home" 2>/dev/null || true
+			if [ "$_home_existed" = "0" ]; then
+				um_home_remove "$_home" 2>/dev/null || true
+			fi
 			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
@@ -1495,7 +1501,9 @@ um_mut_add() {
 		}
 	fi
 	um_registry_add "$_name" || {
-		[ "$_home_existed" = "0" ] && um_home_remove "$_home" 2>/dev/null || true
+		if [ "$_home_existed" = "0" ]; then
+			um_home_remove "$_home" 2>/dev/null || true
+		fi
 		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail registry "$_role"
