@@ -1154,16 +1154,69 @@ um_doctor_checks() {
 		_add_check sudo false "sudo missing"
 	fi
 
+	# Tool presence is preference info only — stock images use busybox fallbacks.
+	_add_info() {
+		_id=$1
+		_cok=$2
+		_msg=$3
+		if [ -n "$_json_checks" ]; then
+			_json_checks="${_json_checks},"
+		fi
+		_em=$(printf '%s' "$_msg" | um_json_escape)
+		_json_checks="${_json_checks}{\"id\":\"${_id}\",\"ok\":${_cok},\"msg\":\"${_em}\"}"
+	}
+
 	if command -v useradd >/dev/null 2>&1 || command -v adduser >/dev/null 2>&1; then
-		_add_check useradd true "useradd/adduser present"
+		_add_info useradd true "useradd/adduser present (preferred)"
 	else
-		_add_check useradd false "useradd/adduser missing (install shadow-useradd)"
+		_add_info useradd true "useradd/adduser absent; using busybox file fallback"
 	fi
 
 	if command -v userdel >/dev/null 2>&1 || command -v deluser >/dev/null 2>&1; then
-		_add_check userdel true "userdel/deluser present"
+		_add_info userdel true "userdel/deluser present (preferred)"
 	else
-		_add_check userdel false "userdel/deluser missing (install shadow-userdel)"
+		_add_info userdel true "userdel/deluser absent; using busybox file fallback"
+	fi
+
+	# Fallback prerequisites: writable account files + home parent + registry.
+	# Missing HOME_ROOT is OK — um_home_create does mkdir -p; require a writable
+	# ancestor so create can succeed.
+	_paths_ok=1
+	_paths_msg=
+	for _p in "$USRMANAGE_PASSWD" "$USRMANAGE_SHADOW" "$USRMANAGE_GROUP"; do
+		if [ ! -f "$_p" ]; then
+			_paths_ok=0
+			_paths_msg="missing ${_p}"
+			break
+		fi
+		if [ ! -w "$_p" ]; then
+			_paths_ok=0
+			_paths_msg="not writable ${_p}"
+			break
+		fi
+	done
+	if [ "$_paths_ok" = "1" ]; then
+		_regdir=$(dirname "$USRMANAGE_REGISTRY")
+		if [ ! -d "$_regdir" ] || [ ! -w "$_regdir" ]; then
+			_paths_ok=0
+			_paths_msg="registry dir not writable"
+		elif [ -d "$USRMANAGE_HOME_ROOT" ]; then
+			if [ ! -w "$USRMANAGE_HOME_ROOT" ]; then
+				_paths_ok=0
+				_paths_msg="home parent not writable"
+			fi
+		else
+			_hr_parent=$(dirname "$USRMANAGE_HOME_ROOT")
+			if [ ! -d "$_hr_parent" ] || [ ! -w "$_hr_parent" ]; then
+				_paths_ok=0
+				_paths_msg="home parent not creatable"
+			fi
+		fi
+	fi
+	if [ "$_paths_ok" = "1" ]; then
+		_add_check fallback_paths true "passwd/shadow/group/registry/home writable"
+	else
+		_add_check fallback_paths false "fallback paths: ${_paths_msg}"
 	fi
 
 	if grep -q '^wheel:' "$USRMANAGE_GROUP" 2>/dev/null; then
