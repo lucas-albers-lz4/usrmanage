@@ -21,6 +21,7 @@
 : "${USRMANAGE_UCI_POLICY:=usrmanage.policy}"
 : "${USRMANAGE_AUDIT_MAX_BYTES:=131072}"
 : "${USRMANAGE_SHELL:=/bin/ash}"
+: "${USRMANAGE_HOME_ROOT:=/home}"
 : "${USRMANAGE_SRC:=cli}"
 : "${USRMANAGE_ACTOR:=}"
 : "${USRMANAGE_DRY_RUN:=0}"
@@ -984,6 +985,11 @@ um_home_create() {
 	_uid=$2
 	_gid=$3
 	_home=$4
+	# Refuse symlinks (matches um_home_remove) — never chmod/chown through them.
+	if [ -L "$_home" ]; then
+		um_err "error: home_is_symlink"
+		return 1
+	fi
 	if [ -e "$_home" ]; then
 		[ -d "$_home" ] || return 1
 		# Refuse to take over a non-empty foreign home
@@ -992,6 +998,10 @@ um_home_create() {
 		[ "$_own" = "0" ] || [ "$_own" = "$_uid" ] || return 1
 	else
 		mkdir -p "$_home" || return 1
+		if [ -L "$_home" ]; then
+			um_err "error: home_is_symlink"
+			return 1
+		fi
 	fi
 	chmod 0750 "$_home" || return 1
 	chown "${_uid}:${_gid}" "$_home" 2>/dev/null || chown "0:${_gid}" "$_home" 2>/dev/null || true
@@ -1015,19 +1025,16 @@ um_group_entry_del() {
 	_u=$1
 	_line=$(grep -m1 "^${_u}:" "$USRMANAGE_GROUP" 2>/dev/null) || return 0
 	_members=$(printf '%s' "$_line" | cut -d: -f4)
+	_others=
 	if [ -n "$_members" ]; then
-		case ",${_members}," in
-			*",${_u},"*)
-				# Only the user themself — strip and delete if empty
-				;;
-			*)
-				um_audit "denied" "$_u" "fail" "group_has_members" || true
-				um_err "error: group_has_members"
-				return 1
-				;;
-		esac
+		_others=$(printf '%s' "$_members" | tr ',' '\n' | grep -vx '' | grep -vx "$_u" || true)
 	fi
-	# Also strip user from other groups' member lists, then drop private group.
+	if [ -n "$_others" ]; then
+		um_audit "denied" "$_u" "fail" "group_has_members" || true
+		um_err "error: group_has_members"
+		return 1
+	fi
+	# Strip user from other groups' member lists, then drop private group.
 	# shellcheck disable=SC2016
 	um_atomic_edit "$USRMANAGE_GROUP" 0644 -v u="$_u" -F: '
 		BEGIN { OFS=":" }
@@ -1064,7 +1071,7 @@ um_delete_account() {
 	if [ "$USRMANAGE_DRY_RUN" = "1" ]; then
 		return 0
 	fi
-	_home=$(um_user_home "$_u" 2>/dev/null) || _home="/home/${_u}"
+	_home=$(um_user_home "$_u" 2>/dev/null) || _home="${USRMANAGE_HOME_ROOT}/${_u}"
 	if command -v userdel >/dev/null 2>&1; then
 		if [ "$_purge" = "1" ]; then
 			userdel -r "$_u" >/dev/null 2>&1 && return 0
@@ -1095,7 +1102,7 @@ um_create_user() {
 	if [ "$USRMANAGE_DRY_RUN" = "1" ]; then
 		return 0
 	fi
-	_home="/home/${_u}"
+	_home="${USRMANAGE_HOME_ROOT}/${_u}"
 	if command -v useradd >/dev/null 2>&1; then
 		useradd -m -d "$_home" -s "$USRMANAGE_SHELL" "$_u" || return 1
 	elif command -v adduser >/dev/null 2>&1; then
@@ -1398,32 +1405,32 @@ um_mut_add() {
 	um_tx_begin
 	um_incomplete_set "add:${_name}"
 	if ! um_create_user "$_name" "$_role"; then
-		um_home_remove "/home/${_name}" 2>/dev/null || true
-		um_tx_rollback
+		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail create "$_role"
 		um_die "error: create_failed"
 	fi
 	if [ -n "$_pfd" ]; then
 		um_set_password_from_fd "$_name" "$_pfd" || {
-			um_home_remove "/home/${_name}" 2>/dev/null || true
-			um_tx_rollback
+			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
 			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	else
 		um_set_password_prompt "$_name" || {
-			um_home_remove "/home/${_name}" 2>/dev/null || true
-			um_tx_rollback
+			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
 			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	fi
 	um_registry_add "$_name" || {
-		um_home_remove "/home/${_name}" 2>/dev/null || true
-		um_tx_rollback
+		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail registry "$_role"
 		um_die "error: registry_failed"
@@ -1554,20 +1561,20 @@ um_mut_del() {
 	um_tx_begin
 	um_incomplete_set "del:${_name}"
 	um_lock_account "$_name" || {
-		um_tx_rollback
+		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail lock "$_role"
 		um_die "error: lock_failed"
 	}
 	um_kill_user_procs "$_name"
 	um_wheel_del_user "$_name" || {
-		um_tx_rollback
+		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail wheel_del "$_role"
 		um_die "error: wheel_del_failed"
 	}
 	um_delete_account "$_name" "$_purge" || {
-		um_tx_rollback
+		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail delete "$_role"
 		um_die "error: delete_failed"
