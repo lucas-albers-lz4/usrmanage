@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Optional local pre-commit hook body for Z3 --fast (#8).
+# Install: ln -sf ../../scripts/hooks/pre-commit-z3-fast .git/hooks/pre-commit
+# Or append: scripts/z3-verify.py --fast
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if ! python3 -c 'import z3' 2>/dev/null; then
+	echo "pre-commit: python3-z3 not installed; skip (CI runs --full)" >&2
+	exit 0
+fi
+exec python3 "$ROOT/scripts/z3-verify.py" --fast
