@@ -959,7 +959,13 @@ um_passwd_entry_add() {
 um_group_entry_add() {
 	_name=$1
 	_gid=$2
-	if grep -q "^${_name}:" "$USRMANAGE_GROUP" 2>/dev/null; then
+	_line=$(grep -m1 "^${_name}:" "$USRMANAGE_GROUP" 2>/dev/null) || true
+	if [ -n "$_line" ]; then
+		_egid=$(printf '%s' "$_line" | cut -d: -f3)
+		if [ "$_egid" != "$_gid" ]; then
+			um_err "error: group_gid_mismatch"
+			return 1
+		fi
 		return 0
 	fi
 	printf '%s:x:%s:\n' "$_name" "$_gid" >> "$USRMANAGE_GROUP" || return 1
@@ -990,21 +996,24 @@ um_home_create() {
 		um_err "error: home_is_symlink"
 		return 1
 	fi
+	# Match useradd -m: do not take over an existing path (incl. root-owned).
 	if [ -e "$_home" ]; then
-		[ -d "$_home" ] || return 1
-		# Refuse to take over a non-empty foreign home
-		# shellcheck disable=SC2012
-		_own=$(ls -ldn "$_home" 2>/dev/null | awk '{print $3}')
-		[ "$_own" = "0" ] || [ "$_own" = "$_uid" ] || return 1
-	else
-		mkdir -p "$_home" || return 1
-		if [ -L "$_home" ]; then
-			um_err "error: home_is_symlink"
+		um_err "error: home_exists"
+		return 1
+	fi
+	mkdir -p "$_home" || return 1
+	if [ -L "$_home" ]; then
+		um_err "error: home_is_symlink"
+		return 1
+	fi
+	chmod 0750 "$_home" || return 1
+	if ! chown "${_uid}:${_gid}" "$_home" 2>/dev/null; then
+		# Root must own the home for the new UID; non-root host tests are best-effort.
+		if [ "$(id -u 2>/dev/null)" = "0" ]; then
+			um_err "error: home_chown_failed"
 			return 1
 		fi
 	fi
-	chmod 0750 "$_home" || return 1
-	chown "${_uid}:${_gid}" "$_home" 2>/dev/null || chown "0:${_gid}" "$_home" 2>/dev/null || true
 	return 0
 }
 
@@ -1455,10 +1464,16 @@ um_mut_add() {
 		um_audit denied "$_name" denied wheel_missing "$_role"
 		um_die "error: wheel_missing"
 	}
+	_home="${USRMANAGE_HOME_ROOT}/${_name}"
+	_home_existed=0
+	[ -e "$_home" ] && _home_existed=1
 	um_tx_begin
 	um_incomplete_set "add:${_name}"
 	if ! um_create_user "$_name" "$_role"; then
-		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+		# Never rm -rf a pre-existing home (home_exists / foreign path).
+		if [ "$_home_existed" = "0" ]; then
+			um_home_remove "$_home" 2>/dev/null || true
+		fi
 		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail create "$_role"
@@ -1466,7 +1481,9 @@ um_mut_add() {
 	fi
 	if [ -n "$_pfd" ]; then
 		um_set_password_from_fd "$_name" "$_pfd" || {
-			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+			if [ "$_home_existed" = "0" ]; then
+				um_home_remove "$_home" 2>/dev/null || true
+			fi
 			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
@@ -1474,7 +1491,9 @@ um_mut_add() {
 		}
 	else
 		um_set_password_prompt "$_name" || {
-			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+			if [ "$_home_existed" = "0" ]; then
+				um_home_remove "$_home" 2>/dev/null || true
+			fi
 			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
@@ -1482,7 +1501,9 @@ um_mut_add() {
 		}
 	fi
 	um_registry_add "$_name" || {
-		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+		if [ "$_home_existed" = "0" ]; then
+			um_home_remove "$_home" 2>/dev/null || true
+		fi
 		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail registry "$_role"

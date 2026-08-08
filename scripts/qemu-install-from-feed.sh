@@ -67,8 +67,6 @@ install_opkg() {
 		echo 'src/gz usrmanage ${feed_url}' >> /etc/opkg/customfeeds.conf"
 	ssh_run 'opkg update'
 	ssh_run 'opkg install usrmanage luci-app-usrmanage'
-	# 0.1.0-r1 did not declare shadow-* deps; ensure account tools exist.
-	ssh_run 'command -v useradd >/dev/null 2>&1 || opkg install shadow-useradd shadow-userdel shadow-usermod shadow-chpasswd shadow-gpasswd'
 }
 
 install_apk() {
@@ -81,8 +79,6 @@ install_apk() {
 		echo '${index_url}' >> /etc/apk/repositories.d/usrmanage.list"
 	ssh_run 'apk update'
 	ssh_run 'apk add usrmanage luci-app-usrmanage'
-	# Ensure account tools exist (apk images may omit BusyBox adduser).
-	ssh_run 'command -v useradd >/dev/null 2>&1 || apk add shadow-useradd shadow-userdel shadow-usermod shadow-chpasswd shadow-gpasswd'
 }
 
 echo "Installing usrmanage from ${base} (OpenWrt ${VERSION})..." >&2

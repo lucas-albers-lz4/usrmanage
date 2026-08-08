@@ -28,17 +28,7 @@ ok "guest ${ARCH} OpenWrt ${RELEASE}"
 ssh_guest 'command -v usrmanage >/dev/null' || die "usrmanage binary missing"
 ok "usrmanage installed"
 
-# Ensure account tools exist (pulled by package deps after 0.1.1; install if missing).
-if ! ssh_guest 'command -v useradd >/dev/null 2>&1'; then
-	echo "→ installing shadow account tools (guest missing useradd)" >&2
-	if ssh_guest 'command -v apk >/dev/null 2>&1'; then
-		ssh_guest 'apk add shadow-useradd shadow-userdel shadow-usermod shadow-chpasswd shadow-gpasswd' \
-			|| die "could not install shadow-* account tools (apk)"
-	else
-		ssh_guest 'opkg install shadow-useradd shadow-userdel shadow-usermod shadow-chpasswd shadow-gpasswd' \
-			|| die "could not install shadow-* account tools (opkg)"
-	fi
-fi
+# Stock images use busybox fallbacks — do not install shadow-* here.
 
 ssh_guest 'rm -f /etc/usrmanage/incomplete'
 ssh_guest 'usrmanage doctor' >/dev/null || die "usrmanage doctor failed"
