@@ -425,15 +425,31 @@ um_registry_add() {
 	_u=$1
 	um_is_managed "$_u" && return 0
 	printf '%s\n' "$_u" >> "$USRMANAGE_REGISTRY" || return 1
+	chmod 0640 "$USRMANAGE_REGISTRY" 2>/dev/null || true
+	chown 0:0 "$USRMANAGE_REGISTRY" 2>/dev/null || true
 }
 
 um_registry_del() {
+	# D3: umask 077 temp, chmod 0640, chown 0:0, then mv (match um_atomic_edit).
 	_u=$1
 	_tmp="${USRMANAGE_REGISTRY}.tmp.$$"
 	if [ -f "$USRMANAGE_REGISTRY" ]; then
-		grep -vx "$_u" "$USRMANAGE_REGISTRY" > "$_tmp" 2>/dev/null || : > "$_tmp"
-		mv "$_tmp" "$USRMANAGE_REGISTRY"
-		chmod 0640 "$USRMANAGE_REGISTRY" 2>/dev/null || true
+		(
+			umask 077
+			grep -vx "$_u" "$USRMANAGE_REGISTRY" > "$_tmp" 2>/dev/null || : > "$_tmp"
+		) || {
+			rm -f "$_tmp"
+			return 1
+		}
+		chmod 0640 "$_tmp" || {
+			rm -f "$_tmp"
+			return 1
+		}
+		chown 0:0 "$_tmp" 2>/dev/null || true
+		mv "$_tmp" "$USRMANAGE_REGISTRY" || {
+			rm -f "$_tmp"
+			return 1
+		}
 	fi
 }
 
@@ -553,35 +569,25 @@ um_incomplete_clear() {
 
 # Multi-file transaction snapshots (shadow-free create/delete). Restored on
 # EXIT unless um_tx_commit runs. Paths honor USRMANAGE_*.
-# EXIT hook is installed once and chains any prior EXIT trap (ash has no trap -p).
+# EXIT hook is installed once. BusyBox ash/dash cannot reliably chain a prior
+# EXIT trap via $(trap | grep) capture (empty inside command substitution), so
+# we do not attempt chaining. The shipped CLI installs no prior EXIT trap;
+# the hook alone is the safety net for uncommitted transactions.
 UM_TX_SNAPDIR=
 UM_TX_COMMITTED=0
 UM_TX_ACTIVE=0
 UM_TX_HOOK_INSTALLED=0
-UM_TX_OUTER_EXIT=
 
 um_tx_exit_hook() {
 	_tx_rc=$?
 	if [ "${UM_TX_ACTIVE:-0}" = "1" ] && [ "${UM_TX_COMMITTED:-0}" != "1" ]; then
 		um_tx_rollback || _tx_rc=1
 	fi
-	if [ -n "${UM_TX_OUTER_EXIT:-}" ]; then
-		# Prior EXIT body captured from `trap` listing (dash/ash/bash).
-		eval "$UM_TX_OUTER_EXIT" || true
-	fi
 	[ "$_tx_rc" -eq 0 ] || exit "$_tx_rc"
 }
 
 um_tx_ensure_exit_hook() {
 	[ "${UM_TX_HOOK_INSTALLED:-0}" = "1" ] && return 0
-	UM_TX_OUTER_EXIT=
-	_tx_line=$(trap 2>/dev/null | grep ' EXIT$' | head -1) || true
-	case "$_tx_line" in
-		"trap -- '"*"' EXIT")
-			UM_TX_OUTER_EXIT=${_tx_line#trap -- \'}
-			UM_TX_OUTER_EXIT=${UM_TX_OUTER_EXIT%\' EXIT}
-			;;
-	esac
 	UM_TX_HOOK_INSTALLED=1
 	trap 'um_tx_exit_hook' EXIT
 }
@@ -644,13 +650,14 @@ um_tx_rollback() {
 	um_tx_restore_one "$USRMANAGE_SHADOW" shadow || _ok=0
 	um_tx_restore_one "$USRMANAGE_GROUP" group || _ok=0
 	um_tx_restore_one "$USRMANAGE_REGISTRY" registry || _ok=0
-	rm -rf "$UM_TX_SNAPDIR"
-	UM_TX_SNAPDIR=
 	UM_TX_ACTIVE=0
 	if [ "$_ok" != "1" ]; then
-		um_err "error: tx_restore_failed"
+		# Keep snapdir for operator/doctor recovery; surface path in the error.
+		um_err "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 		return 1
 	fi
+	rm -rf "$UM_TX_SNAPDIR"
+	UM_TX_SNAPDIR=
 	return 0
 }
 
@@ -980,7 +987,9 @@ um_shadow_entry_add() {
 	if grep -q "^${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null; then
 		return 0
 	fi
-	printf '%s:!:0:99999:7:::\n' "$_u" >> "$USRMANAGE_SHADOW" || return 1
+	# shadow(5): name:pass:lastchg:min:max:warn:inactive:expire
+	# Empty lastchg; min=0 max=99999 warn=7 (mirrors stock root:::0:99999:7:::).
+	printf '%s:!::0:99999:7:::\n' "$_u" >> "$USRMANAGE_SHADOW" || return 1
 	chmod 0600 "$USRMANAGE_SHADOW" 2>/dev/null || true
 	chown 0:0 "$USRMANAGE_SHADOW" 2>/dev/null || true
 	return 0

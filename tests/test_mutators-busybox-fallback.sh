@@ -30,14 +30,20 @@ um_create_user bob readonly || bad "create bob"
 grep -q '^bob:' "$USRMANAGE_PASSWD" && ok "passwd entry" || bad "passwd missing"
 grep -q '^bob:' "$USRMANAGE_GROUP" && ok "group entry" || bad "group missing"
 grep -q '^bob:!' "$USRMANAGE_SHADOW" && ok "shadow locked placeholder" || bad "shadow placeholder"
+_aging=$(awk -F: -v u=bob '$1==u{print $4,$5}' "$USRMANAGE_SHADOW")
+[ "$_aging" = "0 99999" ] && ok "placeholder aging min/max" || bad "placeholder aging '$_aging'"
 [ -d "$USRMANAGE_HOME_ROOT/bob" ] && ok "home created" || bad "home missing"
 _mode=$(stat -c '%a' "$USRMANAGE_HOME_ROOT/bob"); [ "$_mode" = "750" ] && ok "home mode 0750" || bad "home mode $_mode"
 _mode=$(stat -c '%a' "$USRMANAGE_SHADOW"); [ "$_mode" = "600" ] && ok "shadow mode 0600" || bad "shadow mode $_mode"
 _mode=$(stat -c '%a' "$USRMANAGE_PASSWD"); [ "$_mode" = "644" ] && ok "passwd mode 0644" || bad "passwd mode $_mode"
+um_registry_add bob || bad "registry_add bob"
+_mode=$(stat -c '%a' "$USRMANAGE_REGISTRY"); [ "$_mode" = "640" ] && ok "registry mode 0640" || bad "registry mode $_mode"
 grep -q 'passwd -a sha512' "$LIB" && ok "passwd -a sha512 pinned" || bad "sha512 pin missing"
 # shellcheck disable=SC2016
 um_atomic_edit "$USRMANAGE_SHADOW" 0600 -v u=bob -F: 'BEGIN{OFS=":"} $1==u{$2="$6$testsalt$testhash"} {print}'
 grep -q '^bob:\$6\$' "$USRMANAGE_SHADOW" && ok "hash prefix \$6\$" || bad "hash not \$6\$"
+_aging=$(awk -F: -v u=bob '$1==u{print $4,$5}' "$USRMANAGE_SHADOW")
+[ "$_aging" = "0 99999" ] && ok "aging min/max after hash" || bad "aging after hash '$_aging'"
 um_lock_account bob || bad "lock bob"
 um_user_locked bob && ok "bob locked" || bad "bob not locked"
 um_lock_account bob || bad "lock idempotent"

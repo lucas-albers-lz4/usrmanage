@@ -27,7 +27,7 @@ validate_opkg_usign_key() {
 	feed_keys_normalize_usign_keyfile "$public" \
 		|| die "OPKG_FEED_PUBLIC_KEY must be the matching usign public key (public.key from usign -G). Paste both lines or base64-encode the file."
 
-	# usign lives in the SDK image; any supported matrix cell works (23.05 retired).
+	# usign lives in the SDK image; any supported matrix cell works.
 	sdk_matrix_resolve x86-64 24.10
 
 	local secret_abs public_abs tmpdir
