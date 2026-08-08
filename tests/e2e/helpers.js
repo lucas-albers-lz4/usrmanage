@@ -88,11 +88,29 @@ async function sshDelUser(username) {
 	}
 }
 
+/** Best-effort restore OpenWrt password policy on the guest. */
+async function sshResetPolicyOpenWrt() {
+	const sshArgs = [
+		'-o', 'StrictHostKeyChecking=no',
+		'-o', 'UserKnownHostsFile=/dev/null',
+		'-o', 'ConnectTimeout=10',
+		'-p', OPENWRT_SSH_PORT,
+		`root@${OPENWRT_HOST}`,
+		'usrmanage set-policy --preset openwrt',
+	];
+	try {
+		await execFileAsync('ssh', sshArgs, { timeout: 30_000 });
+	} catch {
+		/* ignore */
+	}
+}
+
 module.exports = {
 	luciLogin,
 	openUserManagement,
 	uniqueUsername,
 	sshDelUser,
+	sshResetPolicyOpenWrt,
 	E2E_USER_PASSWORD,
 	LUCI_USER,
 };
