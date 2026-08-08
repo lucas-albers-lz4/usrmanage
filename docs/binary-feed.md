@@ -14,7 +14,6 @@ usrmanage-packages/   (gh-pages)
   public.key              opkg trust
   usrmanage-feed.rsa.pub  apk trust
   manifest.json
-  23.05/   *.ipk + Packages{,.gz,.sig}
   24.10/   *.ipk + Packages{,.gz,.sig}
   25.12/all/  *.apk + packages.adb
 ```
@@ -23,7 +22,7 @@ Packages are **`_all`** — one URL per OpenWrt release line (not per CPU).
 
 ## Install
 
-### OpenWrt 23.05 / 24.10 (opkg)
+### OpenWrt 24.10 (opkg)
 
 ```sh
 wget -O /tmp/usrmanage.key https://lucas-albers-lz4.github.io/usrmanage-packages/public.key
@@ -33,7 +32,7 @@ opkg update
 opkg install usrmanage luci-app-usrmanage
 ```
 
-Use `…/23.05` on OpenWrt 23.05.
+OpenWrt 23.05 operators: use the last published **v0.1.2** artifacts under the historical `23.05/` feed directory.
 
 ### OpenWrt 25.12 (apk)
 

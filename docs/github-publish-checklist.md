@@ -27,5 +27,5 @@ openssl rsa -in apk-secret.rsa -pubout -out usrmanage-feed.rsa.pub
 ## After tag
 
 - [ ] Workflow green
-- [ ] Pages shows `23.05/`, `24.10/`, `25.12/all/`
+- [ ] Pages shows `24.10/`, `25.12/all/` (historical `23.05/` may remain)
 - [ ] Release assets present for both packages

@@ -33,4 +33,4 @@ python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/luci-app-usrmanage.json'))"
 
 echo "package layout: ok (arch-independent all)"
-echo "matrix: 23.05/24.10/25.12 × x86-64 + armsr-armv8; feed stages x86_64 _all artifacts"
+echo "matrix: 24.10/25.12 × x86-64 + armsr-armv8; feed stages x86_64 _all artifacts"
