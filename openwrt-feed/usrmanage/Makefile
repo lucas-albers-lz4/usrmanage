@@ -17,10 +17,8 @@ define Package/usrmanage
   SECTION:=admin
   CATEGORY:=Administration
   TITLE:=Local UNIX user management (CLI)
-  # Stock OpenWrt images often omit BusyBox adduser/useradd applets.
-  DEPENDS:=+sudo +jshn +jsonfilter \
-	+shadow-useradd +shadow-userdel +shadow-usermod \
-	+shadow-chpasswd +shadow-gpasswd
+  # Stock OpenWrt: busybox passwd + manual passwd/group/shadow fallbacks (no shadow-*).
+  DEPENDS:=+sudo +jshn +jsonfilter
   PKGARCH:=all
 endef
 
