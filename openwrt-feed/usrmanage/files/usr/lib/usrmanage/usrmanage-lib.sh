@@ -1178,8 +1178,9 @@ um_doctor_checks() {
 		_add_info userdel true "userdel/deluser absent; using busybox file fallback"
 	fi
 
-	# Fallback prerequisites: writable account files + home parent + registry
-	: "${USRMANAGE_HOME_ROOT:=/home}"
+	# Fallback prerequisites: writable account files + home parent + registry.
+	# Missing HOME_ROOT is OK — um_home_create does mkdir -p; require a writable
+	# ancestor so create can succeed.
 	_paths_ok=1
 	_paths_msg=
 	for _p in "$USRMANAGE_PASSWD" "$USRMANAGE_SHADOW" "$USRMANAGE_GROUP"; do
@@ -1199,9 +1200,17 @@ um_doctor_checks() {
 		if [ ! -d "$_regdir" ] || [ ! -w "$_regdir" ]; then
 			_paths_ok=0
 			_paths_msg="registry dir not writable"
-		elif [ ! -d "$USRMANAGE_HOME_ROOT" ] || [ ! -w "$USRMANAGE_HOME_ROOT" ]; then
-			_paths_ok=0
-			_paths_msg="home parent not writable"
+		elif [ -d "$USRMANAGE_HOME_ROOT" ]; then
+			if [ ! -w "$USRMANAGE_HOME_ROOT" ]; then
+				_paths_ok=0
+				_paths_msg="home parent not writable"
+			fi
+		else
+			_hr_parent=$(dirname "$USRMANAGE_HOME_ROOT")
+			if [ ! -d "$_hr_parent" ] || [ ! -w "$_hr_parent" ]; then
+				_paths_ok=0
+				_paths_msg="home parent not creatable"
+			fi
 		fi
 	fi
 	if [ "$_paths_ok" = "1" ]; then
