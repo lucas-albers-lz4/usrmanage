@@ -21,6 +21,7 @@
 : "${USRMANAGE_UCI_POLICY:=usrmanage.policy}"
 : "${USRMANAGE_AUDIT_MAX_BYTES:=131072}"
 : "${USRMANAGE_SHELL:=/bin/ash}"
+: "${USRMANAGE_HOME_ROOT:=/home}"
 : "${USRMANAGE_SRC:=cli}"
 : "${USRMANAGE_ACTOR:=}"
 : "${USRMANAGE_DRY_RUN:=0}"
@@ -827,9 +828,8 @@ um_set_password_from_fd() {
 		_pass=
 		return $_rc
 	fi
-	# BusyBox passwd -a only for interactive; use busybox passwd via expect-like double echo carefully
-	# Still avoid putting password in argv: use a pipe only.
-	printf '%s\n%s\n' "$_pass" "$_pass" | passwd "$_u" >/dev/null 2>&1
+	# BusyBox: pipe new+retype; pin sha512 crypt ($6$) via -a (D6).
+	printf '%s\n%s\n' "$_pass" "$_pass" | passwd -a sha512 "$_u" >/dev/null 2>&1
 	_rc=$?
 	_pass=
 	return $_rc
@@ -873,7 +873,7 @@ um_set_password_prompt() {
 		_p1=
 		return $_rc
 	fi
-	printf '%s\n%s\n' "$_p1" "$_p1" | passwd "$_u" >/dev/null 2>&1
+	printf '%s\n%s\n' "$_p1" "$_p1" | passwd -a sha512 "$_u" >/dev/null 2>&1
 	_rc=$?
 	_p1=
 	return $_rc
@@ -887,10 +887,23 @@ um_lock_account() {
 	if command -v passwd >/dev/null 2>&1; then
 		passwd -l "$_u" >/dev/null 2>&1 && return 0
 	fi
+	# Already locked (! or * prefix) counts as success when passwd -l fails.
+	if um_user_locked "$_u"; then
+		return 0
+	fi
 	if command -v usermod >/dev/null 2>&1; then
 		usermod -L "$_u" >/dev/null 2>&1 && return 0
 	fi
-	return 1
+	# Manual lock: prefix hash with ! while preserving aging fields (D2).
+	# shellcheck disable=SC2016
+	um_atomic_edit "$USRMANAGE_SHADOW" 0600 -v u="$_u" -F: '
+		BEGIN { OFS=":" }
+		$1 == u {
+			if (substr($2, 1, 1) != "!" && substr($2, 1, 1) != "*")
+				$2 = "!" $2
+		}
+		{ print }
+	' && um_user_locked "$_u"
 }
 
 um_kill_user_procs() {
@@ -927,12 +940,138 @@ um_kill_user_procs() {
 	return 0
 }
 
+# --- BusyBox / manual account mutation fallbacks (shadow-free) ---
+
+um_passwd_entry_add() {
+	_u=$1
+	_uid=$2
+	_gid=$3
+	_home=$4
+	_shell=$5
+	um_user_exists "$_u" && return 0
+	printf '%s:x:%s:%s:%s:%s:%s\n' "$_u" "$_uid" "$_gid" "$_u" "$_home" "$_shell" \
+		>> "$USRMANAGE_PASSWD" || return 1
+	chmod 0644 "$USRMANAGE_PASSWD" 2>/dev/null || true
+	chown 0:0 "$USRMANAGE_PASSWD" 2>/dev/null || true
+	return 0
+}
+
+um_group_entry_add() {
+	_name=$1
+	_gid=$2
+	if grep -q "^${_name}:" "$USRMANAGE_GROUP" 2>/dev/null; then
+		return 0
+	fi
+	printf '%s:x:%s:\n' "$_name" "$_gid" >> "$USRMANAGE_GROUP" || return 1
+	chmod 0644 "$USRMANAGE_GROUP" 2>/dev/null || true
+	chown 0:0 "$USRMANAGE_GROUP" 2>/dev/null || true
+	return 0
+}
+
+um_shadow_entry_add() {
+	# D2: new-user placeholder is locked "!"; preserve aging defaults.
+	_u=$1
+	if grep -q "^${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null; then
+		return 0
+	fi
+	printf '%s:!:0:99999:7:::\n' "$_u" >> "$USRMANAGE_SHADOW" || return 1
+	chmod 0600 "$USRMANAGE_SHADOW" 2>/dev/null || true
+	chown 0:0 "$USRMANAGE_SHADOW" 2>/dev/null || true
+	return 0
+}
+
+um_home_create() {
+	_u=$1
+	_uid=$2
+	_gid=$3
+	_home=$4
+	# Refuse symlinks (matches um_home_remove) — never chmod/chown through them.
+	if [ -L "$_home" ]; then
+		um_err "error: home_is_symlink"
+		return 1
+	fi
+	if [ -e "$_home" ]; then
+		[ -d "$_home" ] || return 1
+		# Refuse to take over a non-empty foreign home
+		# shellcheck disable=SC2012
+		_own=$(ls -ldn "$_home" 2>/dev/null | awk '{print $3}')
+		[ "$_own" = "0" ] || [ "$_own" = "$_uid" ] || return 1
+	else
+		mkdir -p "$_home" || return 1
+		if [ -L "$_home" ]; then
+			um_err "error: home_is_symlink"
+			return 1
+		fi
+	fi
+	chmod 0750 "$_home" || return 1
+	chown "${_uid}:${_gid}" "$_home" 2>/dev/null || chown "0:${_gid}" "$_home" 2>/dev/null || true
+	return 0
+}
+
+um_passwd_entry_del() {
+	_u=$1
+	# shellcheck disable=SC2016
+	um_atomic_edit "$USRMANAGE_PASSWD" 0644 -v u="$_u" -F: '$1 != u { print }'
+}
+
+um_shadow_entry_del() {
+	_u=$1
+	# shellcheck disable=SC2016
+	um_atomic_edit "$USRMANAGE_SHADOW" 0600 -v u="$_u" -F: '$1 != u { print }'
+}
+
+um_group_entry_del() {
+	# Remove private group named after user; bail if other members present.
+	_u=$1
+	_line=$(grep -m1 "^${_u}:" "$USRMANAGE_GROUP" 2>/dev/null) || return 0
+	_members=$(printf '%s' "$_line" | cut -d: -f4)
+	_others=
+	if [ -n "$_members" ]; then
+		_others=$(printf '%s' "$_members" | tr ',' '\n' | grep -vx '' | grep -vx "$_u" || true)
+	fi
+	if [ -n "$_others" ]; then
+		um_audit "denied" "$_u" "fail" "group_has_members" || true
+		um_err "error: group_has_members"
+		return 1
+	fi
+	# Strip user from other groups' member lists, then drop private group.
+	# shellcheck disable=SC2016
+	um_atomic_edit "$USRMANAGE_GROUP" 0644 -v u="$_u" -F: '
+		BEGIN { OFS=":" }
+		$1 == u { next }
+		{
+			n = split($4, a, ",")
+			out = ""
+			for (i = 1; i <= n; i++) {
+				if (a[i] == "" || a[i] == u) continue
+				if (out == "") out = a[i]
+				else out = out "," a[i]
+			}
+			$4 = out
+			print
+		}
+	'
+}
+
+um_home_remove() {
+	_home=$1
+	[ -e "$_home" ] || return 0
+	# Refuse symlinks and non-directories
+	if [ -L "$_home" ] || [ ! -d "$_home" ]; then
+		um_err "error: home_not_directory"
+		return 1
+	fi
+	rm -rf "$_home" || return 1
+	return 0
+}
+
 um_delete_account() {
 	_u=$1
 	_purge=$2
 	if [ "$USRMANAGE_DRY_RUN" = "1" ]; then
 		return 0
 	fi
+	_home=$(um_user_home "$_u" 2>/dev/null) || _home="${USRMANAGE_HOME_ROOT}/${_u}"
 	if command -v userdel >/dev/null 2>&1; then
 		if [ "$_purge" = "1" ]; then
 			userdel -r "$_u" >/dev/null 2>&1 && return 0
@@ -947,7 +1086,14 @@ um_delete_account() {
 			deluser "$_u" >/dev/null 2>&1 && return 0
 		fi
 	fi
-	return 1
+	# Manual fallback
+	um_passwd_entry_del "$_u" || return 1
+	um_shadow_entry_del "$_u" || return 1
+	um_group_entry_del "$_u" || return 1
+	if [ "$_purge" = "1" ]; then
+		um_home_remove "$_home" || return 1
+	fi
+	return 0
 }
 
 um_create_user() {
@@ -956,14 +1102,21 @@ um_create_user() {
 	if [ "$USRMANAGE_DRY_RUN" = "1" ]; then
 		return 0
 	fi
-	_home="/home/${_u}"
+	_home="${USRMANAGE_HOME_ROOT}/${_u}"
 	if command -v useradd >/dev/null 2>&1; then
 		useradd -m -d "$_home" -s "$USRMANAGE_SHELL" "$_u" || return 1
 	elif command -v adduser >/dev/null 2>&1; then
-		# BusyBox adduser non-interactive
+		# BusyBox adduser non-interactive (absent on stock OpenWrt)
 		adduser -D -h "$_home" -s "$USRMANAGE_SHELL" "$_u" || return 1
 	else
-		return 1
+		# Manual create: private group gid=uid (D1), locked shadow placeholder (D2)
+		_ids=$(um_alloc_ids) || return 1
+		_uid=${_ids%% *}
+		_gid=${_ids##* }
+		um_group_entry_add "$_u" "$_gid" || return 1
+		um_passwd_entry_add "$_u" "$_uid" "$_gid" "$_home" "$USRMANAGE_SHELL" || return 1
+		um_shadow_entry_add "$_u" || return 1
+		um_home_create "$_u" "$_uid" "$_gid" "$_home" || return 1
 	fi
 	_uid=$(um_user_uid "$_u") || return 1
 	if [ "$_uid" -lt "$USRMANAGE_UID_FLOOR" ]; then
@@ -1249,34 +1402,40 @@ um_mut_add() {
 		um_audit denied "$_name" denied wheel_missing "$_role"
 		um_die "error: wheel_missing"
 	}
+	um_tx_begin
 	um_incomplete_set "add:${_name}"
 	if ! um_create_user "$_name" "$_role"; then
-		um_delete_account "$_name" 1 || true
+		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail create "$_role"
 		um_die "error: create_failed"
 	fi
 	if [ -n "$_pfd" ]; then
 		um_set_password_from_fd "$_name" "$_pfd" || {
-			um_delete_account "$_name" 1 || true
+			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
 			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	else
 		um_set_password_prompt "$_name" || {
-			um_delete_account "$_name" 1 || true
+			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
 			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	fi
 	um_registry_add "$_name" || {
-		um_delete_account "$_name" 1 || true
+		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail registry "$_role"
 		um_die "error: registry_failed"
 	}
+	um_tx_commit
 	um_incomplete_clear
 	um_audit grant "$_name" ok "" "$_role"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
@@ -1399,21 +1558,29 @@ um_mut_del() {
 			um_die "error: last_admin"
 		fi
 	fi
+	um_tx_begin
 	um_incomplete_set "del:${_name}"
 	um_lock_account "$_name" || {
+		um_tx_rollback || um_die "error: tx_restore_failed"
+		um_incomplete_clear
 		um_audit fail "$_name" fail lock "$_role"
 		um_die "error: lock_failed"
 	}
 	um_kill_user_procs "$_name"
 	um_wheel_del_user "$_name" || {
+		um_tx_rollback || um_die "error: tx_restore_failed"
+		um_incomplete_clear
 		um_audit fail "$_name" fail wheel_del "$_role"
 		um_die "error: wheel_del_failed"
 	}
 	um_delete_account "$_name" "$_purge" || {
+		um_tx_rollback || um_die "error: tx_restore_failed"
+		um_incomplete_clear
 		um_audit fail "$_name" fail delete "$_role"
 		um_die "error: delete_failed"
 	}
 	um_registry_del "$_name"
+	um_tx_commit
 	um_incomplete_clear
 	um_audit remove "$_name" ok "" "$_role"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
