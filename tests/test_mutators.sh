@@ -47,6 +47,9 @@ rm -f "$TMP/lock_ran"
 um_with_lock _mark_touch
 [ -f "$TMP/lock_ran" ] && ok "um_with_lock runs body" || bad "um_with_lock body"
 [ -f "$USRMANAGE_LOCK" ] && ok "lock file created" || bad "lock file missing"
+grep -q 'flock -w 30' "$LIB" \
+	&& ok "um_with_lock uses flock -w 30" \
+	|| bad "um_with_lock missing flock -w 30"
 
 # flock required when flock not on PATH
 mkdir -p "$TMP/emptybin"
