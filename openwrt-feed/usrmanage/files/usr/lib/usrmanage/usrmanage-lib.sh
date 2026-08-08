@@ -462,25 +462,16 @@ um_user_exists() {
 	um_passwd_line "$1" >/dev/null
 }
 
-um_user_uid() {
+um_passwd_field() {
+	# um_passwd_field <user> <field> — 3=uid 4=gid 6=home 7=shell
 	_line=$(um_passwd_line "$1") || return 1
-	printf '%s' "$_line" | cut -d: -f3
+	printf '%s' "$_line" | cut -d: -f"$2"
 }
 
-um_user_gid() {
-	_line=$(um_passwd_line "$1") || return 1
-	printf '%s' "$_line" | cut -d: -f4
-}
-
-um_user_home() {
-	_line=$(um_passwd_line "$1") || return 1
-	printf '%s' "$_line" | cut -d: -f6
-}
-
-um_user_shell() {
-	_line=$(um_passwd_line "$1") || return 1
-	printf '%s' "$_line" | cut -d: -f7
-}
+um_user_uid() { um_passwd_field "$1" 3; }
+um_user_gid() { um_passwd_field "$1" 4; }
+um_user_home() { um_passwd_field "$1" 6; }
+um_user_shell() { um_passwd_field "$1" 7; }
 
 um_user_locked() {
 	_u=$1
@@ -709,13 +700,13 @@ um_atomic_edit() {
 
 # Smallest free uid in USRMANAGE_UID_FLOOR..60000 whose paired gid is free (D4).
 # Prints "uid gid" on success. Audits and returns 1 on range exhaustion.
-um_uid_taken() {
-	awk -F: -v id="$1" '$3 == id { found = 1; exit } END { exit !found }' "$USRMANAGE_PASSWD" 2>/dev/null
+um_id_taken() {
+	# um_id_taken <file> <id>
+	awk -F: -v id="$2" '$3 == id { found = 1; exit } END { exit !found }' "$1" 2>/dev/null
 }
 
-um_gid_taken() {
-	awk -F: -v id="$1" '$3 == id { found = 1; exit } END { exit !found }' "$USRMANAGE_GROUP" 2>/dev/null
-}
+um_uid_taken() { um_id_taken "$USRMANAGE_PASSWD" "$1"; }
+um_gid_taken() { um_id_taken "$USRMANAGE_GROUP" "$1"; }
 
 um_alloc_ids() {
 	_uid=$USRMANAGE_UID_FLOOR
@@ -827,6 +818,24 @@ um_wheel_del_user() {
 	return 1
 }
 
+um_password_write() {
+	# um_password_write <user> <password> — chpasswd preferred; busybox passwd -a sha512
+	_u=$1
+	_pw=$2
+	# Prefer chpasswd (stdin: user:pass) — avoids shell echo | passwd
+	if command -v chpasswd >/dev/null 2>&1; then
+		printf '%s:%s\n' "$_u" "$_pw" | chpasswd
+		_rc=$?
+		_pw=
+		return $_rc
+	fi
+	# BusyBox: pipe new+retype; pin sha512 crypt ($6$) via -a (D6).
+	printf '%s\n%s\n' "$_pw" "$_pw" | passwd -a sha512 "$_u" >/dev/null 2>&1
+	_rc=$?
+	_pw=
+	return $_rc
+}
+
 um_set_password_from_fd() {
 	_u=$1
 	_fd=$2
@@ -842,15 +851,7 @@ um_set_password_from_fd() {
 		_pass=
 		return 0
 	fi
-	# Prefer chpasswd (stdin: user:pass) — avoids shell echo | passwd
-	if command -v chpasswd >/dev/null 2>&1; then
-		printf '%s:%s\n' "$_u" "$_pass" | chpasswd
-		_rc=$?
-		_pass=
-		return $_rc
-	fi
-	# BusyBox: pipe new+retype; pin sha512 crypt ($6$) via -a (D6).
-	printf '%s\n%s\n' "$_pass" "$_pass" | passwd -a sha512 "$_u" >/dev/null 2>&1
+	um_password_write "$_u" "$_pass"
 	_rc=$?
 	_pass=
 	return $_rc
@@ -888,13 +889,7 @@ um_set_password_prompt() {
 		_p1=
 		return 0
 	fi
-	if command -v chpasswd >/dev/null 2>&1; then
-		printf '%s:%s\n' "$_u" "$_p1" | chpasswd
-		_rc=$?
-		_p1=
-		return $_rc
-	fi
-	printf '%s\n%s\n' "$_p1" "$_p1" | passwd -a sha512 "$_u" >/dev/null 2>&1
+	um_password_write "$_u" "$_p1"
 	_rc=$?
 	_p1=
 	return $_rc
@@ -1496,14 +1491,58 @@ um_cmd_audit() {
 	fi
 }
 
+
+# Mutator shared prologue / failure helpers (refactor #47).
+um_mut_require_valid_username() {
+	# um_mut_require_valid_username <user> <role>
+	um_validate_username "$1" || {
+		um_audit denied "$1" denied invalid_username "$2"
+		um_die "error: invalid_username"
+	}
+}
+
+um_mut_require_managed() {
+	# um_mut_require_managed <user> <role>
+	um_is_managed "$1" || {
+		um_audit denied "$1" denied unmanaged "$2"
+		um_die "error: unmanaged"
+	}
+}
+
+um_mut_require_exists() {
+	# um_mut_require_exists <user> <role> <reason>
+	um_user_exists "$1" || {
+		um_audit denied "$1" denied "$3" "$2"
+		um_die "error: $3"
+	}
+}
+
+um_mut_fail() {
+	# um_mut_fail <user> <role> <home> <home_existed> <audit_reason> <die_message>
+	# Never rm -rf a pre-existing home.
+	if [ "$4" = "0" ]; then
+		um_home_remove "$3" 2>/dev/null || true
+	fi
+	um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
+	um_incomplete_clear
+	um_audit fail "$1" fail "$5" "$2"
+	um_die "$6"
+}
+
+um_set_password() {
+	# um_set_password <user> <password_fd_or_empty>
+	if [ -n "$2" ]; then
+		um_set_password_from_fd "$1" "$2"
+	else
+		um_set_password_prompt "$1"
+	fi
+}
+
 um_mut_add() {
 	_name=$1
 	_role=$2
 	_pfd=$3
-	um_validate_username "$_name" || {
-		um_audit denied "$_name" denied invalid_username "$_role"
-		um_die "error: invalid_username"
-	}
+	um_mut_require_valid_username "$_name" "$_role"
 	um_validate_role "$_role" || {
 		um_audit denied "$_name" denied invalid_role
 		um_die "error: invalid_role"
@@ -1521,46 +1560,9 @@ um_mut_add() {
 	[ -e "$_home" ] && _home_existed=1
 	um_tx_begin
 	um_incomplete_set "add:${_name}"
-	if ! um_create_user "$_name" "$_role"; then
-		# Never rm -rf a pre-existing home (home_exists / foreign path).
-		if [ "$_home_existed" = "0" ]; then
-			um_home_remove "$_home" 2>/dev/null || true
-		fi
-		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
-		um_incomplete_clear
-		um_audit fail "$_name" fail create "$_role"
-		um_die "error: create_failed"
-	fi
-	if [ -n "$_pfd" ]; then
-		um_set_password_from_fd "$_name" "$_pfd" || {
-			if [ "$_home_existed" = "0" ]; then
-				um_home_remove "$_home" 2>/dev/null || true
-			fi
-			um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
-			um_incomplete_clear
-			um_audit fail "$_name" fail password "$_role"
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
-		}
-	else
-		um_set_password_prompt "$_name" || {
-			if [ "$_home_existed" = "0" ]; then
-				um_home_remove "$_home" 2>/dev/null || true
-			fi
-			um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
-			um_incomplete_clear
-			um_audit fail "$_name" fail password "$_role"
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
-		}
-	fi
-	um_registry_add "$_name" || {
-		if [ "$_home_existed" = "0" ]; then
-			um_home_remove "$_home" 2>/dev/null || true
-		fi
-		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
-		um_incomplete_clear
-		um_audit fail "$_name" fail registry "$_role"
-		um_die "error: registry_failed"
-	}
+	um_create_user "$_name" "$_role" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" create "error: create_failed"
+	um_set_password "$_name" "$_pfd" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+	um_registry_add "$_name" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" registry "error: registry_failed"
 	um_tx_commit
 	um_incomplete_clear
 	um_audit grant "$_name" ok "" "$_role"
@@ -1575,22 +1577,13 @@ um_mut_add() {
 um_mut_set_role() {
 	_name=$1
 	_role=$2
-	um_validate_username "$_name" || {
-		um_audit denied "$_name" denied invalid_username "$_role"
-		um_die "error: invalid_username"
-	}
+	um_mut_require_valid_username "$_name" "$_role"
 	um_validate_role "$_role" || {
 		um_audit denied "$_name" denied invalid_role
 		um_die "error: invalid_role"
 	}
-	um_is_managed "$_name" || {
-		um_audit denied "$_name" denied unmanaged "$_role"
-		um_die "error: unmanaged"
-	}
-	um_user_exists "$_name" || {
-		um_audit denied "$_name" denied not_found "$_role"
-		um_die "error: not_found"
-	}
+	um_mut_require_managed "$_name" "$_role"
+	um_mut_require_exists "$_name" "$_role" not_found
 	_cur=$(um_role_of "$_name")
 	if [ "$_cur" = "admin" ] && [ "$_role" = "readonly" ]; then
 		_n=$(um_count_managed_admins)
@@ -1626,32 +1619,15 @@ um_mut_set_role() {
 um_mut_passwd() {
 	_name=$1
 	_pfd=$2
-	um_validate_username "$_name" || {
-		um_audit denied "$_name" denied invalid_username
-		um_die "error: invalid_username"
-	}
-	um_is_managed "$_name" || {
-		um_audit denied "$_name" denied unmanaged
-		um_die "error: unmanaged"
-	}
-	um_user_exists "$_name" || {
-		um_audit denied "$_name" denied not_found
-		um_die "error: not_found"
-	}
+	um_mut_require_valid_username "$_name" "$_role"
+	um_mut_require_managed "$_name" "$_role"
+	um_mut_require_exists "$_name" "$_role" not_found
 	um_incomplete_set "passwd:${_name}"
-	if [ -n "$_pfd" ]; then
-		um_set_password_from_fd "$_name" "$_pfd" || {
-			um_incomplete_clear
-			um_audit fail "$_name" fail password
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
-		}
-	else
-		um_set_password_prompt "$_name" || {
-			um_incomplete_clear
-			um_audit fail "$_name" fail password
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
-		}
-	fi
+	um_set_password "$_name" "$_pfd" || {
+		um_incomplete_clear
+		um_audit fail "$_name" fail password
+		um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+	}
 	um_incomplete_clear
 	um_audit passwd "$_name" ok "" "$(um_role_of "$_name")"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
@@ -1664,18 +1640,9 @@ um_mut_passwd() {
 um_mut_del() {
 	_name=$1
 	_purge=$2
-	um_validate_username "$_name" || {
-		um_audit denied "$_name" denied invalid_username
-		um_die "error: invalid_username"
-	}
-	um_is_managed "$_name" || {
-		um_audit denied "$_name" denied unmanaged
-		um_die "error: unmanaged"
-	}
-	um_user_exists "$_name" || {
-		um_audit denied "$_name" denied not_found
-		um_die "error: not_found"
-	}
+	um_mut_require_valid_username "$_name" "$_role"
+	um_mut_require_managed "$_name" "$_role"
+	um_mut_require_exists "$_name" "$_role" not_found
 	_role=$(um_role_of "$_name")
 	if [ "$_role" = "admin" ]; then
 		_n=$(um_count_managed_admins)
@@ -1686,25 +1653,10 @@ um_mut_del() {
 	fi
 	um_tx_begin
 	um_incomplete_set "del:${_name}"
-	um_lock_account "$_name" || {
-		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
-		um_incomplete_clear
-		um_audit fail "$_name" fail lock "$_role"
-		um_die "error: lock_failed"
-	}
+	um_lock_account "$_name" || um_mut_fail "$_name" "$_role" "" 0 lock "error: lock_failed"
 	um_kill_user_procs "$_name"
-	um_wheel_del_user "$_name" || {
-		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
-		um_incomplete_clear
-		um_audit fail "$_name" fail wheel_del "$_role"
-		um_die "error: wheel_del_failed"
-	}
-	um_delete_account "$_name" "$_purge" || {
-		um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
-		um_incomplete_clear
-		um_audit fail "$_name" fail delete "$_role"
-		um_die "error: delete_failed"
-	}
+	um_wheel_del_user "$_name" || um_mut_fail "$_name" "$_role" "" 0 wheel_del "error: wheel_del_failed"
+	um_delete_account "$_name" "$_purge" || um_mut_fail "$_name" "$_role" "" 0 delete "error: delete_failed"
 	# Commit before registry_del: purge may have removed the home already, so
 	# EXIT rollback must not recreate passwd/shadow/group without a home.
 	um_tx_commit
