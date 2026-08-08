@@ -16,17 +16,33 @@ Designed for deployments **without** RADIUS/central auth. Supported: **OpenWrt 2
 
 ## Install (binary feed)
 
-See **[docs/binary-feed.md](docs/binary-feed.md)** and **[docs/user/installation.md](docs/user/installation.md)**.
+**Recommended — [binary feed](docs/binary-feed.md).** Run this on the router. It installs both packages:
 
-Feed: https://lucas-albers-lz4.github.io/usrmanage-packages/
+```sh
+wget -O /tmp/usrmanage.key https://lucas-albers-lz4.github.io/usrmanage-packages/public.key
+opkg-key add /tmp/usrmanage.key
+echo 'src/gz usrmanage https://lucas-albers-lz4.github.io/usrmanage-packages/24.10' >> /etc/opkg/customfeeds.conf
+opkg update && opkg install usrmanage luci-app-usrmanage
+```
 
-## Build from source feed
+**After install:** create your first admin user — [installation guide](docs/user/installation.md#first-admin-user).
+
+<details>
+<summary>Other install methods</summary>
+
+**apk (25.12):** see the apk commands in [binary-feed.md](docs/binary-feed.md#openwrt-2512-apk).
+
+**GitHub Releases:** download the package for your OpenWrt version and install manually — [installation guide](docs/user/installation.md#github-release-manual-download).
+
+**Build from source feed** (firmware builders):
 
 ```sh
 echo "src-link usrmanage /absolute/path/to/usrmanage/openwrt-feed" >> feeds.conf
 ./scripts/feeds update usrmanage
 ./scripts/feeds install usrmanage luci-app-usrmanage
 ```
+
+</details>
 
 ## CLI (summary)
 
