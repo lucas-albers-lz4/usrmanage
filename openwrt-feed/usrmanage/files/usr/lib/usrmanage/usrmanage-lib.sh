@@ -1464,10 +1464,14 @@ um_mut_add() {
 		um_audit denied "$_name" denied wheel_missing "$_role"
 		um_die "error: wheel_missing"
 	}
+	_home="${USRMANAGE_HOME_ROOT}/${_name}"
+	_home_existed=0
+	[ -e "$_home" ] && _home_existed=1
 	um_tx_begin
 	um_incomplete_set "add:${_name}"
 	if ! um_create_user "$_name" "$_role"; then
-		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+		# Never rm -rf a pre-existing home (home_exists / foreign path).
+		[ "$_home_existed" = "0" ] && um_home_remove "$_home" 2>/dev/null || true
 		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail create "$_role"
@@ -1475,7 +1479,7 @@ um_mut_add() {
 	fi
 	if [ -n "$_pfd" ]; then
 		um_set_password_from_fd "$_name" "$_pfd" || {
-			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+			[ "$_home_existed" = "0" ] && um_home_remove "$_home" 2>/dev/null || true
 			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
@@ -1483,7 +1487,7 @@ um_mut_add() {
 		}
 	else
 		um_set_password_prompt "$_name" || {
-			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+			[ "$_home_existed" = "0" ] && um_home_remove "$_home" 2>/dev/null || true
 			um_tx_rollback || um_die "error: tx_restore_failed"
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
@@ -1491,7 +1495,7 @@ um_mut_add() {
 		}
 	fi
 	um_registry_add "$_name" || {
-		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
+		[ "$_home_existed" = "0" ] && um_home_remove "$_home" 2>/dev/null || true
 		um_tx_rollback || um_die "error: tx_restore_failed"
 		um_incomplete_clear
 		um_audit fail "$_name" fail registry "$_role"
