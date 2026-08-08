@@ -397,23 +397,24 @@ um_validate_password() {
 }
 
 um_ensure_dirs() {
-	# Soft: best-effort for audit/read paths (issue #3 M4).
-	mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" 2>/dev/null || true
-	[ -f "$USRMANAGE_REGISTRY" ] || touch "$USRMANAGE_REGISTRY"
-	[ -f "$USRMANAGE_AUDIT" ] || touch "$USRMANAGE_AUDIT"
+	# um_ensure_dirs [strict] — soft by default; strict hard-fails (issue #3 M4).
+	_strict=0
+	[ "${1:-}" = "strict" ] && _strict=1
+	if [ "$_strict" = "1" ]; then
+		mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" \
+			|| um_die "error: dirs_failed"
+		[ -f "$USRMANAGE_REGISTRY" ] || touch "$USRMANAGE_REGISTRY" || um_die "error: dirs_failed"
+		[ -f "$USRMANAGE_AUDIT" ] || touch "$USRMANAGE_AUDIT" || um_die "error: dirs_failed"
+	else
+		mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" 2>/dev/null || true
+		[ -f "$USRMANAGE_REGISTRY" ] || touch "$USRMANAGE_REGISTRY"
+		[ -f "$USRMANAGE_AUDIT" ] || touch "$USRMANAGE_AUDIT"
+	fi
 	chmod 0750 "$USRMANAGE_AUDIT_DIR" 2>/dev/null || true
 	chmod 0640 "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT" 2>/dev/null || true
 }
 
-um_ensure_dirs_strict() {
-	# Hard-fail before mutators take the op lock (issue #3 M4).
-	mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" \
-		|| um_die "error: dirs_failed"
-	[ -f "$USRMANAGE_REGISTRY" ] || touch "$USRMANAGE_REGISTRY" || um_die "error: dirs_failed"
-	[ -f "$USRMANAGE_AUDIT" ] || touch "$USRMANAGE_AUDIT" || um_die "error: dirs_failed"
-	chmod 0750 "$USRMANAGE_AUDIT_DIR" 2>/dev/null || true
-	chmod 0640 "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT" 2>/dev/null || true
-}
+um_ensure_dirs_strict() { um_ensure_dirs strict; }
 
 um_is_managed() {
 	_u=$1
@@ -1182,27 +1183,16 @@ um_doctor_checks() {
 	fi
 
 	# Tool presence is preference info only — stock images use busybox fallbacks.
-	_add_info() {
-		_id=$1
-		_cok=$2
-		_msg=$3
-		if [ -n "$_json_checks" ]; then
-			_json_checks="${_json_checks},"
-		fi
-		_em=$(printf '%s' "$_msg" | um_json_escape)
-		_json_checks="${_json_checks}{\"id\":\"${_id}\",\"ok\":${_cok},\"msg\":\"${_em}\"}"
-	}
-
 	if command -v useradd >/dev/null 2>&1 || command -v adduser >/dev/null 2>&1; then
-		_add_info useradd true "useradd/adduser present (preferred)"
+		_add_check useradd true "useradd/adduser present (preferred)"
 	else
-		_add_info useradd true "useradd/adduser absent; using busybox file fallback"
+		_add_check useradd true "useradd/adduser absent; using busybox file fallback"
 	fi
 
 	if command -v userdel >/dev/null 2>&1 || command -v deluser >/dev/null 2>&1; then
-		_add_info userdel true "userdel/deluser present (preferred)"
+		_add_check userdel true "userdel/deluser present (preferred)"
 	else
-		_add_info userdel true "userdel/deluser absent; using busybox file fallback"
+		_add_check userdel true "userdel/deluser absent; using busybox file fallback"
 	fi
 
 	# Fallback prerequisites: writable account files + home parent + registry.
