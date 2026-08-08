@@ -976,19 +976,16 @@ um_group_entry_del() {
 	_u=$1
 	_line=$(grep -m1 "^${_u}:" "$USRMANAGE_GROUP" 2>/dev/null) || return 0
 	_members=$(printf '%s' "$_line" | cut -d: -f4)
+	_others=
 	if [ -n "$_members" ]; then
-		case ",${_members}," in
-			*",${_u},"*)
-				# Only the user themself — strip and delete if empty
-				;;
-			*)
-				um_audit "denied" "$_u" "fail" "group_has_members" || true
-				um_err "error: group_has_members"
-				return 1
-				;;
-		esac
+		_others=$(printf '%s' "$_members" | tr ',' '\n' | grep -vx '' | grep -vx "$_u" || true)
 	fi
-	# Also strip user from other groups' member lists, then drop private group.
+	if [ -n "$_others" ]; then
+		um_audit "denied" "$_u" "fail" "group_has_members" || true
+		um_err "error: group_has_members"
+		return 1
+	fi
+	# Strip user from other groups' member lists, then drop private group.
 	# shellcheck disable=SC2016
 	um_atomic_edit "$USRMANAGE_GROUP" 0644 -v u="$_u" -F: '
 		BEGIN { OFS=":" }
@@ -1025,7 +1022,7 @@ um_delete_account() {
 	if [ "$USRMANAGE_DRY_RUN" = "1" ]; then
 		return 0
 	fi
-	_home=$(um_user_home "$_u" 2>/dev/null) || _home="/home/${_u}"
+	_home=$(um_user_home "$_u" 2>/dev/null) || _home="${USRMANAGE_HOME_ROOT}/${_u}"
 	if command -v userdel >/dev/null 2>&1; then
 		if [ "$_purge" = "1" ]; then
 			userdel -r "$_u" >/dev/null 2>&1 && return 0
@@ -1056,7 +1053,7 @@ um_create_user() {
 	if [ "$USRMANAGE_DRY_RUN" = "1" ]; then
 		return 0
 	fi
-	_home="/home/${_u}"
+	_home="${USRMANAGE_HOME_ROOT}/${_u}"
 	if command -v useradd >/dev/null 2>&1; then
 		useradd -m -d "$_home" -s "$USRMANAGE_SHELL" "$_u" || return 1
 	elif command -v adduser >/dev/null 2>&1; then
@@ -1403,7 +1400,7 @@ um_mut_add() {
 	um_tx_begin
 	um_incomplete_set "add:${_name}"
 	if ! um_create_user "$_name" "$_role"; then
-		um_home_remove "/home/${_name}" 2>/dev/null || true
+		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
 		um_tx_rollback
 		um_incomplete_clear
 		um_audit fail "$_name" fail create "$_role"
@@ -1411,7 +1408,7 @@ um_mut_add() {
 	fi
 	if [ -n "$_pfd" ]; then
 		um_set_password_from_fd "$_name" "$_pfd" || {
-			um_home_remove "/home/${_name}" 2>/dev/null || true
+			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
 			um_tx_rollback
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
@@ -1419,7 +1416,7 @@ um_mut_add() {
 		}
 	else
 		um_set_password_prompt "$_name" || {
-			um_home_remove "/home/${_name}" 2>/dev/null || true
+			um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
 			um_tx_rollback
 			um_incomplete_clear
 			um_audit fail "$_name" fail password "$_role"
@@ -1427,7 +1424,7 @@ um_mut_add() {
 		}
 	fi
 	um_registry_add "$_name" || {
-		um_home_remove "/home/${_name}" 2>/dev/null || true
+		um_home_remove "${USRMANAGE_HOME_ROOT}/${_name}" 2>/dev/null || true
 		um_tx_rollback
 		um_incomplete_clear
 		um_audit fail "$_name" fail registry "$_role"
