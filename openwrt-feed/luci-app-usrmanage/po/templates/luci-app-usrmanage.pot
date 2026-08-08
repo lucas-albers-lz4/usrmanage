@@ -9,7 +9,15 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Action"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Actions"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Actor"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
@@ -157,6 +165,10 @@ msgid "Refresh"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Reason"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Reject password equal to username"
 msgstr ""
 
@@ -170,6 +182,10 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Request failed"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Result"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
@@ -209,11 +225,19 @@ msgid "Shell"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Source"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Standard"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Strict"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Time"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
