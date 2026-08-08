@@ -959,7 +959,13 @@ um_passwd_entry_add() {
 um_group_entry_add() {
 	_name=$1
 	_gid=$2
-	if grep -q "^${_name}:" "$USRMANAGE_GROUP" 2>/dev/null; then
+	_line=$(grep -m1 "^${_name}:" "$USRMANAGE_GROUP" 2>/dev/null) || true
+	if [ -n "$_line" ]; then
+		_egid=$(printf '%s' "$_line" | cut -d: -f3)
+		if [ "$_egid" != "$_gid" ]; then
+			um_err "error: group_gid_mismatch"
+			return 1
+		fi
 		return 0
 	fi
 	printf '%s:x:%s:\n' "$_name" "$_gid" >> "$USRMANAGE_GROUP" || return 1
@@ -1001,7 +1007,13 @@ um_home_create() {
 		return 1
 	fi
 	chmod 0750 "$_home" || return 1
-	chown "${_uid}:${_gid}" "$_home" 2>/dev/null || chown "0:${_gid}" "$_home" 2>/dev/null || true
+	if ! chown "${_uid}:${_gid}" "$_home" 2>/dev/null; then
+		# Root must own the home for the new UID; non-root host tests are best-effort.
+		if [ "$(id -u 2>/dev/null)" = "0" ]; then
+			um_err "error: home_chown_failed"
+			return 1
+		fi
+	fi
 	return 0
 }
 
