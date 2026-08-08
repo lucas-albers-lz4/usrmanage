@@ -8,7 +8,7 @@ Source and CI: https://github.com/lucas-albers-lz4/usrmanage
 
 ## Install
 
-### OpenWrt 23.05 / 24.10 (opkg)
+### OpenWrt 24.10 (opkg)
 
 ```sh
 wget -O /tmp/usrmanage.key https://lucas-albers-lz4.github.io/usrmanage-packages/public.key
@@ -18,7 +18,7 @@ opkg update
 opkg install usrmanage luci-app-usrmanage
 ```
 
-Use `…/23.05` on OpenWrt 23.05.
+OpenWrt 23.05: stay on v0.1.2 (`…/23.05` historical feed).
 
 ### OpenWrt 25.12 (apk)
 

@@ -3,7 +3,7 @@
 ## After first feed publish (`v0.1.0`)
 
 - [x] QEMU feed smoke on x86_64 (24.10.5) — `scripts/validate-feed-smoke.sh`
-- [ ] QEMU feed smoke on armsr-armv8 + remaining release lines (23.05 / 25.12)
+- [ ] QEMU feed smoke on armsr-armv8 + remaining release lines (25.12)
 - [x] LuCI Playwright e2e spotcheck (login + add user vs QEMU lab) — `scripts/playwright-luci.sh` / Playwright MCP
 - [ ] QEMU i18n / theme spotchecks
 - [x] Password policy presets + live checklist (OpenWrt default; Save to change)

@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${ROOT}/scripts/lib/sdk-matrix.sh"
 
 TARGET="${OWRT_VERIFY_TARGET:-x86-64}"
-VERSIONS=(23.05 24.10 25.12)
+VERSIONS=(24.10 25.12)
 
 usage() {
 	sed -n '1,10p' "$0"

@@ -14,7 +14,7 @@ usage() {
 Usage: validate-feed-smoke.sh [options]
 
 Options:
-  --version VERSION   23.05 | 24.10 | 25.12 (default: 24.10)
+  --version VERSION   24.10 | 25.12 (default: 24.10)
   --feed-url URL      override USRMANAGE_FEED_BASE_URL
   -h, --help
 EOF
@@ -30,7 +30,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$VERSION" in
-	23.05) IMG_RELEASE="23.05.5" ;;
 	24.10) IMG_RELEASE="24.10.5" ;;
 	25.12) IMG_RELEASE="25.12.0" ;;
 	*) echo "unsupported version: $VERSION" >&2; exit 1 ;;

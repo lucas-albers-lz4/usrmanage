@@ -22,7 +22,7 @@ git push origin v0.1.1
 ```
 
 5. GitHub Actions `publish-packages`:
-   - Builds 23.05 / 24.10 / 25.12 × x86-64 + armsr-armv8
+   - Builds 24.10 / 25.12 × x86-64 + armsr-armv8
    - Reproducible double-build on x86-64
    - Signs and deploys feed to `usrmanage-packages`
    - Attaches `.ipk` / `.apk` to the GitHub Release

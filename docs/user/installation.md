@@ -2,7 +2,7 @@
 
 ## From the binary feed (recommended)
 
-See [binary-feed.md](../binary-feed.md) for opkg (23.05 / 24.10) and apk (25.12) commands.
+See [binary-feed.md](../binary-feed.md) for opkg (24.10) and apk (25.12) commands.
 
 Install both:
 

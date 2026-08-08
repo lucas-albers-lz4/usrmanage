@@ -24,7 +24,7 @@ Commands:
 
 Options:
   --target TARGET    armsr-armv8 | x86-64   (default: x86-64)
-  --version VERSION  25.12 | 24.10 | 23.05   (default: 24.10)
+  --version VERSION  25.12 | 24.10   (default: 24.10)
 
 Parallelism: OWRT_MAKE_JOBS=16 or make -j N
 EOF

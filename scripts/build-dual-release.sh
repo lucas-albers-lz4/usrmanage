@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: Apache-2.0
-# Dual-release helper — delegates to Docker SDK matrix (23.05 / 24.10 / 25.12 × dual arch).
+# Dual-release helper — delegates to Docker SDK matrix (24.10 / 25.12 × dual arch).
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 "$ROOT/scripts/smoke-host.sh"
