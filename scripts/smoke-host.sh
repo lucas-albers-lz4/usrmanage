@@ -8,6 +8,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 "$ROOT/scripts/smoke-package-layout.sh"
 "$ROOT/tests/test_validators.sh"
 "$ROOT/tests/test_mutators.sh"
+"$ROOT/tests/test_phase1_foundation.sh"
 
 if command -v node >/dev/null 2>&1; then
 	node "$ROOT/tests/usrmanage-theme.test.js"
