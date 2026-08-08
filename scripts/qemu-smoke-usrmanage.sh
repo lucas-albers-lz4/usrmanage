@@ -46,6 +46,11 @@ ssh_guest 'printf "LabPass1!\n" | usrmanage add umsmoke --role readonly --passwo
 	|| die "usrmanage add readonly failed"
 ok "add umsmoke readonly"
 
+# Aging fields: min=0 max=99999 after create+passwd (shadow-free path).
+_aging="$(ssh_guest 'awk -F: -v u=umsmoke '\''$1==u{print $4,$5}'\'' /etc/shadow')"
+[[ "$_aging" == "0 99999" ]] || die "umsmoke aging want '0 99999' got '${_aging}'"
+ok "umsmoke aging min/max after add"
+
 ssh_guest 'id umsmoke >/dev/null' || die "system user umsmoke missing"
 if ssh_guest 'id -nG umsmoke | tr " " "\n" | grep -qx wheel'; then
 	die "readonly user unexpectedly in wheel"
@@ -62,6 +67,10 @@ ok "set-role admin → wheel"
 ssh_guest 'printf "LabPass2!\n" | usrmanage passwd umsmoke --password-fd 0' \
 	|| die "passwd failed"
 ok "passwd"
+
+_aging="$(ssh_guest 'awk -F: -v u=umsmoke '\''$1==u{print $4,$5}'\'' /etc/shadow')"
+[[ "$_aging" == "0 99999" ]] || die "umsmoke aging after passwd want '0 99999' got '${_aging}'"
+ok "umsmoke aging min/max after passwd"
 
 ssh_guest 'usrmanage set-role umsmoke --role readonly' || die "set-role readonly failed"
 ok "set-role back to readonly"

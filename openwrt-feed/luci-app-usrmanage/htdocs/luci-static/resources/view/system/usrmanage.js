@@ -7,7 +7,7 @@
 'require poll';
 
 /* Keep in sync with openwrt-feed/luci-app-usrmanage/Makefile PKG_VERSION */
-const APP_VERSION = '0.1.3';
+const APP_VERSION = '0.1.4';
 
 const callList = rpc.declare({
 	object: 'usrmanage',

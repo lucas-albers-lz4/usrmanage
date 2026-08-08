@@ -105,6 +105,12 @@ um_in_wheel audit && bad "audit still in wheel after del" || ok "del cleared whe
 printf 'ops\n' > "$USRMANAGE_REGISTRY"
 printf 'root:x:0:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
 
+# --- set-policy under lock (CLI dispatch) ---
+CLI="$ROOT/openwrt-feed/usrmanage/files/usr/sbin/usrmanage"
+grep -q 'um_with_lock um_policy_save' "$CLI" \
+	&& ok "set-policy wraps um_policy_save in um_with_lock" \
+	|| bad "set-policy missing um_with_lock um_policy_save"
+
 # --- rpcd argv: stub CLI ---
 cat > "$TMP/bin/usrmanage-stub" <<'STUB'
 #!/bin/sh

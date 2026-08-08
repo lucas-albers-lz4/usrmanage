@@ -25,7 +25,7 @@ export USRMANAGE_ACTOR=testhost
 mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")"
 touch "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT"
 printf 'root:x:0:0:root:/root:/bin/ash\nops:x:1000:1000:ops:/home/ops:/bin/ash\n' > "$USRMANAGE_PASSWD"
-printf 'root:::0:99999:7:::\nops:!:0:99999:7:::\n' > "$USRMANAGE_SHADOW"
+printf 'root:::0:99999:7:::\nops:!::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
 printf 'root:x:0:\nops:x:1000:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
 printf 'ops\n' > "$USRMANAGE_REGISTRY"
 
@@ -114,15 +114,33 @@ else
 fi
 um_tx_commit
 
-# partial restore must fail the rollback (not return success)
+# partial restore must fail the rollback (not return success) and keep snapdir
 um_tx_begin
+_snap_keep=$UM_TX_SNAPDIR
 rm -f "$UM_TX_SNAPDIR/passwd" "$UM_TX_SNAPDIR/passwd.missing"
-if um_tx_rollback; then
+_rb_err=$TMP/rb_err.txt
+if um_tx_rollback 2>"$_rb_err"; then
 	bad "tx rollback should fail when snapshot incomplete"
 else
 	ok "tx rollback fails on incomplete snapshot"
 fi
+[ -d "$_snap_keep" ] && ok "snapdir kept after failed restore" || bad "snapdir removed on failed restore"
+grep -q "tx_restore_failed path=$_snap_keep" "$_rb_err" \
+	&& ok "failed restore reports snapdir path" \
+	|| bad "error missing snapdir path: $(cat "$_rb_err")"
+# Cleanup leftover recovery snapdir from this test
+rm -rf "$_snap_keep"
 
+# --- registry D3 modes ---
+printf 'ops\n' > "$USRMANAGE_REGISTRY"
+chmod 0640 "$USRMANAGE_REGISTRY"
+um_registry_add alice
+_mode=$(stat -c '%a' "$USRMANAGE_REGISTRY")
+[ "$_mode" = "640" ] && ok "registry mode 0640 after add" || bad "registry mode after add: $_mode"
+um_registry_del alice
+_mode=$(stat -c '%a' "$USRMANAGE_REGISTRY")
+[ "$_mode" = "640" ] && ok "registry mode 0640 after del" || bad "registry mode after del: $_mode"
+grep -qx 'alice' "$USRMANAGE_REGISTRY" && bad "alice still in registry" || ok "registry_del removed alice"
 if [ "$fail" -ne 0 ]; then
 	echo "phase1 foundation tests FAILED" >&2
 	exit 1

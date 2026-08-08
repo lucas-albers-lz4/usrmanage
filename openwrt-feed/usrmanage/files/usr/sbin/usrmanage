@@ -249,7 +249,7 @@ case "$CMD" in
 		else
 			um_policy_set_fields "$SET_PRESET" || um_die "error: invalid_policy"
 		fi
-		um_policy_save || um_die "error: policy_save_failed"
+		um_with_lock um_policy_save || um_die "error: policy_save_failed"
 		if [ "$JSON_OUT" = "1" ]; then
 			um_policy_json_full
 		else
