@@ -61,11 +61,29 @@ fi
 
 if [[ -f "$MNT/etc/config/network" ]]; then
 	if [[ "$OWRT_LAB_NET_MODE" == "dhcp" ]]; then
-		sed -i "/config interface 'lan'/,/^$/{
-			s/option proto '[^']*'/option proto 'dhcp'/
-			/option ipaddr/d
-			/option netmask/d
-		}" "$MNT/etc/config/network"
+		# Match lan section through next config block or EOF. Handles both
+		# classic option ipaddr/netmask and 25.12 list ipaddr 'x.x.x.x/nn'.
+		awk '
+			BEGIN { in_lan = 0 }
+			/^config / {
+				if (in_lan) in_lan = 0
+				if ($0 ~ /^config interface .lan./) in_lan = 1
+			}
+			{
+				if (in_lan) {
+					if ($0 ~ /option proto /) {
+						print "\toption proto '\''dhcp'\''"
+						next
+					}
+					if ($0 ~ /option ipaddr /) next
+					if ($0 ~ /option netmask /) next
+					if ($0 ~ /list ipaddr /) next
+					if ($0 ~ /option ip6assign /) next
+				}
+				print
+			}
+		' "$MNT/etc/config/network" > "$MNT/etc/config/network.tmp"
+		mv "$MNT/etc/config/network.tmp" "$MNT/etc/config/network"
 	fi
 fi
 

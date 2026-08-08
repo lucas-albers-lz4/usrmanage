@@ -550,6 +550,128 @@ um_incomplete_clear() {
 	rm -f "$USRMANAGE_INCOMPLETE"
 }
 
+# Multi-file transaction snapshots (shadow-free create/delete). Restored on
+# EXIT unless um_tx_commit runs. Paths honor USRMANAGE_*.
+UM_TX_SNAPDIR=
+UM_TX_COMMITTED=0
+
+um_tx_snap_one() {
+	_src=$1
+	_name=$2
+	[ -n "$UM_TX_SNAPDIR" ] || return 1
+	if [ -f "$_src" ]; then
+		cp "$_src" "${UM_TX_SNAPDIR}/${_name}" || return 1
+	else
+		printf 'missing\n' > "${UM_TX_SNAPDIR}/${_name}.missing"
+	fi
+	return 0
+}
+
+um_tx_begin() {
+	# Snapshot passwd/shadow/group/registry for rollback on failure.
+	UM_TX_COMMITTED=0
+	UM_TX_SNAPDIR=$(mktemp -d "${TMPDIR:-/tmp}/usrmanage-tx.XXXXXX") \
+		|| um_die "error: tx_snapshot_failed"
+	um_tx_snap_one "$USRMANAGE_PASSWD" passwd || um_die "error: tx_snapshot_failed"
+	um_tx_snap_one "$USRMANAGE_SHADOW" shadow || um_die "error: tx_snapshot_failed"
+	um_tx_snap_one "$USRMANAGE_GROUP" group || um_die "error: tx_snapshot_failed"
+	um_tx_snap_one "$USRMANAGE_REGISTRY" registry || um_die "error: tx_snapshot_failed"
+	# shellcheck disable=SC2064
+	trap 'um_tx_rollback' EXIT
+}
+
+um_tx_restore_one() {
+	_dst=$1
+	_name=$2
+	[ -n "$UM_TX_SNAPDIR" ] || return 1
+	if [ -f "${UM_TX_SNAPDIR}/${_name}.missing" ]; then
+		rm -f "$_dst"
+		return 0
+	fi
+	[ -f "${UM_TX_SNAPDIR}/${_name}" ] || return 1
+	cp "${UM_TX_SNAPDIR}/${_name}" "$_dst" || return 1
+	case "$_name" in
+		shadow) chmod 0600 "$_dst" 2>/dev/null || true ;;
+		passwd|group) chmod 0644 "$_dst" 2>/dev/null || true ;;
+		registry) chmod 0640 "$_dst" 2>/dev/null || true ;;
+	esac
+	chown 0:0 "$_dst" 2>/dev/null || true
+	return 0
+}
+
+um_tx_rollback() {
+	[ "${UM_TX_COMMITTED:-0}" = "1" ] && return 0
+	[ -n "${UM_TX_SNAPDIR:-}" ] || return 0
+	_ok=1
+	um_tx_restore_one "$USRMANAGE_PASSWD" passwd || _ok=0
+	um_tx_restore_one "$USRMANAGE_SHADOW" shadow || _ok=0
+	um_tx_restore_one "$USRMANAGE_GROUP" group || _ok=0
+	um_tx_restore_one "$USRMANAGE_REGISTRY" registry || _ok=0
+	rm -rf "$UM_TX_SNAPDIR"
+	UM_TX_SNAPDIR=
+	trap - EXIT
+	[ "$_ok" = "1" ] || um_err "error: tx_restore_failed"
+	return 0
+}
+
+um_tx_commit() {
+	UM_TX_COMMITTED=1
+	trap - EXIT
+	[ -n "${UM_TX_SNAPDIR:-}" ] && rm -rf "$UM_TX_SNAPDIR"
+	UM_TX_SNAPDIR=
+}
+
+# Atomic awk rewrite: umask 077 temp, fixed mode + chown 0:0, then mv (D3).
+# Usage: um_atomic_edit <path> <octal_mode> [awk args...]
+# Remaining args are passed to awk; <path> is appended as the input file.
+um_atomic_edit() {
+	_path=$1
+	_mode=$2
+	shift 2
+	_tmp="${_path}.tmp.$$"
+	(
+		umask 077
+		awk "$@" "$_path" > "$_tmp"
+	) || {
+		rm -f "$_tmp"
+		return 1
+	}
+	chmod "$_mode" "$_tmp" || {
+		rm -f "$_tmp"
+		return 1
+	}
+	chown 0:0 "$_tmp" 2>/dev/null || true
+	mv "$_tmp" "$_path" || {
+		rm -f "$_tmp"
+		return 1
+	}
+	return 0
+}
+
+# Smallest free uid in USRMANAGE_UID_FLOOR..60000 whose paired gid is free (D4).
+# Prints "uid gid" on success. Audits and returns 1 on range exhaustion.
+um_uid_taken() {
+	awk -F: -v id="$1" '$3 == id { found = 1; exit } END { exit !found }' "$USRMANAGE_PASSWD" 2>/dev/null
+}
+
+um_gid_taken() {
+	awk -F: -v id="$1" '$3 == id { found = 1; exit } END { exit !found }' "$USRMANAGE_GROUP" 2>/dev/null
+}
+
+um_alloc_ids() {
+	_uid=$USRMANAGE_UID_FLOOR
+	while [ "$_uid" -le 60000 ]; do
+		if ! um_uid_taken "$_uid" && ! um_gid_taken "$_uid"; then
+			printf '%s %s\n' "$_uid" "$_uid"
+			return 0
+		fi
+		_uid=$((_uid + 1))
+	done
+	um_audit "denied" "-" "fail" "uid_range_exhausted" || true
+	um_err "error: uid_range_exhausted"
+	return 1
+}
+
 um_with_lock() {
 	# um_with_lock <shell function name> [args...]
 	# Requires flock (BusyBox or util-linux). No mkdir fallback — that path
@@ -594,20 +716,19 @@ um_wheel_add_user() {
 	if command -v usermod >/dev/null 2>&1; then
 		usermod -a -G wheel "$_u" >/dev/null 2>&1 && um_in_wheel "$_u" && return 0
 	fi
-	# Manual append to wheel members
-	_tmp="${USRMANAGE_GROUP}.tmp.$$"
-	if awk -v u="$_u" -F: '
+	# Manual append to wheel members (atomic replace, D3 modes)
+	# shellcheck disable=SC2016
+	if um_atomic_edit "$USRMANAGE_GROUP" 0644 -v u="$_u" -F: '
 		BEGIN { OFS=":" }
 		$1=="wheel" {
 			if ($4 == "") $4 = u
 			else if (index("," $4 ",", "," u ",") == 0) $4 = $4 "," u
 		}
 		{ print }
-	' "$USRMANAGE_GROUP" > "$_tmp" && mv "$_tmp" "$USRMANAGE_GROUP"; then
+	'; then
 		um_in_wheel "$_u"
 		return $?
 	fi
-	rm -f "$_tmp"
 	return 1
 }
 
@@ -622,8 +743,8 @@ um_wheel_del_user() {
 			return 0
 		fi
 	fi
-	_tmp="${USRMANAGE_GROUP}.tmp.$$"
-	if awk -v u="$_u" -F: '
+	# shellcheck disable=SC2016
+	if um_atomic_edit "$USRMANAGE_GROUP" 0644 -v u="$_u" -F: '
 		BEGIN { OFS=":" }
 		$1=="wheel" {
 			n = split($4, a, ",")
@@ -636,13 +757,12 @@ um_wheel_del_user() {
 			$4 = out
 		}
 		{ print }
-	' "$USRMANAGE_GROUP" > "$_tmp" && mv "$_tmp" "$USRMANAGE_GROUP"; then
+	'; then
 		if um_in_wheel "$_u"; then
 			return 1
 		fi
 		return 0
 	fi
-	rm -f "$_tmp"
 	return 1
 }
 
