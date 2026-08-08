@@ -73,3 +73,13 @@ Specs use unique usernames (`pwflow_*`) and clean up via SSH/`usrmanage del` whe
 - [luci-ux.md](luci-ux.md) — theme/i18n guards
 - [supported-releases.md](../supported-releases.md) — smoke expectations per release
 - [ROADMAP.md](../ROADMAP.md) — remaining QEMU matrix / i18n spotchecks
+
+## Z3 sanitation checks (#6 / #8)
+
+```sh
+sudo apt install python3-z3   # or pip install -r requirements-z3.txt
+python3 scripts/z3-verify.py --fast   # local / pre-commit
+python3 scripts/z3-verify.py --full   # CI job z3-verify
+```
+
+Optional hook: `ln -sf ../../scripts/hooks/pre-commit-z3-fast .git/hooks/pre-commit`
