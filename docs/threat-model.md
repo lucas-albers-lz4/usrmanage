@@ -46,3 +46,8 @@ Passwords may traverse ubus JSON once (platform limitation) then are piped to CL
 - Cryptographic integrity of local audit file
 - SELinux/AppArmor MAC
 - Attacker with root already on device
+
+
+## Shadow-free stock images
+
+Prefer shadow-utils when present. When absent, usrmanage edits account files directly under flock + snapshot restore. Concurrent non-usrmanage editors are out of scope (same as stock `useradd`).

@@ -9,12 +9,7 @@ Install both:
 - `usrmanage` (CLI)
 - `luci-app-usrmanage` (web UI)
 
-`usrmanage` depends on `sudo` and the `shadow-useradd` / `shadow-userdel` /
-`shadow-usermod` / `shadow-chpasswd` / `shadow-gpasswd` packages (stock images
-often omit BusyBox account applets). `opkg` / `apk` pull these automatically
-from the OpenWrt base feeds.
-
-Then:
+`usrmanage` depends on `sudo`, `jshn`, and `jsonfilter`. Stock OpenWrt needs no `shadow-*` packages; account create/delete uses busybox `passwd` plus atomic file fallbacks.
 
 ```sh
 usrmanage doctor
