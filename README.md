@@ -18,6 +18,8 @@ Designed for deployments **without** RADIUS/central auth. Supported: **OpenWrt 2
 
 **Recommended — [binary feed](docs/binary-feed.md).** Run this on the router. It installs both packages:
 
+**OpenWrt 24.10 (opkg):**
+
 ```sh
 wget -O /tmp/usrmanage.key https://lucas-albers-lz4.github.io/usrmanage-packages/public.key
 opkg-key add /tmp/usrmanage.key
@@ -25,12 +27,21 @@ echo 'src/gz usrmanage https://lucas-albers-lz4.github.io/usrmanage-packages/24.
 opkg update && opkg install usrmanage luci-app-usrmanage
 ```
 
+**OpenWrt 25.12 (apk):**
+
+```sh
+wget -O /tmp/usrmanage-feed.rsa.pub https://lucas-albers-lz4.github.io/usrmanage-packages/usrmanage-feed.rsa.pub
+mkdir -p /etc/apk/keys
+cp /tmp/usrmanage-feed.rsa.pub /etc/apk/keys/usrmanage-feed.rsa.pub
+echo 'https://lucas-albers-lz4.github.io/usrmanage-packages/25.12/all/packages.adb' \
+  >> /etc/apk/repositories.d/usrmanage.list
+apk update && apk add usrmanage luci-app-usrmanage
+```
+
 **After install:** create your first admin user — [installation guide](docs/user/installation.md#first-admin-user).
 
 <details>
 <summary>Other install methods</summary>
-
-**apk (25.12):** see the apk commands in [binary-feed.md](docs/binary-feed.md#openwrt-2512-apk).
 
 **GitHub Releases:** download the package for your OpenWrt version and install manually — [installation guide](docs/user/installation.md#github-release-manual-download).
 
