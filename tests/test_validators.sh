@@ -31,6 +31,7 @@ printf '%%wheel ALL=(ALL:ALL) ALL\n' > "$USRMANAGE_SUDOERS"
 
 # shellcheck disable=SC1090
 . "$LIB"
+. "$ROOT/tests/lib.sh"
 
 fail=0
 
@@ -109,7 +110,7 @@ um_in_wheel ops && bad "ops still in wheel" || ok "ops removed from wheel"
 grep -q '^wheel:x:10:audit$' "$USRMANAGE_GROUP" && ok "wheel members rewritten" || bad "wheel members: $(cat "$USRMANAGE_GROUP")"
 
 um_ensure_dirs
-_mode=$(stat -c '%a' "$USRMANAGE_AUDIT_DIR" 2>/dev/null || stat -f '%OLp' "$USRMANAGE_AUDIT_DIR")
+_mode=$(stat_mode "$USRMANAGE_AUDIT_DIR")
 case "$_mode" in
 	750|0750) ok "audit dir mode 750" ;;
 	*) bad "audit dir mode $_mode (want 750)" ;;
