@@ -84,6 +84,16 @@ When a signing key is rotated:
 2. Compute new fingerprints with the commands above.
 3. Update the table in **both** this file and the `usrmanage-packages` README **in the same release**.
 4. Publish the new feed under the existing URL; old packages remain signed by the previous key until replaced.
+5. **Client migration (luna fold 2026-08-10):** replacing the published
+   key causes existing installations to reject newly signed
+   indexes/packages unless the new key is distributed and trusted
+   first. Preferred: an **overlap period** — publish the new key
+   alongside the old (e.g. `public.key.new` / both fingerprints
+   listed) and instruct operators to install the new key while the
+   old one still validates; only cut over after the new key is
+   distributed. At minimum, the release notes must state that
+   operators must re-fetch and re-add the key (verifying the new
+   fingerprint) before updating to the post-rotation release.
 
 ## Signing
 
