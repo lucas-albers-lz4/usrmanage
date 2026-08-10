@@ -21,9 +21,13 @@ feed_keys_normalize_usign_keyfile() {
 	fi
 
 	if grep -q 'untrusted comment:' "$f" && grep -qE ' RW[A-Za-z0-9+/=]+$' "$f"; then
+		local old_umask
+		old_umask="$(umask)"
+		umask 077
 		sed -E 's/^(untrusted comment: .+) (RW[A-Za-z0-9+/=]+)[[:space:]]*$/\1\
 \2/' "$f" > "${f}.tmp"
 		mv "${f}.tmp" "$f"
+		umask "$old_umask"
 	fi
 
 	grep -qE '^RW[A-Za-z0-9+/=]+$' "$f" || return 1
@@ -42,9 +46,13 @@ feed_keys_maybe_decode_base64() {
 	if [[ "$first" == untrusted\ comment:* || "$first" == -----BEGIN* ]]; then
 		return 0
 	fi
+	local old_umask
+	old_umask="$(umask)"
+	umask 077
 	if base64 -d <"$f" >"${f}.tmp" 2>/dev/null && [[ -s "${f}.tmp" ]]; then
 		mv "${f}.tmp" "$f"
 	fi
+	umask "$old_umask"
 }
 
 feed_keys_write_from_env() {
