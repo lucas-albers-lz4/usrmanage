@@ -152,55 +152,63 @@ else
 fi
 MOCK_PULL_FAIL=0
 
-# --- ipkg index cache TOCTOU (luna fold): a symlinked cache seed must be
-# re-verified as a COPY, not trusted by source hash -------------------------
-# The production cache dir is under $USRMANAGE_ETC-ish paths; simulate an
-# attacker replacing the cache with a symlink pointing at a DIFFERENT file
-# (same base name, malicious content). The fixed code copies then hashes the
-# copy; the sha256 of the copied content differs from the expected hash, so
-# the function must REFETCH (and the returned file must hash to the expected
-# value). A pre-fold implementation hashing only the source would accept the
-# symlink content and return it for execution.
+# --- ipkg index cache TOCTOU (luna r2 fold): symlinked seed must NOT come
+# back as an executable symlink --------------------------------------------
+# Genuine discriminator: the attacker symlinks the seed at the LEGITIMATE
+# file (so a source-hash check — which follows symlinks — MATCHES). Pre-fold
+# `cp -a` copies the LINK itself, so the returned $tmp is a symlink to the
+# attacker-chosen path (re-pointable after the check). The fix `cp -aL`
+# dereferences and writes the target's CONTENT into the fresh private
+# regular file. Assert: returned file is a REGULAR file with the legit hash.
 cache_dir="$TMP/ipkg-cache"
 mkdir -p "$cache_dir"
 export FEED_PUBLISH_IPKG_INDEX_CACHE="$cache_dir"
-good_script="$TMP/good-ipkg-make-index.sh"
-printf '#!/bin/sh\necho GOOD-INDEX\n' > "$good_script"
-# stash the pinned expected hash of the REAL upstream script
-real_script="$(curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/4f7e6e554be2aef6a55be36f9f954d56705eb2ee/scripts/ipkg-make-index.sh' 2>/dev/null || true)"
-if [[ -n "$real_script" ]]; then
-	# Hash the REAL fetched bytes (command substitution strips trailing
-	# newlines, so hash a file copy, not the substituted string).
-	real_file="$TMP/real-ipkg-make-index.sh"
-	curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/4f7e6e554be2aef6a55be36f9f954d56705eb2ee/scripts/ipkg-make-index.sh' -o "$real_file" 2>/dev/null
+# fetch the REAL upstream script once, save to a stable file (curl -o keeps
+# the exact bytes incl. trailing newline — do NOT use $(...) which strips).
+real_file="$TMP/real-ipkg-make-index.sh"
+curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/4f7e6e554be2aef6a55be36f9f954d56705eb2ee/scripts/ipkg-make-index.sh' -o "$real_file" 2>/dev/null
+if [[ -s "$real_file" ]]; then
 	exp="$(sha256sum "$real_file" | awk '{print $1}')"
-	# attacker-controlled cache: symlink named like the seed -> malicious file
-	printf '#!/bin/sh\necho EVIL-INDEX\n' > "$TMP/evil"
-	ln -sf "$TMP/evil" "$cache_dir/ipkg-make-index-24.10.5.sh"
+	# attacker: seed name -> symlink to the LEGIT file (hash checks pass)
+	ln -sf "$real_file" "$cache_dir/ipkg-make-index-24.10.5.sh"
 	got_file="$(feed_publish_ipkg_index_script 24.10.5)"
 	got_sum="$(sha256sum "$got_file" | awk '{print $1}')"
-	evil_now="$(cat "$TMP/evil")"
-	if [[ "$got_sum" == "$exp" ]] && [[ "$evil_now" == *EVIL* ]]; then
-		ok "ipkg cache TOCTOU closed: symlink seed refetched; attacker file untouched"
+	got_type="$(stat -c '%F' "$got_file")"
+	if [[ "$got_sum" == "$exp" ]] && [[ "$got_type" == "regular file" ]]; then
+		ok "ipkg cache TOCTOU: symlinked seed returned as REGULAR file (cp -aL)"
 	else
-		bad "ipkg cache TOCTOU: symlink accepted or attacker file overwritten (evil='$evil_now')"
+		bad "ipkg cache TOCTOU: returned $got_type (want regular file) hash=$got_sum"
 	fi
 	rm -f "$got_file"
 else
 	bad "ipkg cache TOCTOU test: upstream fetch unavailable"
 fi
 
-# --- ipkg cache valid-hit path returns a verified copy ----------------------
-# A correct cache seed must still flow through verify-the-copy.
-printf '%s' "$real_script" > "$cache_dir/ipkg-make-index-24.10.5.sh"
-got_file="$(feed_publish_ipkg_index_script 24.10.5)"
+# --- ipkg cache valid-hit path: no refetch, verified copy ------------------
+# Seed = the exact downloaded bytes. A working cache must return the
+# verified copy WITHOUT calling curl again. A curl mock (named `curl`, on a
+# PATH-prefixed bin dir) records calls; if the seed were treated as invalid
+# the function would refetch and the mock would record it.
+mkdir -p "$TMP/bin"
+cat > "$TMP/bin/curl" <<'CURL'
+#!/bin/sh
+echo "CURL-CALLED" >> "$MOCK_CURL_LOG"
+CURL
+chmod +x "$TMP/bin/curl"
+export MOCK_CURL_LOG="$TMP/curl.log"
+: > "$MOCK_CURL_LOG"
+rm -f "$cache_dir/ipkg-make-index-24.10.5.sh"   # drop the TOCTOU symlink
+cp "$real_file" "$cache_dir/ipkg-make-index-24.10.5.sh"
+got_file="$(PATH="$TMP/bin:$PATH" MOCK_CURL_LOG="$MOCK_CURL_LOG" feed_publish_ipkg_index_script 24.10.5)"
 got_sum="$(sha256sum "$got_file" | awk '{print $1}')"
-if [[ "$got_sum" == "$exp" ]]; then
-	ok "ipkg cache valid seed accepted (verified copy)"
+refetch_count="$(wc -l < "$MOCK_CURL_LOG" 2>/dev/null || echo 0)"
+if [[ "$got_sum" == "$exp" ]] && [[ "$refetch_count" == "0" ]]; then
+	ok "ipkg cache valid seed: verified copy, no refetch"
 else
-	bad "ipkg cache valid seed rejected ($got_sum)"
+	bad "ipkg cache valid seed: hash=$got_sum refetches=$refetch_count"
 fi
 rm -f "$got_file"
+unset MOCK_CURL_LOG
 
 # --- sdk_matrix_pull must re-resolve tags (luna fold): pull always ----------
 # Pre-fold, an image present locally (MOCK_ABSENT=0) skipped pull; a stale
