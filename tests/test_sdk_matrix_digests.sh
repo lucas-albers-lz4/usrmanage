@@ -166,8 +166,7 @@ export FEED_PUBLISH_IPKG_INDEX_CACHE="$cache_dir"
 # fetch the REAL upstream script once, save to a stable file (curl -o keeps
 # the exact bytes incl. trailing newline — do NOT use $(...) which strips).
 real_file="$TMP/real-ipkg-make-index.sh"
-curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/4f7e6e554be2aef6a55be36f9f954d56705eb2ee/scripts/ipkg-make-index.sh' -o "$real_file" 2>/dev/null
-if [[ -s "$real_file" ]]; then
+if curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/4f7e6e554be2aef6a55be36f9f954d56705eb2ee/scripts/ipkg-make-index.sh' -o "$real_file" 2>/dev/null && [[ -s "$real_file" ]]; then
 	exp="$(sha256sum "$real_file" | awk '{print $1}')"
 	# attacker: seed name -> symlink to the LEGIT file (hash checks pass)
 	ln -sf "$real_file" "$cache_dir/ipkg-make-index-24.10.5.sh"
@@ -190,9 +189,14 @@ fi
 # PATH-prefixed bin dir) records calls; if the seed were treated as invalid
 # the function would refetch and the mock would record it.
 mkdir -p "$TMP/bin"
-cat > "$TMP/bin/curl" <<'CURL'
+REAL_CURL="$(command -v curl)"
+cat > "$TMP/bin/curl" <<CURL
 #!/bin/sh
-echo "CURL-CALLED" >> "$MOCK_CURL_LOG"
+# Mock: record the call AND write real bytes (so a refetch path completes
+# and the test can assert refetch_count; a silent mock would exit the test
+# under set -e before the assertion runs — luna r3 fold).
+echo "CURL-CALLED" >> "\$MOCK_CURL_LOG"
+exec "$REAL_CURL" "\$@" </dev/null 2>/dev/null || true
 CURL
 chmod +x "$TMP/bin/curl"
 export MOCK_CURL_LOG="$TMP/curl.log"
