@@ -60,10 +60,14 @@ sdk_matrix_resolve() {
 sdk_matrix_pull() {
 	# Ensure the SDK image for a matrix cell is present locally so its digest can be
 	# recorded (tags are mutable; always re-resolve against the registry).
+	# NOTE (luna fold 2026-08-10): do NOT skip pull when the tag exists
+	# locally — a stale local tag would record a digest that no longer
+	# matches the registry. docker pull of an unchanged tag is a cheap
+	# manifest re-resolution; if the tag moved upstream, the local image
+	# (and its RepoDigests) is updated here before the digest is read.
 	local target="${1:-x86-64}" version="${2:-24.10}"
 	sdk_matrix_resolve "$target" "$version"
-	docker image inspect "$SDK_MATRIX_IMAGE" >/dev/null 2>&1 \
-		|| docker pull "$SDK_MATRIX_IMAGE"
+	docker pull "$SDK_MATRIX_IMAGE"
 }
 
 sdk_matrix_image_digest() {

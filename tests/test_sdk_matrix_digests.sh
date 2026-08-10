@@ -29,6 +29,7 @@ docker() {
 	case "$1" in
 		pull)
 			[[ "$MOCK_PULL_FAIL" != 1 ]] || return 1
+			[[ -n "${MOCK_PULL_LOG:-}" ]] && echo "pull $2" >> "$MOCK_PULL_LOG"
 			MOCK_ABSENT["$2"]=0
 			return 0
 			;;
@@ -150,6 +151,73 @@ else
 	ok "manifest fails fast when a cell digest is unresolvable"
 fi
 MOCK_PULL_FAIL=0
+
+# --- ipkg index cache TOCTOU (luna fold): a symlinked cache seed must be
+# re-verified as a COPY, not trusted by source hash -------------------------
+# The production cache dir is under $USRMANAGE_ETC-ish paths; simulate an
+# attacker replacing the cache with a symlink pointing at a DIFFERENT file
+# (same base name, malicious content). The fixed code copies then hashes the
+# copy; the sha256 of the copied content differs from the expected hash, so
+# the function must REFETCH (and the returned file must hash to the expected
+# value). A pre-fold implementation hashing only the source would accept the
+# symlink content and return it for execution.
+cache_dir="$TMP/ipkg-cache"
+mkdir -p "$cache_dir"
+export FEED_PUBLISH_IPKG_INDEX_CACHE="$cache_dir"
+good_script="$TMP/good-ipkg-make-index.sh"
+printf '#!/bin/sh\necho GOOD-INDEX\n' > "$good_script"
+# stash the pinned expected hash of the REAL upstream script
+real_script="$(curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/4f7e6e554be2aef6a55be36f9f954d56705eb2ee/scripts/ipkg-make-index.sh' 2>/dev/null || true)"
+if [[ -n "$real_script" ]]; then
+	# Hash the REAL fetched bytes (command substitution strips trailing
+	# newlines, so hash a file copy, not the substituted string).
+	real_file="$TMP/real-ipkg-make-index.sh"
+	curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/4f7e6e554be2aef6a55be36f9f954d56705eb2ee/scripts/ipkg-make-index.sh' -o "$real_file" 2>/dev/null
+	exp="$(sha256sum "$real_file" | awk '{print $1}')"
+	# attacker-controlled cache: symlink named like the seed -> malicious file
+	printf '#!/bin/sh\necho EVIL-INDEX\n' > "$TMP/evil"
+	ln -sf "$TMP/evil" "$cache_dir/ipkg-make-index-24.10.5.sh"
+	got_file="$(feed_publish_ipkg_index_script 24.10.5)"
+	got_sum="$(sha256sum "$got_file" | awk '{print $1}')"
+	evil_now="$(cat "$TMP/evil")"
+	if [[ "$got_sum" == "$exp" ]] && [[ "$evil_now" == *EVIL* ]]; then
+		ok "ipkg cache TOCTOU closed: symlink seed refetched; attacker file untouched"
+	else
+		bad "ipkg cache TOCTOU: symlink accepted or attacker file overwritten (evil='$evil_now')"
+	fi
+	rm -f "$got_file"
+else
+	bad "ipkg cache TOCTOU test: upstream fetch unavailable"
+fi
+
+# --- ipkg cache valid-hit path returns a verified copy ----------------------
+# A correct cache seed must still flow through verify-the-copy.
+printf '%s' "$real_script" > "$cache_dir/ipkg-make-index-24.10.5.sh"
+got_file="$(feed_publish_ipkg_index_script 24.10.5)"
+got_sum="$(sha256sum "$got_file" | awk '{print $1}')"
+if [[ "$got_sum" == "$exp" ]]; then
+	ok "ipkg cache valid seed accepted (verified copy)"
+else
+	bad "ipkg cache valid seed rejected ($got_sum)"
+fi
+rm -f "$got_file"
+
+# --- sdk_matrix_pull must re-resolve tags (luna fold): pull always ----------
+# Pre-fold, an image present locally (MOCK_ABSENT=0) skipped pull; a stale
+# local tag then recorded a stale digest. Fixed code always pulls. The mock
+# records pulls; assert the pull count for a present image is > 0.
+MOCK_PULL_LOG="$TMP/pulls.log"
+: > "$MOCK_PULL_LOG"
+img_present="$(img_ref x86-64 24.10)"
+MOCK_ABSENT["$img_present"]=0   # image exists locally
+sdk_matrix_pull x86-64 24.10
+pulls="$(grep -c "$img_present" "$MOCK_PULL_LOG" || true)"
+if [[ "$pulls" -ge 1 ]]; then
+	ok "sdk_matrix_pull always re-resolves (pull fired on present image)"
+else
+	bad "sdk_matrix_pull skipped pull on present image (stale digest risk)"
+fi
+unset MOCK_PULL_LOG
 
 [ "$fail" = "0" ] || exit 1
 echo "ALL TESTS PASSED"

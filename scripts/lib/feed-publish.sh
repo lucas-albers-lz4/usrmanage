@@ -167,14 +167,21 @@ feed_publish_ipkg_index_script() {
 	tmp="$(mktemp)"
 	seed="${cache}/ipkg-make-index-${ver_label}.sh"
 	if [[ -f "$seed" ]]; then
-		actual="$(sha256sum "$seed" | awk '{print $1}')"
+		# TOCTOU-closed (luna fold 2026-08-10): hash the COPY, not the
+		# cache — a writable cache or symlink can be swapped between the
+		# source hash and the cp. `cp -aL` DEREFERENCES a symlink seed and
+		# writes the target's CONTENT into the fresh private $tmp regular
+		# file (a bare `cp -a` would copy the link itself, making $tmp a
+		# symlink the refetch could then follow into attacker-chosen
+		# paths). Verify the copy's hash: mismatch => refetch.
+		cp -aL "$seed" "$tmp"
+		actual="$(sha256sum "$tmp" | awk '{print $1}')"
 		if [[ "$actual" == "$sha_expected" ]]; then
-			cp -a "$seed" "$tmp"
 			chmod +x "$tmp"
 			printf '%s' "$tmp"
 			return 0
 		fi
-		echo "ipkg-make-index: cache ${seed} sha256 mismatch; refetching pinned ${ref}" >&2
+		echo "ipkg-make-index: cache ${seed} failed re-verification (got ${actual}); refetching pinned ${ref}" >&2
 	fi
 	if ! curl -fsSL "https://raw.githubusercontent.com/openwrt/openwrt/${ref}/scripts/ipkg-make-index.sh" -o "$tmp"; then
 		rm -f "$tmp"
