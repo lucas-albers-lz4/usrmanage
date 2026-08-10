@@ -18,11 +18,31 @@ printf 'root:::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
 printf 'root:x:0:\nwheel:x:10:\n' > "$USRMANAGE_GROUP"
 chmod 0644 "$USRMANAGE_PASSWD" "$USRMANAGE_GROUP"
 chmod 0600 "$USRMANAGE_SHADOW"
-export PATH="/usr/bin:/bin"
+
+# Shim dir for the stock-BusyBox PATH simulation. flock is a hard product
+# requirement (um_with_lock) — resolve it to an absolute path BEFORE narrowing
+# PATH so the test does not depend on where the binary lives (Homebrew puts
+# it under /opt/homebrew or /usr/local, not /usr/bin).
+HOSTBIN="$TMP/hostbin"
+mkdir -p "$HOSTBIN"
+_flock_abs=$(command -v flock) || { echo "FAIL: flock missing (Linux: util-linux, macOS: brew install flock)" >&2; exit 1; }
+ln -s "$_flock_abs" "$HOSTBIN/flock"
+
+# Shadow host account tools the simulated image must never reach. On macOS,
+# /usr/bin/passwd -l means "location", not "lock"; pkill would scan the real
+# host. Stub them so the mutators deterministically take the manual file
+# fallback instead of running the host's own binaries.
+for _t in passwd pkill; do
+	printf '#!/bin/sh\nexit 1\n' > "$HOSTBIN/$_t"
+	chmod +x "$HOSTBIN/$_t"
+done
+
+export PATH="$HOSTBIN:/usr/bin:/bin"
 command -v useradd >/dev/null 2>&1 && { echo "FAIL: useradd on PATH" >&2; exit 1; }
-command -v flock >/dev/null 2>&1 || { echo "FAIL: flock missing" >&2; exit 1; }
+command -v flock >/dev/null 2>&1 || { echo "FAIL: flock not reachable on pinned PATH" >&2; exit 1; }
 # shellcheck disable=SC1090
 . "$LIB"
+. "$ROOT/tests/lib.sh"
 fail=0
 ok() { echo "ok: $*"; }
 bad() { echo "FAIL: $*" >&2; fail=1; }
@@ -33,13 +53,12 @@ grep -q '^bob:!' "$USRMANAGE_SHADOW" && ok "shadow locked placeholder" || bad "s
 _aging=$(awk -F: -v u=bob '$1==u{print $4,$5}' "$USRMANAGE_SHADOW")
 [ "$_aging" = "0 99999" ] && ok "placeholder aging min/max" || bad "placeholder aging '$_aging'"
 [ -d "$USRMANAGE_HOME_ROOT/bob" ] && ok "home created" || bad "home missing"
-_mode=$(stat -c '%a' "$USRMANAGE_HOME_ROOT/bob"); [ "$_mode" = "750" ] && ok "home mode 0750" || bad "home mode $_mode"
-_mode=$(stat -c '%a' "$USRMANAGE_SHADOW"); [ "$_mode" = "600" ] && ok "shadow mode 0600" || bad "shadow mode $_mode"
-_mode=$(stat -c '%a' "$USRMANAGE_PASSWD"); [ "$_mode" = "644" ] && ok "passwd mode 0644" || bad "passwd mode $_mode"
+_mode=$(stat_mode "$USRMANAGE_HOME_ROOT/bob"); [ "$_mode" = "750" ] && ok "home mode 0750" || bad "home mode $_mode"
+_mode=$(stat_mode "$USRMANAGE_SHADOW"); [ "$_mode" = "600" ] && ok "shadow mode 0600" || bad "shadow mode $_mode"
+_mode=$(stat_mode "$USRMANAGE_PASSWD"); [ "$_mode" = "644" ] && ok "passwd mode 0644" || bad "passwd mode $_mode"
 um_registry_add bob || bad "registry_add bob"
-_mode=$(stat -c '%a' "$USRMANAGE_REGISTRY"); [ "$_mode" = "640" ] && ok "registry mode 0640" || bad "registry mode $_mode"
-_own=$(stat -c '%u %g' "$USRMANAGE_REGISTRY" 2>/dev/null \
-	|| ls -ldn "$USRMANAGE_REGISTRY" | awk '{print $3,$4}')
+_mode=$(stat_mode "$USRMANAGE_REGISTRY"); [ "$_mode" = "640" ] && ok "registry mode 0640" || bad "registry mode $_mode"
+_own=$(stat_owner "$USRMANAGE_REGISTRY")
 if [ "$(id -u)" = "0" ]; then
 	[ "$_own" = "0 0" ] && ok "registry owner 0:0 after add" || bad "registry owner after add: $_own"
 else
