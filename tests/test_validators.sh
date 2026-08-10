@@ -20,6 +20,8 @@ export USRMANAGE_SHADOW="$TMP/shadow"
 export USRMANAGE_GROUP="$TMP/group"
 export USRMANAGE_SUDOERS="$TMP/sudoers"
 export USRMANAGE_DRY_RUN=1
+# Hermetic tests rely on USRMANAGE_* path overrides; enable the test-only gate.
+export USRMANAGE_TEST_OVERRIDES=1
 
 mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")"
 touch "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT"
@@ -50,6 +52,15 @@ um_validate_role root && bad "bad role allowed" || ok "bad role rejected"
 um_validate_password ops 'short' && bad "short pw allowed" || ok "short pw rejected"
 um_validate_password ops 'ops' && bad "username pw allowed" || ok "username pw rejected"
 um_validate_password ops 'goodpass1' && ok "good password" || bad "good password"
+
+# --- env override gate (#72 / #65) ---
+_gate=$( ( unset USRMANAGE_TEST_OVERRIDES; . "$LIB" 2>/dev/null; printf '%s|%s|%s' "$USRMANAGE_PASSWD" "$USRMANAGE_REGISTRY" "$USRMANAGE_UID_FLOOR" ) )
+[ "$_gate" = "/etc/passwd|/etc/usrmanage/users|1000" ] \
+	&& ok "env overrides inert without USRMANAGE_TEST_OVERRIDES" \
+	|| bad "env override gate: got '$_gate'"
+[ "$USRMANAGE_PASSWD" = "$TMP/passwd" ] \
+	&& ok "env overrides honored with USRMANAGE_TEST_OVERRIDES=1" \
+	|| bad "test override not honored (PASSWD=$USRMANAGE_PASSWD)"
 
 um_is_managed ops && ok "ops managed" || bad "ops managed"
 um_is_managed nobody && bad "nobody managed" || ok "unmanaged"

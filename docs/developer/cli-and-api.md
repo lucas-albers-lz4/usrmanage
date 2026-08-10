@@ -51,7 +51,7 @@ With `--json` (and all LuCI mutator calls), denials and failures print a structu
 
 The `error` field is the CLI token after the `error: ` prefix (no passwords). rpcd always returns that object as the ubus reply (CLI exit status is not treated as an RPC failure). LuCI notifications show `Failed: <error>`.
 
-Passwords on `--password-fd` / LuCI must be **single-line** (`read -r` stops at the first newline).
+Passwords on `--password-fd` / LuCI must be **single-line**. Values containing an embedded (or trailing) newline or any control character are rejected with an explicit `password_policy:multi_line` / `password_policy:control_char` (CLI) or `password_control_chars` (rpcd) error — they are never silently truncated.
 
 Success shapes match [api-shapes.json](../prototype/api-shapes.json) (`ok: true` plus name/role as applicable).
 

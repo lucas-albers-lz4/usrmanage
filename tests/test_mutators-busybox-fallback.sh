@@ -11,6 +11,8 @@ export USRMANAGE_INCOMPLETE="$TMP/etc/incomplete" USRMANAGE_PASSWD="$TMP/passwd"
 export USRMANAGE_SHADOW="$TMP/shadow" USRMANAGE_GROUP="$TMP/group" USRMANAGE_SUDOERS="$TMP/sudoers"
 export USRMANAGE_HOME_ROOT="$TMP/home" USRMANAGE_UID_FLOOR=1000 USRMANAGE_SHELL=/bin/sh
 export USRMANAGE_SRC=cli USRMANAGE_ACTOR=testhost USRMANAGE_DRY_RUN=0
+# Hermetic tests rely on USRMANAGE_* path overrides; enable the test-only gate.
+export USRMANAGE_TEST_OVERRIDES=1
 mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" "$USRMANAGE_HOME_ROOT"
 touch "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT" "$USRMANAGE_SUDOERS"
 printf 'root:x:0:0:root:/root:/bin/sh\n' > "$USRMANAGE_PASSWD"

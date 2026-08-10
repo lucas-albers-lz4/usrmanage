@@ -80,12 +80,72 @@ run_cli() {
 	return 0
 }
 
+password_has_control() {
+	# 0 if the value contains a C0 control char or DEL (#72 P2). Mirrors
+	# um_str_has_control in usrmanage-lib.sh; rejects before the CLI pipe so
+	# embedded newlines/tabs never reach --password-fd.
+	_s=$1
+	[ -n "$_s" ] || return 1
+	_nl=$(printf '\nx')
+	_nl=${_nl%x}
+	case "$_s" in
+		*"$_nl"*) return 0 ;;
+	esac
+	printf '%s' "$_s" | awk 'BEGIN {
+		RS = ""; ORS = ""
+		for (n = 1; n < 128; n++)
+			ord[sprintf("%c", n)] = n
+	}
+	{
+		for (i = 1; i <= length($0); i++) {
+			c = substr($0, i, 1)
+			o = ord[c] + 0
+			if ((o > 0 && o < 32) || o == 127) {
+				found = 1
+				exit
+			}
+		}
+	}
+	END { if (found) exit 0; exit 1 }'
+}
+
 run_password_cli() {
 	# Shared: read password, resolve actor, reject empty, pipe to CLI on fd 0, scrub.
-	_pass=$(json_get password)
+	# Password extraction avoids command substitution (luna fold 2026-08-10):
+	# `_pass=$(json_get password)` strips trailing newlines, so a JSON
+	# password ending in \n silently became clean before the control check —
+	# the exact truncation P2 must reject. Extract to a private temp file
+	# instead and read lines: an embedded OR trailing newline in the value
+	# then appears as a second line and is rejected.
+	_pass_file="$(mktemp)"
+	_pass=
+	printf '%s' "$INPUT" | jsonfilter -e '@.password' > "$_pass_file" 2>/dev/null || true
+	# Sequential reads on ONE fd (luna fold 2026-08-10): a re-opened fd
+	# would re-read line 1, so acceptance would wrongly depend on line 1
+	# having a trailing newline instead of a second line existing. Real
+	# OpenWrt jsonfilter terminates each value with \n, so:
+	#   clean  "NewSecret1"      -> file "NewSecret1\n"  -> 1 line
+	#   trailing "NewSecret1\n"  -> file "NewSecret1\n\n" -> 2 lines
+	#   embedded "...\n..."      -> 2+ lines
+	exec 3< "$_pass_file"
+	IFS= read -r _pass <&3 || true   # EOF-without-newline: content still in _pass
+	if IFS= read -r _extra <&3; then # genuine second line (empty line = trailing \n)
+		_pass=
+		exec 3<&-
+		rm -f "$_pass_file"
+		printf '{"ok":false,"error":"password_control_chars"}\n'
+		return 0
+	fi
+	exec 3<&-
+	rm -f "$_pass_file"
 	_actor=$(session_actor)
 	if [ -z "$_pass" ]; then
 		printf '{"ok":false,"error":"password_required"}\n'
+		return 0
+	fi
+	if password_has_control "$_pass"; then
+		_pass=
+		printf '{"ok":false,"error":"password_control_chars"}\n'
 		return 0
 	fi
 	printf '%s\n' "$_pass" | USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \

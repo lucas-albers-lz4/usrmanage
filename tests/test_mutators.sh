@@ -23,6 +23,8 @@ export USRMANAGE_SUDOERS="$TMP/sudoers"
 export USRMANAGE_DRY_RUN=1
 export USRMANAGE_SRC=cli
 export USRMANAGE_ACTOR=testhost
+# Hermetic tests rely on USRMANAGE_* path overrides; enable the test-only gate.
+export USRMANAGE_TEST_OVERRIDES=1
 
 mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" "$TMP/bin"
 touch "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT"
