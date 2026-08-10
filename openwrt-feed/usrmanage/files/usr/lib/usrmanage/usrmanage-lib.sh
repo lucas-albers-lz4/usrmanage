@@ -456,7 +456,7 @@ um_registry_del() {
 
 um_passwd_line() {
 	_u=$1
-	grep -m1 "^${_u}:" "$USRMANAGE_PASSWD" 2>/dev/null
+	grep -m1 -F "${_u}:" "$USRMANAGE_PASSWD" 2>/dev/null
 }
 
 um_user_exists() {
@@ -476,7 +476,7 @@ um_user_shell() { um_passwd_field "$1" 7; }
 
 um_user_locked() {
 	_u=$1
-	_sh=$(grep -m1 "^${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null | cut -d: -f2)
+	_sh=$(grep -m1 -F "${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null | cut -d: -f2)
 	case "$_sh" in
 		'!'*|'*'*) return 0 ;;
 		*) return 1 ;;
@@ -1609,6 +1609,7 @@ um_mut_set_role() {
 um_mut_passwd() {
 	_name=$1
 	_pfd=$2
+	_role=$(um_role_of "$_name")
 	um_mut_require_valid_username "$_name" "$_role"
 	um_mut_require_managed "$_name" "$_role"
 	um_mut_require_exists "$_name" "$_role" not_found
@@ -1630,10 +1631,10 @@ um_mut_passwd() {
 um_mut_del() {
 	_name=$1
 	_purge=$2
+	_role=$(um_role_of "$_name")
 	um_mut_require_valid_username "$_name" "$_role"
 	um_mut_require_managed "$_name" "$_role"
 	um_mut_require_exists "$_name" "$_role" not_found
-	_role=$(um_role_of "$_name")
 	if [ "$_role" = "admin" ]; then
 		_n=$(um_count_managed_admins)
 		if [ "$_n" -le 1 ]; then
