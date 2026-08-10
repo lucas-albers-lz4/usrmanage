@@ -20,6 +20,7 @@ shellcheck -s bash \
 	"$ROOT/scripts/verify-reproducible-build.sh" \
 	"$ROOT/scripts/lib/feed-publish.sh" \
 	"$ROOT/scripts/lib/feed-keys.sh" \
-	"$ROOT/scripts/validate-feed-keys.sh" || true
+	"$ROOT/scripts/validate-feed-keys.sh" \
+	"$ROOT/tests/test_sdk_matrix_digests.sh" || true
 
 echo "shellcheck: ok"

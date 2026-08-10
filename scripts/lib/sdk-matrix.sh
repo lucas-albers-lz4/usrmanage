@@ -57,6 +57,44 @@ sdk_matrix_resolve() {
 	SDK_MATRIX_OUT_DIR="$(sdk_matrix_root)/out/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}"
 }
 
+sdk_matrix_pull() {
+	# Ensure the SDK image for a matrix cell is present locally so its digest can be
+	# recorded (tags are mutable; always re-resolve against the registry).
+	local target="${1:-x86-64}" version="${2:-24.10}"
+	sdk_matrix_resolve "$target" "$version"
+	docker image inspect "$SDK_MATRIX_IMAGE" >/dev/null 2>&1 \
+		|| docker pull "$SDK_MATRIX_IMAGE"
+}
+
+sdk_matrix_image_digest() {
+	# Print the resolved digest of the SDK image for a matrix cell (target, version).
+	# Prefers the RepoDigest entry whose repo prefix matches the requested image LITERALLY
+	# (awk index($0, repo "@sha256:") == 1; multi-registry ordering is unspecified, so
+	# RepoDigests[0] is not trusted). Falls back to "@sha256:<image id>" with a WARNING.
+	# Aborts (non-zero) if no source resolves at all — never silent.
+	local target="${1:-x86-64}" version="${2:-24.10}" repo digests digest id
+	sdk_matrix_resolve "$target" "$version"
+	sdk_matrix_pull "$target" "$version" || {
+		echo "sdk-matrix: failed to pull ${SDK_MATRIX_IMAGE}" >&2
+		return 1
+	}
+	repo="${SDK_MATRIX_IMAGE%%:*}"
+	digests="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$SDK_MATRIX_IMAGE" 2>/dev/null || true)"
+	digest="$(printf '%s\n' "$digests" | awk -v repo="$repo" 'index($0, repo "@sha256:")==1 {print; exit}')"
+	if [[ -n "$digest" ]]; then
+		printf '%s' "$digest"
+		return 0
+	fi
+	id="$(docker image inspect --format '{{.Id}}' "$SDK_MATRIX_IMAGE" 2>/dev/null || true)"
+	if [[ -n "$id" ]]; then
+		echo "sdk-matrix: WARNING ${SDK_MATRIX_IMAGE} has no RepoDigest; falling back to image id sha256:${id#sha256:}" >&2
+		printf '%s' "@sha256:${id#sha256:}"
+		return 0
+	fi
+	echo "sdk-matrix: no resolvable source for ${SDK_MATRIX_IMAGE} (not pulled / no digest)" >&2
+	return 1
+}
+
 sdk_matrix_validate_target() {
 	local t
 	for t in "${SDK_MATRIX_TARGETS[@]}"; do

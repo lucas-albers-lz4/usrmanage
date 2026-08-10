@@ -42,7 +42,7 @@ Details: [docs/developer/testing.md](docs/developer/testing.md).
 Details: [docs/release.md](docs/release.md), [docs/binary-feed.md](docs/binary-feed.md).
 
 - Version: bump **third octet** of `PKG_VERSION` in both Makefiles; keep `PKG_RELEASE:=1`; tag `v0.1.N` (not `v0.1.0-r2`).
-- Tag `v*` → `publish-packages` (6-cell SDK matrix → signed feed on Pages). Do not cut a release until lab acceptance when asked.
+- Tag `v*` → `publish-packages` (4-cell SDK matrix → signed feed on Pages). Do not cut a release until lab acceptance when asked.
 - Feed: https://lucas-albers-lz4.github.io/usrmanage-packages/
 - Never commit secrets (`*.key`, feed signing material). `lab/` images are gitignored.
 

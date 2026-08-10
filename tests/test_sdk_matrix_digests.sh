@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# Host tests for pinned SDK image digest resolution (sdk_matrix_pull / sdk_matrix_image_digest)
+# and the feed manifest sdk_images section (issue #71 R4). Docker is mocked — no daemon needed.
+# shellcheck disable=SC2015  # deliberate ok()/bad() test idiom (A && ok || bad)
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+# shellcheck source=../scripts/lib/sdk-matrix.sh
+source "$ROOT/scripts/lib/sdk-matrix.sh"
+# shellcheck disable=SC1091
+# shellcheck source=../scripts/lib/feed-publish.sh
+source "$ROOT/scripts/lib/feed-publish.sh"
+
+fail=0
+ok() { echo "ok: $*"; }
+bad() { echo "FAIL: $*" >&2; fail=1; }
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+declare -A MOCK_ABSENT=()
+declare -A MOCK_REPO=()
+declare -A MOCK_ID=()
+MOCK_PULL_FAIL=0
+
+docker() {
+	local img
+	case "$1" in
+		pull)
+			[[ "$MOCK_PULL_FAIL" != 1 ]] || return 1
+			MOCK_ABSENT["$2"]=0
+			return 0
+			;;
+		image)
+			[[ "$2" == "inspect" ]] || return 0
+			img="${!#}"
+			[[ "${MOCK_ABSENT[$img]:-0}" != 1 ]] || return 1
+			if [[ -n "${MOCK_REPO[$img]:-}" ]]; then
+				printf '%s\n' "${MOCK_REPO[$img]}"
+			elif [[ -n "${MOCK_ID[$img]:-}" ]]; then
+				printf '%s' "${MOCK_ID[$img]}"
+			fi
+			return 0
+			;;
+		*) return 0 ;;
+	esac
+}
+
+img_ref() { printf 'ghcr.io/openwrt/sdk:%s' "$(sdk_matrix_image_tag "$1" "$2")"; }
+
+# --- 4-cell resolution: literal repo-prefix match (decoy entry listed FIRST, so
+#     RepoDigests[0] ordering is explicitly not trusted) ---
+declare -A EXPECT=(
+	["armsr-armv8/25.12"]="ghcr.io/openwrt/sdk@sha256:aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"
+	["armsr-armv8/24.10"]="ghcr.io/openwrt/sdk@sha256:bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222"
+	["x86-64/25.12"]="ghcr.io/openwrt/sdk@sha256:cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333"
+	["x86-64/24.10"]="ghcr.io/openwrt/sdk@sha256:dddd4444dddd4444dddd4444dddd4444dddd4444dddd4444dddd4444dddd4444"
+)
+for key in "${!EXPECT[@]}"; do
+	target="${key%%/*}"
+	version="${key##*/}"
+	MOCK_REPO["$(img_ref "$target" "$version")"]="registry.example.net/sdk@sha256:decoydecoydecoydecoydecoydecoydecoydecoydecoydecoydecoydecoydecoydeco
+${EXPECT[$key]}"
+done
+
+cells=0
+for t in "${SDK_MATRIX_TARGETS[@]}"; do
+	for v in "${SDK_MATRIX_VERSIONS[@]}"; do
+		got="$(sdk_matrix_image_digest "$t" "$v")"
+		want="${EXPECT["$t/$v"]}"
+		if [[ "$got" == "$want" ]]; then
+			ok "digest ${t}/${v}: ${got}"
+		else
+			bad "digest ${t}/${v}: got '${got}' want '${want}'"
+		fi
+		cells=$((cells + 1))
+	done
+done
+[[ "$cells" -eq 4 ]] && ok "resolved 4 matrix cells" || bad "resolved $cells cells (want 4)"
+
+# --- fallback: empty RepoDigests → @sha256:<image id> + WARNING ---
+fallback_img="$(img_ref x86-64 24.10)"
+MOCK_REPO["$fallback_img"]=""
+MOCK_ID["$fallback_img"]="sha256:feedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeed"
+MOCK_ABSENT["$fallback_img"]=0
+warn="$TMP/fallback-warn.txt"
+got="$(sdk_matrix_image_digest x86-64 24.10 2>"$warn")"
+if [[ "$got" == "@sha256:feedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeedfeed" ]]; then
+	ok "fallback digest uses image id"
+else
+	bad "fallback digest: got '$got'"
+fi
+grep -q 'WARNING' "$warn" && ok "fallback emitted WARNING" || bad "no WARNING for fallback"
+
+# --- abort: pull fails (no source) → non-zero, never silent ---
+MOCK_ABSENT["$(img_ref armsr-armv8 25.12)"]=1
+MOCK_PULL_FAIL=1
+if sdk_matrix_image_digest armsr-armv8 25.12 >/dev/null 2>&1; then
+	bad "digest should abort when pull fails"
+else
+	ok "digest aborts when pull fails"
+fi
+MOCK_PULL_FAIL=0
+
+# --- abort: image present but no RepoDigests / id resolvable → non-zero ---
+MOCK_ABSENT["$(img_ref armsr-armv8 25.12)"]=0
+MOCK_REPO["$(img_ref armsr-armv8 25.12)"]=""
+MOCK_ID["$(img_ref armsr-armv8 25.12)"]=""
+if sdk_matrix_image_digest armsr-armv8 25.12 >/dev/null 2>&1; then
+	bad "digest should abort with no resolvable source"
+else
+	ok "digest aborts with no resolvable source"
+fi
+
+# --- manifest records all 4 cell digests (+ packages array intact) ---
+MOCK_ID=()
+for key in "${!EXPECT[@]}"; do
+	target="${key%%/*}"
+	version="${key##*/}"
+	MOCK_REPO["$(img_ref "$target" "$version")"]="registry.example.net/sdk@sha256:decoydecoydecoydecoydecoydecoydecoydecoydecoydecoydecoydecoydecoydeco
+${EXPECT[$key]}"
+	MOCK_ABSENT["$(img_ref "$target" "$version")"]=0
+done
+stage="$TMP/stage"
+mkdir -p "$stage"
+feed_publish_write_manifest "$stage" "v0.1.9"
+[[ -f "$stage/manifest.json" ]] || { bad "manifest.json not written"; exit 1; }
+n="$(jq '.sdk_images | length' "$stage/manifest.json")"
+[[ "$n" -eq 4 ]] && ok "manifest has 4 sdk_images" || bad "manifest sdk_images length $n (want 4)"
+allok=1
+for key in "${!EXPECT[@]}"; do
+	target="${key%%/*}"
+	version="${key##*/}"
+	label="$(sdk_matrix_version_label "$version")"
+	got="$(jq -r --arg v "$label" --arg t "$target" '.sdk_images[] | select(.openwrt==$v and .target==$t) | .digest' "$stage/manifest.json")"
+	[[ "$got" == "${EXPECT[$key]}" ]] || { bad "manifest digest ${target}/${version}: $got"; allok=0; }
+done
+[[ "$allok" -eq 1 ]] && ok "manifest digests match all 4 cells"
+jq -e '.packages | type == "array"' "$stage/manifest.json" >/dev/null \
+	&& ok "manifest packages array present" || bad "manifest packages array missing"
+
+# --- manifest aborts (non-zero) when a cell digest cannot be resolved ---
+mkdir -p "$TMP/badstage"
+MOCK_ABSENT["$(img_ref x86-64 25.12)"]=1
+MOCK_PULL_FAIL=1
+if feed_publish_write_manifest "$TMP/badstage" "v0.1.9" >/dev/null 2>&1; then
+	bad "manifest should fail when a cell digest is unresolvable"
+else
+	ok "manifest fails fast when a cell digest is unresolvable"
+fi
+MOCK_PULL_FAIL=0
+
+[ "$fail" = "0" ] || exit 1
+echo "ALL TESTS PASSED"
