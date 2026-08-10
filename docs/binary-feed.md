@@ -20,6 +20,8 @@ usrmanage-packages/   (gh-pages)
 
 Packages are **`_all`** — one URL per OpenWrt release line (not per CPU).
 
+`manifest.json` records package sha256 hashes **and** the resolved digest of each of the 4 SDK image cells (24.10/25.12 × x86-64/armsr-armv8) used to build the feed.
+
 ## Install
 
 ### OpenWrt 24.10 (opkg)
@@ -59,4 +61,4 @@ Secrets live on the **usrmanage** repo (not the packages repo). See [github-publ
 
 ## Maintainer publish
 
-Tag `v*` → `.github/workflows/publish-packages.yml` builds the 6-cell matrix, verifies reproducibility, stages the feed, deploys `usrmanage-packages` gh-pages, uploads Release assets.
+Tag `v*` → `.github/workflows/publish-packages.yml` builds the 4-cell matrix, verifies reproducibility, stages the feed, deploys `usrmanage-packages` gh-pages, uploads Release assets.

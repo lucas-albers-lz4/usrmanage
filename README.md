@@ -75,7 +75,7 @@ usrmanage doctor
 | [docs/developer/cli-and-api.md](docs/developer/cli-and-api.md) | CLI / ubus / audit schema |
 | [docs/developer/luci-ux.md](docs/developer/luci-ux.md) | UI, themes, i18n |
 | [docs/developer/testing.md](docs/developer/testing.md) | Unit, integration, Playwright MCP / e2e |
-| [docs/developer/build-matrix.md](docs/developer/build-matrix.md) | SDK 6-cell matrix |
+| [docs/developer/build-matrix.md](docs/developer/build-matrix.md) | SDK 4-cell matrix |
 | [docs/binary-feed.md](docs/binary-feed.md) | Signed opkg/apk feed |
 | [docs/release.md](docs/release.md) | Tag → publish |
 | [docs/github-publish-checklist.md](docs/github-publish-checklist.md) | Secrets / Pages setup |
