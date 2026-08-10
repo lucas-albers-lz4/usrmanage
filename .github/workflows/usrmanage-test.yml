@@ -12,7 +12,7 @@ jobs:
   host-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
@@ -23,10 +23,23 @@ jobs:
   z3-verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Z3
         run: sudo apt-get update && sudo apt-get install -y python3-z3
 
       - name: Z3 sanitation suite (--full)
         run: python3 scripts/z3-verify.py --full
+
+  actionlint:
+    runs-on: ubuntu-latest
+    container:
+      image: rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 # 1.7.7
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Run actionlint
+        run: actionlint -version && actionlint -color
+
+      - name: Print actionlint version
+        run: actionlint -version

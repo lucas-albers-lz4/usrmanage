@@ -24,7 +24,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
@@ -71,7 +71,7 @@ jobs:
         run: ./scripts/validate-feed-keys.sh
 
       - name: Restore SDK dl/feeds cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: sdk-cache
         with:
           path: |
@@ -107,7 +107,7 @@ jobs:
 
       - name: Save SDK dl/feeds cache
         if: success() && steps.sdk-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             .ci-sdk-cache/dl
@@ -124,7 +124,7 @@ jobs:
         run: ./scripts/publish-packages.sh feed-staging
 
       - name: Deploy to GitHub Pages (usrmanage-packages)
-        uses: peaceiris/actions-gh-pages@v4.1.0
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           deploy_key: ${{ secrets.FEED_DEPLOY_KEY }}
           external_repository: ${{ env.USRMANAGE_PACKAGES_REPO }}
