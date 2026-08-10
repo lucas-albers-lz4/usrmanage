@@ -58,6 +58,9 @@ session_actor() {
 		return 0
 	fi
 	if [ -n "${RPC_SESSION:-}" ] && command -v ubus >/dev/null 2>&1; then
+		case "$RPC_SESSION" in
+			''|*[!0-9a-fA-F]*) printf '%s' "unknown"; return 0 ;;
+		esac
 		_u=$(ubus call session get "{\"ubus_rpc_session\":\"${RPC_SESSION}\"}" 2>/dev/null \
 			| jsonfilter -e '@.values.username' 2>/dev/null) || _u=
 		if [ -n "$_u" ]; then
