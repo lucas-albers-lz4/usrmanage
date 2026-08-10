@@ -30,9 +30,11 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
       - name: Resolve release tag
+        env:
+          TAG: ${{ github.event.inputs.tag }}
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag="${{ github.event.inputs.tag }}"
+            tag="$TAG"
           else
             tag="${GITHUB_REF#refs/tags/}"
           fi
