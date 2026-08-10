@@ -36,10 +36,12 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | `./scripts/smoke-host.sh` | shellcheck, package layout, link check, validators, mutators-under-lock, rpcd argv (password-safe stub), busybox fallback, theme/i18n/parity |
 | `python3 scripts/z3-verify.py --full` | Formal proof of username / actor grammars (empty, length, deny-list, injection alphabet) |
 | `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → add/list/set-role/passwd/del → audit → last-admin → LuCI/ubus |
+| `gh api repos/:owner/:repo/code-scanning/alerts` | CodeQL findings, **including dismissed ones** — check before filing, a finding may already have a decision |
 
 Notes:
 
 - Z3 proves **input grammars**. Last-admin arithmetic and the lock/tx state machine are covered by **host tests** on the real shell, not yet by a formal model.
+- CodeQL runs via GitHub **default setup** (`actions`, `javascript-typescript`, `python`, extended suite), so there is no workflow file for it in this repo. Its `actions` queries cover unpinned action tags but treat `workflow_dispatch` inputs as trusted.
 - Host prerequisites and the macOS gaps live in [developer/testing.md](developer/testing.md#host-smoke) — do not restate them here.
 
 ## Controls in force
@@ -86,7 +88,7 @@ One row per open tracking issue. Close the row out here when the issue closes.
 | Issue | Area | Summary |
 |-------|------|---------|
 | [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) | CLI / rpcd | S1 BRE `grep` on usernames (`um_passwd_line`, `um_user_locked`, `um_is_managed`); S2 no `flock` wait timeout; S3 unvalidated `$RPC_SESSION` in `session_actor`; S4 unset `$_role` in first validity audit |
-| [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) | CI / release | R1 `workflow_dispatch` input interpolated into `run:`; R2 usign secret mode drops to 0644; R3 mutable action tags; R4 unpinned usign / index script / SDK digests; R5 no workflow linter |
+| [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) | CI / release | R1 `workflow_dispatch` input interpolated into `run:`; R2 usign secret mode drops to 0644; R3 mutable action tags (CodeQL alert already dismissed as fleet standard — decision to revisit, not a new find); R4 unpinned usign / index script / SDK digests; R5 no workflow linter beyond CodeQL |
 | [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64) | Operator trust | Feed signing key fingerprints not published for out-of-band verification |
 | [#65](https://github.com/lucas-albers-lz4/usrmanage/issues/65) | Product | P1 `USRMANAGE_*` path overrides are ungated (latent if a NOPASSWD sudo rule is ever added); P2 password silently truncated at first newline |
 | [#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66) | Tooling | Host gate not fully runnable on macOS (GNU `stat`, PATH-pinned fallback test) |
@@ -176,7 +178,7 @@ Confirmed still holding, no change needed: audit field injection (#3 C1) — aud
 1. Read this file and [threat-model.md](threat-model.md) first. Do not reopen the #3 won't-fix bucket or the [Accepted residuals](#accepted-residuals) without new evidence.
 2. Pick the surface with the **oldest date in the [coverage map](#surface-coverage-map)**. A pass that only re-reads the CLI is a pass that finds nothing new.
 3. Diff the surface against [Controls in force](#controls-in-force). Anything new — mutator, rpcd method, file-write path, workflow step, release input — needs a named guard and a proof, or it is a finding.
-4. Re-run the gates in [How to re-verify](#how-to-re-verify-current-gates) and reproduce each finding before filing it. Findings in this repo are expected to come with the command that demonstrates them.
+4. Re-run the gates in [How to re-verify](#how-to-re-verify-current-gates) and reproduce each finding before filing it. Findings in this repo are expected to come with the command that demonstrates them. Check dismissed CodeQL alerts too — a "new" finding may already have a recorded decision.
 5. File one tracking issue per theme with the `security` label, using an ID table (`S1`, `R1`, `P1`) so the ledger and the issue can reference the same rows. One issue plus one PR per hardening batch.
 6. In the same PR: append a dated entry under [Audit history](#audit-history), refresh the coverage map dates, and add or close rows in [Open findings](#open-findings).
 7. Sibling repos (e.g. fwlive) may share patterns; treat cross-repo notes as candidates, not as an audit of that repo.
