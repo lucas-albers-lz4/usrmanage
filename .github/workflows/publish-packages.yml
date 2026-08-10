@@ -57,6 +57,7 @@ jobs:
           OPKG_PUB: ${{ secrets.OPKG_FEED_PUBLIC_KEY }}
           APK_PUB: ${{ secrets.APK_FEED_PUBLIC_KEY }}
         run: |
+          # shellcheck disable=SC2153 # env vars mapped from secrets above
           test -n "$OPKG_SECRET" && test -n "$APK_SECRET"
           # shellcheck source=scripts/lib/feed-keys.sh
           source ./scripts/lib/feed-keys.sh
