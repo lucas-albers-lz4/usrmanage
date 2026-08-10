@@ -25,13 +25,20 @@ OpenWrt **local UNIX user management** (CLI + LuCI): managed users, readonly vs 
 - rpcd: call CLI with explicit quoted argv per method; require `jsonfilter` (no sed JSON for passwords).
 - Prefer `flock` for the op lock; do not leave stale locks on `um_die`.
 - Audit denials (`denied`) on mutator validation failures, not only successes.
-- Known review backlog: GitHub issue **#3**. Do not “clean up” pipeline-unrelated labeled work elsewhere without asking.
+- Release path is in scope too: no `${{ }}` interpolation into workflow `run:` bodies, no unpinned tool fetched and executed at release time, and signing keys stay mode 0600.
+- Do not “clean up” pipeline-unrelated labeled work elsewhere without asking.
+
+### Security reviews
+
+[docs/security-review.md](docs/security-review.md) is the **single source of truth** for review state — surface coverage map (what was reviewed and when), controls in force, open findings, accepted residuals, and the review procedure. Start there, do not re-derive scope, and do not reopen accepted residuals or the #3 won't-fix bucket without new evidence.
+
+Findings carry the `security` label and use ID tables (`S1`, `R1`, `P1`) so issues and ledger rows line up. Every review PR updates the coverage map dates and the open-findings table.
 
 ## Testing
 
 Details: [docs/developer/testing.md](docs/developer/testing.md).
 
-- **PR CI / done gate:** `./scripts/smoke-host.sh` (shellcheck, layout, validators, mutators, theme, i18n). Host-only — no QEMU/Playwright in PR CI.
+- **PR CI / done gate:** `./scripts/smoke-host.sh` (shellcheck, layout, validators, mutators, theme, i18n). Host-only — no QEMU/Playwright in PR CI. Needs `flock` locally (`brew install flock` on macOS).
 - **QEMU lab:** SSH `127.0.0.1:2222`, LuCI `http://127.0.0.1:8080`, root empty password on prepared images. CLI/ubus smoke: `scripts/qemu-smoke-usrmanage.sh`. Fixture users (`umadmin`, `pwflow_*`) are **lab-only**, not product defaults.
 - **Playwright MCP:** `.cursor/mcp.json` — enable in Cursor Settings → MCP; use for interactive LuCI exploration when the guest is up. Never put passwords in MCP traces/logs.
 - **E2E:** `./scripts/playwright-luci.sh` (`tests/e2e/`) against a running lab; EN UI; unique usernames + SSH cleanup.

@@ -1,5 +1,7 @@
 # Security guidance — usrmanage
 
+Operator and deployment guidance. Audit history (checked / fixed / accepted / open): [security-review.md](security-review.md). Threat model: [threat-model.md](threat-model.md).
+
 ## Operational audit claim
 
 Usrmanage writes a **compact operational audit log** to `/var/log/usrmanage/audit.log` and mirrors lines to syslog (`logger -t usrmanage`).
@@ -75,3 +77,13 @@ Use `luci-app-acl` / `rpcd` login with `$p$username` for UNIX shadow passwords:
 ## Account file write safety (v0.1.3+)
 
 Mutations run under `flock`. Multi-file create/delete snapshots passwd/shadow/group/registry and restores on failure. Atomic replaces use `umask 077` temps, then fixed modes (`shadow` 0600, `passwd`/`group` 0644) and `chown 0:0` before `mv`. Interactive `passwd` prompts may echo if `stty` is absent on stock images; prefer `--password-fd`.
+
+BusyBox `flock` has no wait-timeout (`-w`). A stuck holder blocks concurrent manage commands indefinitely until the holder exits or the device reboots; `doctor` can surface lock-held state. See [security-review.md](security-review.md) (accepted BusyBox constraint).
+
+## Binary feed trust
+
+Installing from the [signed feed](binary-feed.md) currently bootstraps trust on first use: the operator downloads the signing public key over HTTPS from the same origin that serves the packages. Publishing fingerprints so that download can be verified out of band is tracked in [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64). Until then, prefer installing on a network you trust, and keep `ca-bundle` present so the HTTPS fetch is actually validated.
+
+## Future reviews
+
+Procedure, scope map, and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state.
