@@ -80,12 +80,46 @@ run_cli() {
 	return 0
 }
 
+password_has_control() {
+	# 0 if the value contains a C0 control char or DEL (#72 P2). Mirrors
+	# um_str_has_control in usrmanage-lib.sh; rejects before the CLI pipe so
+	# embedded newlines/tabs never reach --password-fd.
+	_s=$1
+	[ -n "$_s" ] || return 1
+	_nl=$(printf '\nx')
+	_nl=${_nl%x}
+	case "$_s" in
+		*"$_nl"*) return 0 ;;
+	esac
+	printf '%s' "$_s" | awk 'BEGIN {
+		RS = ""; ORS = ""
+		for (n = 1; n < 128; n++)
+			ord[sprintf("%c", n)] = n
+	}
+	{
+		for (i = 1; i <= length($0); i++) {
+			c = substr($0, i, 1)
+			o = ord[c] + 0
+			if ((o > 0 && o < 32) || o == 127) {
+				found = 1
+				exit
+			}
+		}
+	}
+	END { if (found) exit 0; exit 1 }'
+}
+
 run_password_cli() {
 	# Shared: read password, resolve actor, reject empty, pipe to CLI on fd 0, scrub.
 	_pass=$(json_get password)
 	_actor=$(session_actor)
 	if [ -z "$_pass" ]; then
 		printf '{"ok":false,"error":"password_required"}\n'
+		return 0
+	fi
+	if password_has_control "$_pass"; then
+		_pass=
+		printf '{"ok":false,"error":"password_control_chars"}\n'
 		return 0
 	fi
 	printf '%s\n' "$_pass" | USRMANAGE_SRC=luci USRMANAGE_ACTOR="$_actor" \

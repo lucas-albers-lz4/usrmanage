@@ -32,6 +32,8 @@ Passwords may traverse ubus JSON once (platform limitation) then are piped to CL
 |------|------------|
 | Shell metacharacters in username | Strict charset validation before any exec |
 | Password in `ps` / argv | `--password-fd` / stdin only |
+| Multi-line / control-char password silently truncated | Explicit `password_policy:multi_line` / `control_char` rejection in the CLI fd path and the rpcd pipe; account hash untouched |
+| `USRMANAGE_*` env override redirects account files to arbitrary paths | Overrides are **inert unless `USRMANAGE_TEST_OVERRIDES=1`** (test-only gate, #72 / #65); production forces packaged defaults |
 | Delete last managed admin | Count managed wheel members; deny |
 | View→manage escalation | Split rpcd ACL; server enforces write |
 | Mutate unmanaged/foreign users | Registry gate on mutators |
@@ -39,6 +41,11 @@ Passwords may traverse ubus JSON once (platform limitation) then are piped to CL
 | Incomplete remove after crash | `incomplete` marker + `doctor` |
 | Audit claimed as compliance evidence | Documented as operational only |
 | CSRF / session replay | LuCI/rpcd platform responsibility |
+
+## Hard invariants
+
+- **Never grant `usrmanage` via a NOPASSWD sudoers rule.** `%wheel ALL=(ALL:ALL) ALL` requires a password by design; removing that requirement would let a compromised wheel member run `usrmanage` as root unattended and, together with any environment they control, rewrite account files.
+- **`USRMANAGE_TEST_OVERRIDES=1` is test-only.** It must not be set by production init scripts, uhttpd/rpcd, or sudoers environment overrides. Without it the `USRMANAGE_*` path overrides are ignored.
 
 ## Out of scope threats
 

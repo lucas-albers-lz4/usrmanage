@@ -7,7 +7,7 @@ How usrmanage is tested locally and in CI. Passwords never appear on argv, in au
 | Layer | What | Where | When |
 |-------|------|-------|------|
 | **Unit** | Validators, audit sanitize, theme (no hex), i18n POT coverage | `tests/test_validators.sh`, `tests/usrmanage-theme.test.js`, `tests/usrmanage-i18n.test.js` | PR via `./scripts/smoke-host.sh` |
-| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, rpcd argv (no password leak) | `tests/test_mutators.sh`, `tests/test_mutators-busybox-fallback.sh` | PR via `./scripts/smoke-host.sh` |
+| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, rpcd argv (no password leak), multi-line/control-char password rejection over the real `--password-fd` path | `tests/test_mutators.sh`, `tests/test_mutators-busybox-fallback.sh`, `tests/test_password_control.sh` | PR via `./scripts/smoke-host.sh` |
 | **Device integration** | Real `useradd`/wheel/ubus/HTTP page on guest | `scripts/qemu-smoke-usrmanage.sh` | Local (QEMU lab); not PR CI |
 | **Playwright MCP** | Agent navigate/snapshot/click against live LuCI | `.cursor/mcp.json` → `@playwright/mcp` | Local with lab up |
 | **E2E UI** | Committed LuCI user flows | `tests/e2e/` + `./scripts/playwright-luci.sh` | Local with lab up; not PR CI |
@@ -21,6 +21,8 @@ PR CI stays **host-only** (`usrmanage-test.yml` → `smoke-host.sh`) so merge ga
 ```
 
 Runs shellcheck, package layout, validators, mutators, and (if `node` is present) theme + i18n checks.
+
+The shell stages and `smoke-host.sh` export `USRMANAGE_TEST_OVERRIDES=1` — the **test-only gate** that enables the `USRMANAGE_*` path overrides in the lib (issue #72 / #65). Outside the harness those overrides are inert.
 
 ## QEMU lab + CLI smoke
 

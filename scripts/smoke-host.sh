@@ -6,6 +6,10 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
 skipped=0
 
+# Hermetic shell test stages rely on USRMANAGE_* path overrides; those
+# overrides are honored only when the test-only gate is set (issue #72 / #65).
+export USRMANAGE_TEST_OVERRIDES=1
+
 # need <tool> <stage> <hint> — run the stage only if <tool> exists; otherwise
 # skip it with a clear one-line reason (partial-green stays obvious below).
 need() {
@@ -34,6 +38,7 @@ if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	"$ROOT/tests/test_mutators.sh"
 	"$ROOT/tests/test_phase1_foundation.sh"
 	"$ROOT/tests/test_mutators-busybox-fallback.sh"
+	"$ROOT/tests/test_password_control.sh"
 fi
 
 if need node theme-i18n-parity "install node"; then

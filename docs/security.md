@@ -33,9 +33,16 @@ Example (device-side): ensure `logd` / `syslog-ng` / remote relay receives `usrm
 | Audit / syslog | Never contains password material |
 | Policy (factory default) | OpenWrt preset: min length 8, not equal to username. Stricter presets (Standard, Strict) and toggles apply after an operator saves a new policy |
 
-Passwords must be **single-line**. The CLI reads one line via `read -r` from the password fd (or TTY); an embedded newline truncates the value.
+Passwords must be **single-line and free of control characters**. The CLI reads the password fd and rejects any value with an embedded (or trailing) newline or a control character with an explicit `password_policy:multi_line` / `password_policy:control_char` error — it never silently truncates. The rpcd path applies the same rejection before piping to the CLI. Valid single-line passwords are unaffected.
 
 Do **not** copy stock `luci setPassword` `echo \| passwd` shell interpolation patterns for new code.
+
+## Environment override gate
+
+Account-file path and behavior overrides (`USRMANAGE_PASSWD`, `USRMANAGE_SHADOW`, `USRMANAGE_GROUP`, `USRMANAGE_REGISTRY`, `USRMANAGE_SUDOERS`, `USRMANAGE_UID_FLOOR`, `USRMANAGE_HOME_ROOT`, plus the infra paths `ETC`/`AUDIT_DIR`/`AUDIT`/`LOCK`/`INCOMPLETE`) are **ignored** unless `USRMANAGE_TEST_OVERRIDES=1` is set.
+
+- `USRMANAGE_TEST_OVERRIDES=1` is a **test-only** switch: it is set by the host test harness (`scripts/smoke-host.sh` and the `tests/*.sh` stages). It must never be set in production environments, init scripts, or sudoers env_reset overrides.
+- In production the packaged defaults are forced, so a stray `USRMANAGE_*` override can never redirect root writes to arbitrary paths.
 
 ## Sudo / wheel (intentional)
 
@@ -46,6 +53,8 @@ Do **not** copy stock `luci setPassword` `echo \| passwd` shell interpolation pa
 ```
 
 with password required (no NOPASSWD). **Admin role means full root via sudo.** Document this for auditors and customers.
+
+**Invariant: never grant `usrmanage` (or the shell script behind it) via a NOPASSWD sudoers rule.** The password gate is what makes `%wheel` require an explicit credential; a NOPASSWD rule would let any member of the allowed set run `usrmanage` as root without a password, and combined with the environment-override gate below that becomes arbitrary root file rewrite.
 
 ## LuCI ACL wiring (no auto login in v1)
 
