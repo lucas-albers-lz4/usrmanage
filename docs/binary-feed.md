@@ -94,6 +94,14 @@ When a signing key is rotated:
    distributed. At minimum, the release notes must state that
    operators must re-fetch and re-add the key (verifying the new
    fingerprint) before updating to the post-rotation release.
+6. **Format-specific migration (luna r2 2026-08-10):** the mechanics
+   differ per package manager — `opkg-key add /tmp/usrmanage.key`
+   installs an ADDITIONAL usign key (the old one stays valid, so the
+   overlap period works naturally); `apk` requires placing the new
+   RSA key under `/etc/apk/keys/usrmanage-feed.rsa.pub` BEFORE
+   `apk update`, and the old key must be removed only after the new
+   one is trusted. Release notes must provide these format-specific
+   commands.
 
 ## Signing
 
