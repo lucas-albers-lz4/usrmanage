@@ -141,8 +141,10 @@ while [ $# -gt 0 ]; do
 done
 key=${e#@.}
 inp=$(cat)
-val=$(printf '%s' "$inp" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n1)
-printf '%b' "$val"
+val=$(printf '%s' "$inp" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n1)
+# Real OpenWrt jsonfilter terminates each value with \n — mirror that so the
+# trailing-newline detection (sequential reads) is honest (#72 P2, luna fold).
+printf '%b\n' "$val"
 JF
 	chmod +x "$TMP/bin/jsonfilter"
 	export USRMANAGE_BIN="$CLI"
@@ -158,6 +160,16 @@ JF
 	echo "$_out" | grep -q '"ok":false' && ok "rpcd tab ok:false" || bad "rpcd tab json: $_out"
 	echo "$_out" | grep -q 'password_control_chars' && ok "rpcd tab control error token" || bad "rpcd tab error: $_out"
 	[ "$(shadow_hash)" = "$_orig" ] && ok "rpcd hash unchanged after tab" || bad "rpcd hash changed after tab"
+
+	# rpcd must reject a password whose JSON value ENDS in a newline — the
+	# command-substitution truncation case (luna fold 2026-08-10): a value
+	# like "NewSecret1\n" would have been stripped to clean by $(json_get)
+	# before the control check. Now rejected via the temp-file read path.
+	_orig=$(shadow_hash)
+	_out=$(sh "$RPCD" call passwd '{"name":"ops","password":"NewSecret1\n"}' 2>/dev/null) || true
+	echo "$_out" | grep -q '"ok":false' && ok "rpcd trailing newline ok:false" || bad "rpcd trailing-nl json: $_out"
+	echo "$_out" | grep -q 'password_control_chars' && ok "rpcd trailing newline control error token" || bad "rpcd trailing-nl error: $_out"
+	[ "$(shadow_hash)" = "$_orig" ] && ok "rpcd hash unchanged after trailing newline" || bad "rpcd hash changed after trailing newline"
 
 	# rpcd must not over-reject a clean single-line password.
 	_orig=$(shadow_hash)

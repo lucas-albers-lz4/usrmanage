@@ -111,7 +111,33 @@ password_has_control() {
 
 run_password_cli() {
 	# Shared: read password, resolve actor, reject empty, pipe to CLI on fd 0, scrub.
-	_pass=$(json_get password)
+	# Password extraction avoids command substitution (luna fold 2026-08-10):
+	# `_pass=$(json_get password)` strips trailing newlines, so a JSON
+	# password ending in \n silently became clean before the control check —
+	# the exact truncation P2 must reject. Extract to a private temp file
+	# instead and read lines: an embedded OR trailing newline in the value
+	# then appears as a second line and is rejected.
+	_pass_file="$(mktemp)"
+	_pass=
+	printf '%s' "$INPUT" | jsonfilter -e '@.password' > "$_pass_file" 2>/dev/null || true
+	# Sequential reads on ONE fd (luna fold 2026-08-10): a re-opened fd
+	# would re-read line 1, so acceptance would wrongly depend on line 1
+	# having a trailing newline instead of a second line existing. Real
+	# OpenWrt jsonfilter terminates each value with \n, so:
+	#   clean  "NewSecret1"      -> file "NewSecret1\n"  -> 1 line
+	#   trailing "NewSecret1\n"  -> file "NewSecret1\n\n" -> 2 lines
+	#   embedded "...\n..."      -> 2+ lines
+	exec 3< "$_pass_file"
+	IFS= read -r _pass <&3 || true   # EOF-without-newline: content still in _pass
+	if IFS= read -r _extra <&3; then # genuine second line (empty line = trailing \n)
+		_pass=
+		exec 3<&-
+		rm -f "$_pass_file"
+		printf '{"ok":false,"error":"password_control_chars"}\n'
+		return 0
+	fi
+	exec 3<&-
+	rm -f "$_pass_file"
 	_actor=$(session_actor)
 	if [ -z "$_pass" ]; then
 		printf '{"ok":false,"error":"password_required"}\n'
