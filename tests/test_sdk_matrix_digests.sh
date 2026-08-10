@@ -181,6 +181,7 @@ if curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/4f7e6e554be2aef
 	rm -f "$got_file"
 else
 	bad "ipkg cache TOCTOU test: upstream fetch unavailable"
+	exit 1   # controlled diagnostic — do NOT fall through to cp (luna r4)
 fi
 
 # --- ipkg cache valid-hit path: no refetch, verified copy ------------------
