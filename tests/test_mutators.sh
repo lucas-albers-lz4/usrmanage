@@ -197,6 +197,20 @@ grep -q 'stdin=nonempty' "$USRMANAGE_STUB_LOG" && ok "rpcd add password on stdin
 # Password must not appear in stub argv log
 grep -F 'LabPass1!' "$USRMANAGE_STUB_LOG" && bad "password leaked into stub log" || ok "password not in stub argv log"
 
+rm -f "$USRMANAGE_STUB_LOG"
+sh "$RPCD" call set_luci_login '{"name":"ops","enable":true}' >/dev/null
+grep -q 'arg1=set-luci-login' "$USRMANAGE_STUB_LOG" && ok "rpcd set_luci_login → set-luci-login" || bad "rpcd set_luci_login cmd: $(cat "$USRMANAGE_STUB_LOG")"
+grep -q 'arg2=ops' "$USRMANAGE_STUB_LOG" && ok "rpcd set_luci_login name" || bad "rpcd set_luci_login name"
+grep -q 'arg3=--enable' "$USRMANAGE_STUB_LOG" && ok "rpcd set_luci_login --enable" || bad "rpcd set_luci_login enable: $(cat "$USRMANAGE_STUB_LOG")"
+grep -q 'arg4=--json' "$USRMANAGE_STUB_LOG" && ok "rpcd set_luci_login --json" || bad "rpcd set_luci_login --json"
+grep -E 'arg[0-9]+=--password' "$USRMANAGE_STUB_LOG" && bad "set_luci_login must not pass password" || ok "rpcd set_luci_login no password argv"
+
+rm -f "$USRMANAGE_STUB_LOG"
+sh "$RPCD" call set_luci_login '{"name":"ops","enable":false}' >/dev/null
+grep -q 'arg1=set-luci-login' "$USRMANAGE_STUB_LOG" && ok "rpcd set_luci_login disable cmd" || bad "rpcd disable cmd: $(cat "$USRMANAGE_STUB_LOG")"
+grep -q 'arg3=--disable' "$USRMANAGE_STUB_LOG" && ok "rpcd set_luci_login --disable" || bad "rpcd set_luci_login disable: $(cat "$USRMANAGE_STUB_LOG")"
+grep -E 'arg[0-9]+=--password' "$USRMANAGE_STUB_LOG" && bad "disable must not pass password" || ok "rpcd disable no password argv"
+
 # jsonfilter required when missing from PATH (keep /bin for sh builtins' external helpers)
 mv "$TMP/bin/jsonfilter" "$TMP/bin/jsonfilter.bak"
 out=$(sh "$RPCD" call list '{}' 2>/dev/null) || true
