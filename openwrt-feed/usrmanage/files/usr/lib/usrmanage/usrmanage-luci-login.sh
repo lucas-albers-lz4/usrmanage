@@ -247,14 +247,18 @@ um_luci_login_state() {
 }
 
 um_luci_login_ours_index() {
-	# Index of login we claim: marker + $p$user + managed (ACLs may be drifted).
+	# Index of login we claim: marker + $p$user (+ managed when still registered).
+	# Pass skip_managed=1 as $2 for del cleanup after unregister.
 	_ull_name=$1
+	_ull_skip_managed=${2:-0}
 	_expect_pass="\$p\$${_ull_name}"
 	um_rpcd_login_dump | while IFS='|' read -r _i _ru _rp _rm _rr _rw || [ -n "$_i" ]; do
 		[ "$_ru" = "$_ull_name" ] || continue
 		[ "$_rm" = "1" ] || continue
 		[ "$_rp" = "$_expect_pass" ] || continue
-		um_is_managed "$_ull_name" || continue
+		if [ "$_ull_skip_managed" != "1" ]; then
+			um_is_managed "$_ull_name" || continue
+		fi
 		printf '%s\n' "$_i"
 	done | head -n1
 }
@@ -437,40 +441,40 @@ um_luci_login_disable_user() {
 		UM_LUCI_ERR=rpcd_pending_changes
 		return 1
 	}
+	_ull_idx=$(um_luci_login_ours_index "$_ull_name")
 	_ull_st=$(um_luci_login_state "$_ull_name")
-	case "$_ull_st" in
-		owned) ;;
-		none)
-			um_session_revoke_user "$_ull_name" || {
-				um_audit fail "$_ull_name" fail session_revoke_unavailable
-				UM_LUCI_ERR=session_revoke_unavailable
+	# Prefer removing our section even when a foreign login coexists (state=foreign).
+	if [ -z "$_ull_idx" ]; then
+		case "$_ull_st" in
+			none)
+				um_session_revoke_user "$_ull_name" || {
+					um_audit fail "$_ull_name" fail session_revoke_unavailable
+					UM_LUCI_ERR=session_revoke_unavailable
+					return 1
+				}
+				um_audit luci_revoke "$_ull_name" ok "acl=none" "$_ull_role"
+				return 0
+				;;
+			foreign)
+				um_audit denied "$_ull_name" denied login_exists_foreign "$_ull_role"
+				UM_LUCI_ERR=login_exists_foreign
 				return 1
-			}
-			um_audit luci_revoke "$_ull_name" ok "acl=none" "$_ull_role"
-			return 0
-			;;
-		foreign)
-			um_audit denied "$_ull_name" denied login_exists_foreign "$_ull_role"
-			UM_LUCI_ERR=login_exists_foreign
-			return 1
-			;;
-		tampered)
-			# ACL-drifted ours can be disabled; forged marker/password cannot.
-			_ull_idx=$(um_luci_login_ours_index "$_ull_name")
-			if [ -z "$_ull_idx" ]; then
+				;;
+			tampered)
 				um_audit denied "$_ull_name" denied login_tampered "$_ull_role"
 				UM_LUCI_ERR=login_tampered
 				return 1
-			fi
-			;;
-		*)
-			UM_LUCI_ERR=luci_login_state
-			return 1
-			;;
-	esac
-	_ull_idx=$(um_luci_login_ours_index "$_ull_name")
-	[ -n "$_ull_idx" ] || {
-		UM_LUCI_ERR=luci_login_missing
+				;;
+			*)
+				UM_LUCI_ERR=luci_login_state
+				return 1
+				;;
+		esac
+	fi
+	# Revoke live sessions before deleting the login definition.
+	um_session_revoke_user "$_ull_name" || {
+		um_audit fail "$_ull_name" fail session_revoke_unavailable
+		UM_LUCI_ERR=session_revoke_unavailable
 		return 1
 	}
 	_ull_dir=$(dirname "$USRMANAGE_RPCD_CONFIG")
@@ -489,11 +493,6 @@ um_luci_login_disable_user() {
 		return 1
 	}
 	rm -f "$_ull_tmp"
-	um_session_revoke_user "$_ull_name" || {
-		um_audit fail "$_ull_name" fail session_revoke_unavailable
-		UM_LUCI_ERR=session_revoke_unavailable
-		return 1
-	}
 	um_audit luci_revoke "$_ull_name" ok "acl=none" "$_ull_role"
 	return 0
 }
@@ -523,9 +522,9 @@ um_luci_login_sync_acls() {
 }
 
 um_luci_login_remove_owned_best_effort() {
-	# Used on del: remove our marker+$p$ section; leave foreign/forged alone.
+	# Used on del: remove marker+$p$ section even after unregister.
 	_ull_name=$1
-	_ull_idx=$(um_luci_login_ours_index "$_ull_name")
+	_ull_idx=$(um_luci_login_ours_index "$_ull_name" 1)
 	[ -n "$_ull_idx" ] || return 0
 	_ull_dir=$(dirname "$USRMANAGE_RPCD_CONFIG")
 	_ull_tmp=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || return 1

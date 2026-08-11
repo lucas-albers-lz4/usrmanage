@@ -134,6 +134,17 @@ um_with_lock um_mut_set_luci_login ops disable
 [ "$(um_luci_login_state ops)" = "none" ] && ok "disable → none" || bad "disable state $(um_luci_login_state ops)"
 grep -q 'luci_revoke' "$USRMANAGE_AUDIT" && ok "luci_revoke audited" || bad "luci_revoke missing"
 
+# del cleanup: enable, unregister path must not leave orphan login
+um_with_lock um_mut_set_luci_login ops enable
+[ "$(um_luci_login_state ops)" = "owned" ] || bad "pre-del enable failed"
+# Simulate del cleanup ordering: remove while managed, then drop registry
+um_luci_login_remove_owned_best_effort ops || bad "remove_owned failed"
+um_registry_del ops || bad "registry_del failed"
+_idx=$(um_luci_login_ours_index ops 1)
+[ -z "$_idx" ] && ok "del cleanup removes ours login" || bad "orphan login remains idx=$_idx"
+# restore ops for emit test
+printf 'ops\naudit\nempty\n' > "$USRMANAGE_REGISTRY"
+
 # emit json includes luci_login
 _j=$(um_emit_user_json ops)
 printf '%s' "$_j" | grep -q '"luci_login":"none"' && ok "emit luci_login" || bad "emit json: $_j"

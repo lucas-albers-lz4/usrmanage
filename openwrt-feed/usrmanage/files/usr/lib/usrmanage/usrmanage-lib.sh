@@ -1694,14 +1694,15 @@ um_mut_passwd() {
 	um_mut_require_managed "$_name" "$_role"
 	um_mut_require_exists "$_name" "$_role" not_found
 	um_incomplete_set "passwd:${_name}"
+	# Revoke first so a failed revoke cannot leave live sessions after a password change.
+	if command -v um_session_revoke_required >/dev/null 2>&1; then
+		um_session_revoke_required "$_name"
+	fi
 	um_set_password "$_name" "$_pfd" || {
 		um_incomplete_clear
 		um_audit fail "$_name" fail password
 		um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 	}
-	if command -v um_session_revoke_required >/dev/null 2>&1; then
-		um_session_revoke_required "$_name"
-	fi
 	um_incomplete_clear
 	um_audit passwd "$_name" ok "" "$(um_role_of "$_name")"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
@@ -1734,11 +1735,10 @@ um_mut_del() {
 	# Commit before registry_del: purge may have removed the home already, so
 	# EXIT rollback must not recreate passwd/shadow/group without a home.
 	um_tx_commit
-	um_registry_del "$_name" || {
-		um_incomplete_clear
-		um_audit fail "$_name" fail registry "$_role"
-		um_die "error: registry_failed"
-	}
+	# Revoke sessions, then drop our rpcd login, then unregister.
+	if command -v um_session_revoke_required >/dev/null 2>&1; then
+		um_session_revoke_required "$_name"
+	fi
 	if command -v um_luci_login_remove_owned_best_effort >/dev/null 2>&1; then
 		um_luci_login_remove_owned_best_effort "$_name" || {
 			um_incomplete_clear
@@ -1746,9 +1746,11 @@ um_mut_del() {
 			um_die "error: luci_login_cleanup_failed"
 		}
 	fi
-	if command -v um_session_revoke_required >/dev/null 2>&1; then
-		um_session_revoke_required "$_name"
-	fi
+	um_registry_del "$_name" || {
+		um_incomplete_clear
+		um_audit fail "$_name" fail registry "$_role"
+		um_die "error: registry_failed"
+	}
 	um_incomplete_clear
 	um_audit remove "$_name" ok "" "$_role"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
