@@ -23,6 +23,7 @@ export USRMANAGE_RPCD_CONFIG="$TMP/rpcd"
 export USRMANAGE_DRY_RUN=1
 export USRMANAGE_SRC=cli
 export USRMANAGE_ACTOR=testhost
+export USRMANAGE_TEST_OVERRIDES=1
 export JSON_OUT=0
 
 mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")"
@@ -143,8 +144,8 @@ _idx=$(um_luci_login_ours_index ops 1)
 printf 'ops\naudit\nempty\n' > "$USRMANAGE_REGISTRY"
 printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
 
-# Full del → re-add without luci: must not resurrect orphan write ACL.
-# Under DRY_RUN, delete leaves passwd/shadow rows; re-add is registry restore.
+# Full del → um_mut_add without luci: must not resurrect orphan write ACL.
+# DRY_RUN skips real userdel/useradd; scrub passwd/shadow so add sees a fresh name.
 um_with_lock um_mut_set_role ops admin
 um_with_lock um_mut_set_luci_login ops enable
 grep -q "option password '\$p\$ops'" "$USRMANAGE_RPCD_CONFIG" || bad "pre-full-del missing \$p\$ops"
@@ -153,11 +154,19 @@ um_with_lock um_mut_del ops 0
 _idx=$(um_luci_login_ours_index ops 1)
 [ -z "$_idx" ] && ok "full del removes luci login" || bad "full del orphan idx=$_idx"
 grep -q "option username 'ops'" "$USRMANAGE_RPCD_CONFIG" && bad "ops login section left after del" || ok "no ops login after del"
-# Re-add without --luci-login (DRY_RUN: passwd still present; restore registry only)
-printf 'ops\naudit\nempty\n' > "$USRMANAGE_REGISTRY"
-printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
+# Simulate account row removal that DRY_RUN um_delete_account skipped.
+_awk_tmp=$(mktemp)
+awk -F: -v u=ops '$1 != u' "$USRMANAGE_PASSWD" > "$_awk_tmp" && mv "$_awk_tmp" "$USRMANAGE_PASSWD"
+awk -F: -v u=ops '$1 != u' "$USRMANAGE_SHADOW" > "$_awk_tmp" && mv "$_awk_tmp" "$USRMANAGE_SHADOW"
+printf 'root:x:0:\nwheel:x:10:audit\n' > "$USRMANAGE_GROUP"
+printf 'goodpass12\n' | um_with_lock um_mut_add ops readonly 0 0
+um_is_managed ops && ok "um_mut_add re-created ops" || bad "um_mut_add did not register ops"
 [ "$(um_luci_login_state ops)" = "none" ] && ok "re-add without luci stays none" || bad "re-add state $(um_luci_login_state ops)"
-grep -q "option password '\$p\$ops'" "$USRMANAGE_RPCD_CONFIG" && bad "orphan \$p\$ops after re-add" || ok "no orphan \$p\$ops after re-add"
+grep -q "option password '\$p\$ops'" "$USRMANAGE_RPCD_CONFIG" && bad "orphan \$p\$ops after um_mut_add" || ok "no orphan \$p\$ops after um_mut_add"
+# Restore passwd/shadow rows (DRY_RUN create skipped them) for later enable tests.
+printf 'ops:x:1002:1002:ops:/home/ops:/bin/ash\n' >> "$USRMANAGE_PASSWD"
+printf 'ops:$6$salt$ophash:0:99999:7:::\n' >> "$USRMANAGE_SHADOW"
+printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
 
 # Owned + foreign coexistence: demote must drop write on ours via ours_index.
 um_with_lock um_mut_set_luci_login ops enable
