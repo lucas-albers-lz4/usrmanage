@@ -7,7 +7,7 @@ How usrmanage is tested locally and in CI. Passwords never appear on argv, in au
 | Layer | What | Where | When |
 |-------|------|-------|------|
 | **Unit** | Validators, audit sanitize, theme (no hex), i18n POT coverage | `tests/test_validators.sh`, `tests/usrmanage-theme.test.js`, `tests/usrmanage-i18n.test.js` | PR via `./scripts/smoke-host.sh` |
-| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, rpcd argv (no password leak) | `tests/test_mutators.sh`, `tests/test_mutators-busybox-fallback.sh` | PR via `./scripts/smoke-host.sh` |
+| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, rpcd argv (no password leak), multi-line/control-char password rejection over the real `--password-fd` path | `tests/test_mutators.sh`, `tests/test_mutators-busybox-fallback.sh`, `tests/test_password_control.sh` | PR via `./scripts/smoke-host.sh` |
 | **Device integration** | Real `useradd`/wheel/ubus/HTTP page on guest | `scripts/qemu-smoke-usrmanage.sh` | Local (QEMU lab); not PR CI |
 | **Playwright MCP** | Agent navigate/snapshot/click against live LuCI | `.cursor/mcp.json` → `@playwright/mcp` | Local with lab up |
 | **E2E UI** | Committed LuCI user flows | `tests/e2e/` + `./scripts/playwright-luci.sh` | Local with lab up; not PR CI |
@@ -20,7 +20,20 @@ PR CI stays **host-only** (`usrmanage-test.yml` → `smoke-host.sh`) so merge ga
 ./scripts/smoke-host.sh
 ```
 
-Runs shellcheck, package layout, validators, mutators, and (if `node` is present) theme + i18n checks.
+Runs shellcheck, link check, package layout, validators, mutators, and (if `node` is present) theme + i18n + parity checks.
+
+### Host prerequisites
+
+| Tool | Needed for | Install |
+|------|-----------|---------|
+| `shellcheck` | lint stage | `brew install shellcheck` / `apt install shellcheck` |
+| `flock` | mutator, lock, and transaction tests | `brew install flock` / preinstalled on Linux |
+| `node` | theme / i18n / parity tests (skipped with a warning if absent) | `brew install node` |
+| `python3` + `z3` | `scripts/z3-verify.py` | `pip install -r requirements-z3.txt` / `apt install python3-z3` |
+
+On stock macOS, `smoke-host.sh` stops at the first missing tool, so install `flock` before trusting a green run. Two stages previously failed on macOS: `test_phase1_foundation.sh` (GNU `stat -c`) and `test_mutators-busybox-fallback.sh` (it pins `PATH=/usr/bin:/bin`, which hides Homebrew binaries). [PR #84](https://github.com/lucas-albers-lz4/usrmanage/pull/84) fixed both with a portable stat helper, a flock absolute-path shim, and explicit skip reasons ([#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66)). The full gate now runs on macOS. Linux CI runs all stages.
+
+The shell stages and `smoke-host.sh` export `USRMANAGE_TEST_OVERRIDES=1` — the **test-only gate** that enables the `USRMANAGE_*` path overrides in the lib (issue #72 / #65). Outside the harness those overrides are inert.
 
 ## QEMU lab + CLI smoke
 

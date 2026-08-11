@@ -1,5 +1,7 @@
 # Security guidance — usrmanage
 
+Operator and deployment guidance. Audit history (checked / fixed / accepted / open): [security-review.md](security-review.md). Threat model: [threat-model.md](threat-model.md).
+
 ## Operational audit claim
 
 Usrmanage writes a **compact operational audit log** to `/var/log/usrmanage/audit.log` and mirrors lines to syslog (`logger -t usrmanage`).
@@ -33,9 +35,16 @@ Example (device-side): ensure `logd` / `syslog-ng` / remote relay receives `usrm
 | Audit / syslog | Never contains password material |
 | Policy (factory default) | OpenWrt preset: min length 8, not equal to username. Stricter presets (Standard, Strict) and toggles apply after an operator saves a new policy |
 
-Passwords must be **single-line**. The CLI reads one line via `read -r` from the password fd (or TTY); an embedded newline truncates the value.
+Passwords must be **single-line and free of control characters**. The CLI reads the password fd and rejects any value with an embedded (or trailing) newline or a control character with an explicit `password_policy:multi_line` / `password_policy:control_char` error — it never silently truncates. The rpcd path applies the same rejection before piping to the CLI. Valid single-line passwords are unaffected.
 
 Do **not** copy stock `luci setPassword` `echo \| passwd` shell interpolation patterns for new code.
+
+## Environment override gate
+
+Account-file path and behavior overrides (`USRMANAGE_PASSWD`, `USRMANAGE_SHADOW`, `USRMANAGE_GROUP`, `USRMANAGE_REGISTRY`, `USRMANAGE_SUDOERS`, `USRMANAGE_UID_FLOOR`, `USRMANAGE_HOME_ROOT`, plus the infra paths `ETC`/`AUDIT_DIR`/`AUDIT`/`LOCK`/`INCOMPLETE`) are **ignored** unless `USRMANAGE_TEST_OVERRIDES=1` is set.
+
+- `USRMANAGE_TEST_OVERRIDES=1` is a **test-only** switch: it is set by the host test harness (`scripts/smoke-host.sh` and the `tests/*.sh` stages). It must never be set in production environments, init scripts, or sudoers env_reset overrides.
+- In production the packaged defaults are forced, so a stray `USRMANAGE_*` override can never redirect root writes to arbitrary paths.
 
 ## Sudo / wheel (intentional)
 
@@ -46,6 +55,8 @@ Do **not** copy stock `luci setPassword` `echo \| passwd` shell interpolation pa
 ```
 
 with password required (no NOPASSWD). **Admin role means full root via sudo.** Document this for auditors and customers.
+
+**Invariant: never grant `usrmanage` (or the shell script behind it) via a NOPASSWD sudoers rule.** The password gate is what makes `%wheel` require an explicit credential; a NOPASSWD rule would let any member of the allowed set run `usrmanage` as root without a password, and combined with the environment-override gate below that becomes arbitrary root file rewrite.
 
 ## LuCI login lifecycle (opt-in)
 
@@ -70,3 +81,13 @@ Manual `luci-app-acl` logins (including separate hash passwords) stay out of sco
 ## Account file write safety (v0.1.3+)
 
 Mutations run under `flock`. Multi-file create/delete snapshots passwd/shadow/group/registry and restores on failure. Atomic replaces use `umask 077` temps, then fixed modes (`shadow` 0600, `passwd`/`group` 0644) and `chown 0:0` before `mv`. Interactive `passwd` prompts may echo if `stty` is absent on stock images; prefer `--password-fd`.
+
+BusyBox `flock` has no wait-timeout (`-w`). A stuck holder blocks concurrent manage commands indefinitely until the holder exits or the device reboots; `doctor` can surface lock-held state. See [security-review.md](security-review.md) (accepted BusyBox constraint).
+
+## Binary feed trust
+
+Installing from the [signed feed](binary-feed.md) bootstraps trust on first use. The operator downloads the signing public key over HTTPS from the same origin that serves the packages. The key fingerprints are published for out-of-band verification. See the key table in [binary-feed.md](binary-feed.md) and the [README](../README.md) ([#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64), fixed in [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81)). The install snippets verify the SHA-256 before trusting the key. Prefer installing on a network you trust, and keep `ca-bundle` present so the HTTPS fetch is actually validated.
+
+## Future reviews
+
+Procedure, scope map, and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state.

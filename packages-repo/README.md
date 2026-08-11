@@ -8,6 +8,8 @@ Source and CI: https://github.com/lucas-albers-lz4/usrmanage
 
 ## Install
 
+**Recommended — binary feed.** Full guide: [installation](https://github.com/lucas-albers-lz4/usrmanage/blob/main/docs/user/installation.md).
+
 ### OpenWrt 24.10 (opkg)
 
 ```sh
@@ -19,6 +21,9 @@ opkg install usrmanage luci-app-usrmanage
 ```
 
 OpenWrt 23.05: stay on v0.1.2 (`…/23.05` historical feed).
+
+<details>
+<summary>OpenWrt 25.12 (apk) and more detail</summary>
 
 ### OpenWrt 25.12 (apk)
 
@@ -32,4 +37,10 @@ apk update
 apk add usrmanage luci-app-usrmanage
 ```
 
-This repository’s `gh-pages` branch is written by CI; do not edit package binaries by hand.
+More detail: [binary feed](https://github.com/lucas-albers-lz4/usrmanage/blob/main/docs/binary-feed.md) · [installation guide](https://github.com/lucas-albers-lz4/usrmanage/blob/main/docs/user/installation.md)
+
+</details>
+
+Menu after install: **System → User Management**.
+
+This repository’s `gh-pages` branch is written by CI. Do not edit package binaries by hand.

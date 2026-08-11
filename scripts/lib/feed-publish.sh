@@ -108,43 +108,94 @@ feed_publish_stage_release_assets() {
 	done
 }
 
+# Pinned usign revision for host-side opkg feed signing (no fixed /tmp path; fresh build per call).
+# Resolved via: git ls-remote https://github.com/openwrt/usign master
+USIGN_PIN_SHA='c4c72b1b07945ee192361dc751291a7c98d6adcd'
+
 feed_publish_ensure_usign() {
 	if command -v usign >/dev/null 2>&1; then
 		return 0
 	fi
-	local build_dir="${FEED_PUBLISH_USIGN_BUILD:-/tmp/usrmanage-usign-build}"
-	if [[ -x "${build_dir}/usign" ]]; then
-		export PATH="${build_dir}:${PATH}"
-		return 0
+	local build_dir rc
+	command -v cmake >/dev/null 2>&1 || {
+		echo "usign build needs cmake (pinned ${USIGN_PIN_SHA}); install cmake or put usign on PATH" >&2
+		return 1
+	}
+	build_dir="$(mktemp -d "${TMPDIR:-/tmp}/usrmanage-usign-build.XXXXXX")" || return 1
+	echo "→ building pinned usign (${USIGN_PIN_SHA}) in ${build_dir}..." >&2
+	rc=0
+	(
+		set -e
+		git init -q "${build_dir}/src"
+		git -C "${build_dir}/src" remote add origin "https://github.com/openwrt/usign.git"
+		git -C "${build_dir}/src" fetch -q --depth 1 origin "${USIGN_PIN_SHA}"
+		git -C "${build_dir}/src" checkout -q "${USIGN_PIN_SHA}"
+		cmake -S "${build_dir}/src" -B "${build_dir}/build" >/dev/null
+		make -C "${build_dir}/build" -j"$(nproc 2>/dev/null || echo 2)" >/dev/null
+		ln -sf "${build_dir}/build/usign" "${build_dir}/usign"
+	) || rc=1
+	if [[ "$rc" -ne 0 ]]; then
+		rm -rf "$build_dir"
+		echo "usign build failed (pinned ${USIGN_PIN_SHA})" >&2
+		return 1
 	fi
-	echo "→ building usign (one-time)..." >&2
-	mkdir -p "$build_dir"
-	if [[ ! -d "${build_dir}/src/.git" ]]; then
-		git clone --depth 1 https://git.openwrt.org/project/usign.git "${build_dir}/src"
-	fi
-	make -C "${build_dir}/src" -j"$(nproc 2>/dev/null || echo 2)" >/dev/null
-	ln -sf "${build_dir}/src/usign" "${build_dir}/usign"
 	export PATH="${build_dir}:${PATH}"
 	command -v usign >/dev/null
 }
 
 feed_publish_ipkg_index_script() {
+	# Fetch ipkg-make-index.sh pinned to a commit SHA and verify its sha256 AFTER fetch,
+	# BEFORE it can execute. A fixed-path cache is used only as a RE-VERIFIED read-only seed;
+	# the returned path is a fresh private mktemp file (caller-owned cleanup, trap RETURN).
 	local ver_label="$1"
-	local cache="${FEED_PUBLISH_IPKG_INDEX_CACHE:-/tmp/usrmanage-ipkg-make-index}"
-	local tag
+	local cache ref sha_expected tmp actual seed
+	cache="${FEED_PUBLISH_IPKG_INDEX_CACHE:-/tmp/usrmanage-ipkg-make-index}"
 	case "$ver_label" in
-		21.02.7) tag='v21.02.7' ;;
-		22.03.7) tag='openwrt-22.03' ;;
-		24.10.5) tag='v24.10.5' ;;
-		*) tag='v24.10.5' ;;
+		24.10.5)
+			ref='4f7e6e554be2aef6a55be36f9f954d56705eb2ee' # tag v24.10.5
+			sha_expected='f19c5013c38d2dc54a95457dd372cb4b6a077ca6ddf7ef3da982b7b6e49b6d06'
+			;;
+		25.12.0)
+			ref='4da53efc2fe744601e6189492dbd06b8930d72b8' # tag v25.12.0
+			sha_expected='f19c5013c38d2dc54a95457dd372cb4b6a077ca6ddf7ef3da982b7b6e49b6d06'
+			;;
+		*)
+			echo "ipkg-make-index: unsupported version label: ${ver_label} (24.10.5 / 25.12.0 only)" >&2
+			return 1
+			;;
 	esac
-	mkdir -p "$cache"
-	local dest="${cache}/ipkg-make-index-${ver_label}.sh"
-	if [[ ! -f "$dest" ]]; then
-		curl -fsSL "https://raw.githubusercontent.com/openwrt/openwrt/${tag}/scripts/ipkg-make-index.sh" -o "$dest"
-		chmod +x "$dest"
+	tmp="$(mktemp)"
+	seed="${cache}/ipkg-make-index-${ver_label}.sh"
+	if [[ -f "$seed" ]]; then
+		# TOCTOU-closed (luna fold 2026-08-10): hash the COPY, not the
+		# cache — a writable cache or symlink can be swapped between the
+		# source hash and the cp. `cp -aL` DEREFERENCES a symlink seed and
+		# writes the target's CONTENT into the fresh private $tmp regular
+		# file (a bare `cp -a` would copy the link itself, making $tmp a
+		# symlink the refetch could then follow into attacker-chosen
+		# paths). Verify the copy's hash: mismatch => refetch.
+		cp -aL "$seed" "$tmp"
+		actual="$(sha256sum "$tmp" | awk '{print $1}')"
+		if [[ "$actual" == "$sha_expected" ]]; then
+			chmod +x "$tmp"
+			printf '%s' "$tmp"
+			return 0
+		fi
+		echo "ipkg-make-index: cache ${seed} failed re-verification (got ${actual}); refetching pinned ${ref}" >&2
 	fi
-	printf '%s' "$dest"
+	if ! curl -fsSL "https://raw.githubusercontent.com/openwrt/openwrt/${ref}/scripts/ipkg-make-index.sh" -o "$tmp"; then
+		rm -f "$tmp"
+		echo "ipkg-make-index: fetch failed (pinned ${ref})" >&2
+		return 1
+	fi
+	actual="$(sha256sum "$tmp" | awk '{print $1}')"
+	if [[ "$actual" != "$sha_expected" ]]; then
+		rm -f "$tmp"
+		echo "ipkg-make-index: sha256 mismatch for pinned ${ref} (got ${actual}, want ${sha_expected}); refusing to execute" >&2
+		return 1
+	fi
+	chmod +x "$tmp"
+	printf '%s' "$tmp"
 }
 
 feed_publish_stage_opkg_host() {
@@ -152,6 +203,7 @@ feed_publish_stage_opkg_host() {
 	local index_script raw mkhash
 	index_script="$(feed_publish_ipkg_index_script "$ver_label")"
 	raw="$(mktemp)"
+	trap 'rm -f "$index_script" "$raw"' RETURN
 	# ipkg-make-index.sh uses $MKHASH sha256 (OpenWrt mkhash), not sha256sum alone.
 	mkhash=""
 	for ver in 25.12 24.10; do
@@ -308,10 +360,26 @@ feed_publish_copy_keys() {
 feed_publish_write_manifest() {
 	local staging="$1" git_tag="${2:-unknown}"
 	local manifest ver artifact ver_label sum
+	local target image digest
 	manifest="${staging}/manifest.json"
 	: > "$manifest"
-	printf '{\n  "git_tag": "%s",\n  "packages": [\n' "${git_tag//\"/\\\"}" >> "$manifest"
+	printf '{\n  "git_tag": "%s",\n  "sdk_images": [\n' "${git_tag//\"/\\\"}" >> "$manifest"
 	local first=1
+	for target in "${SDK_MATRIX_TARGETS[@]}"; do
+		for ver in "${SDK_MATRIX_VERSIONS[@]}"; do
+			digest="$(sdk_matrix_image_digest "$target" "$ver")" || {
+				echo "feed-publish: no SDK image digest for ${target}/${ver}" >&2
+				return 1
+			}
+			image="ghcr.io/openwrt/sdk:$(sdk_matrix_image_tag "$target" "$ver")"
+			[[ $first -eq 1 ]] || printf ',\n' >> "$manifest"
+			first=0
+			printf '    {"openwrt": "%s", "target": "%s", "image": "%s", "digest": "%s"}' \
+				"$(sdk_matrix_version_label "$ver")" "$target" "$image" "$digest" >> "$manifest"
+		done
+	done
+	printf '\n  ],\n  "packages": [\n' >> "$manifest"
+	first=1
 	for ver in 24.10 25.12; do
 		ver_label="$(sdk_matrix_version_label "$ver")"
 		while IFS= read -r artifact; do

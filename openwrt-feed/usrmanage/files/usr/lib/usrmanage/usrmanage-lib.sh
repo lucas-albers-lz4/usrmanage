@@ -5,23 +5,15 @@
 # Shared library for usrmanage. Sourced by /usr/sbin/usrmanage.
 # BusyBox ash-safe: no pipefail, no bashisms. Paths overridable for tests.
 
-# Defaults (overridable via env for unit tests)
-: "${USRMANAGE_ETC:=/etc/usrmanage}"
-: "${USRMANAGE_REGISTRY:=$USRMANAGE_ETC/users}"
-: "${USRMANAGE_AUDIT_DIR:=/var/log/usrmanage}"
-: "${USRMANAGE_AUDIT:=$USRMANAGE_AUDIT_DIR/audit.log}"
-: "${USRMANAGE_LOCK:=/var/lock/usrmanage.lock}"
-: "${USRMANAGE_INCOMPLETE:=$USRMANAGE_ETC/incomplete}"
-: "${USRMANAGE_PASSWD:=/etc/passwd}"
-: "${USRMANAGE_SHADOW:=/etc/shadow}"
-: "${USRMANAGE_GROUP:=/etc/group}"
-: "${USRMANAGE_SUDOERS:=/etc/sudoers.d/usrmanage}"
-: "${USRMANAGE_UID_FLOOR:=1000}"
+# Defaults. Account-file path and behavior overrides (PASSWD / SHADOW / GROUP /
+# REGISTRY / SUDOERS / UID_FLOOR / HOME_ROOT and the infra file paths below)
+# are honored ONLY when USRMANAGE_TEST_OVERRIDES=1 (host hermetic tests). In
+# production a stray USRMANAGE_* override — e.g. on a forbidden NOPASSWD
+# sudoers line — must never redirect root writes to arbitrary paths (#72 / #65).
 : "${USRMANAGE_PASS_MINLEN:=8}"
 : "${USRMANAGE_UCI_POLICY:=usrmanage.policy}"
 : "${USRMANAGE_AUDIT_MAX_BYTES:=131072}"
 : "${USRMANAGE_SHELL:=/bin/ash}"
-: "${USRMANAGE_HOME_ROOT:=/home}"
 : "${USRMANAGE_SRC:=cli}"
 : "${USRMANAGE_ACTOR:=}"
 : "${USRMANAGE_DRY_RUN:=0}"
@@ -32,6 +24,36 @@
 if [ -f "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh" ]; then
 	# shellcheck disable=SC1090,SC1091
 	. "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh"
+fi
+
+if [ "${USRMANAGE_TEST_OVERRIDES:-0}" = "1" ]; then
+	# Hermetic test env: honor the overrides below.
+	: "${USRMANAGE_ETC:=/etc/usrmanage}"
+	: "${USRMANAGE_REGISTRY:=$USRMANAGE_ETC/users}"
+	: "${USRMANAGE_AUDIT_DIR:=/var/log/usrmanage}"
+	: "${USRMANAGE_AUDIT:=$USRMANAGE_AUDIT_DIR/audit.log}"
+	: "${USRMANAGE_LOCK:=/var/lock/usrmanage.lock}"
+	: "${USRMANAGE_INCOMPLETE:=$USRMANAGE_ETC/incomplete}"
+	: "${USRMANAGE_PASSWD:=/etc/passwd}"
+	: "${USRMANAGE_SHADOW:=/etc/shadow}"
+	: "${USRMANAGE_GROUP:=/etc/group}"
+	: "${USRMANAGE_SUDOERS:=/etc/sudoers.d/usrmanage}"
+	: "${USRMANAGE_UID_FLOOR:=1000}"
+	: "${USRMANAGE_HOME_ROOT:=/home}"
+else
+	# Production: overrides are inert — force the packaged defaults.
+	USRMANAGE_ETC=/etc/usrmanage
+	USRMANAGE_REGISTRY=$USRMANAGE_ETC/users
+	USRMANAGE_AUDIT_DIR=/var/log/usrmanage
+	USRMANAGE_AUDIT=$USRMANAGE_AUDIT_DIR/audit.log
+	USRMANAGE_LOCK=/var/lock/usrmanage.lock
+	USRMANAGE_INCOMPLETE=$USRMANAGE_ETC/incomplete
+	USRMANAGE_PASSWD=/etc/passwd
+	USRMANAGE_SHADOW=/etc/shadow
+	USRMANAGE_GROUP=/etc/group
+	USRMANAGE_SUDOERS=/etc/sudoers.d/usrmanage
+	USRMANAGE_UID_FLOOR=1000
+	USRMANAGE_HOME_ROOT=/home
 fi
 
 # Effective password policy (populated by um_policy_load)
@@ -358,6 +380,35 @@ um_policy_json_full() {
 		"$(um_policy_bool_json "$UM_POL_REQUIRE_SPECIAL")"
 }
 
+um_str_has_control() {
+	# 0 if the string contains a C0 control char (0x01-0x1F) or DEL (0x7f);
+	# multi-byte UTF-8 passes. Newline is checked via case because awk
+	# RS="" splits records on blank lines; everything else via awk (#72 P2).
+	_s=$1
+	[ -n "$_s" ] || return 1
+	_nl=$(printf '\nx')
+	_nl=${_nl%x}
+	case "$_s" in
+		*"$_nl"*) return 0 ;;
+	esac
+	printf '%s' "$_s" | awk 'BEGIN {
+		RS = ""; ORS = ""
+		for (n = 1; n < 128; n++)
+			ord[sprintf("%c", n)] = n
+	}
+	{
+		for (i = 1; i <= length($0); i++) {
+			c = substr($0, i, 1)
+			o = ord[c] + 0
+			if ((o > 0 && o < 32) || o == 127) {
+				found = 1
+				exit
+			}
+		}
+	}
+	END { if (found) exit 0; exit 1 }'
+}
+
 um_validate_password() {
 	_user=$1
 	_pass=$2
@@ -367,6 +418,10 @@ um_validate_password() {
 		UM_POL_FAIL_REASON=empty
 		return 1
 	}
+	if um_str_has_control "$_pass"; then
+		UM_POL_FAIL_REASON=control_char
+		return 1
+	fi
 	_plen=${#_pass}
 	if [ "$_plen" -lt "$UM_POL_MIN_LENGTH" ]; then
 		UM_POL_FAIL_REASON=min_length
@@ -464,7 +519,7 @@ um_registry_del() {
 
 um_passwd_line() {
 	_u=$1
-	grep -m1 "^${_u}:" "$USRMANAGE_PASSWD" 2>/dev/null
+	grep -m1 -F "${_u}:" "$USRMANAGE_PASSWD" 2>/dev/null
 }
 
 um_user_exists() {
@@ -484,7 +539,7 @@ um_user_shell() { um_passwd_field "$1" 7; }
 
 um_user_locked() {
 	_u=$1
-	_sh=$(grep -m1 "^${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null | cut -d: -f2)
+	_sh=$(grep -m1 -F "${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null | cut -d: -f2)
 	case "$_sh" in
 		'!'*|'*'*) return 0 ;;
 		*) return 1 ;;
@@ -848,10 +903,24 @@ um_password_write() {
 um_set_password_from_fd() {
 	_u=$1
 	_fd=$2
-	# Read password once from FD (no echo to logs)
+	# Read password once from FD (no echo to logs). The whole fd is
+	# validated, not just the first line: an embedded (or trailing) newline
+	# must fail explicitly instead of silently truncating the secret (#72 P2).
 	_pass=
 	# shellcheck disable=SC2039
 	IFS= read -r _pass <&"$_fd" || true
+	if [ ! -t "$_fd" ]; then
+		# Non-TTY fd: any second line (even an empty one) means the caller
+		# sent a multi-line value — reject before touching the account.
+		_has_more=0
+		IFS= read -r _rest <&"$_fd" && _has_more=1
+		_rest=
+		if [ "$_has_more" = "1" ]; then
+			_pass=
+			UM_POL_FAIL_REASON=multi_line
+			return 1
+		fi
+	fi
 	um_validate_password "$_u" "$_pass" || {
 		_pass=
 		return 1
@@ -1690,6 +1759,7 @@ um_mut_set_role() {
 um_mut_passwd() {
 	_name=$1
 	_pfd=$2
+	_role=$(um_role_of "$_name")
 	um_mut_require_valid_username "$_name" "$_role"
 	um_mut_require_managed "$_name" "$_role"
 	um_mut_require_exists "$_name" "$_role" not_found
@@ -1715,10 +1785,10 @@ um_mut_passwd() {
 um_mut_del() {
 	_name=$1
 	_purge=$2
+	_role=$(um_role_of "$_name")
 	um_mut_require_valid_username "$_name" "$_role"
 	um_mut_require_managed "$_name" "$_role"
 	um_mut_require_exists "$_name" "$_role" not_found
-	_role=$(um_role_of "$_name")
 	if [ "$_role" = "admin" ]; then
 		_n=$(um_count_managed_admins)
 		if [ "$_n" -le 1 ]; then

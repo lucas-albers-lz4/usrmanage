@@ -16,17 +16,53 @@ Designed for deployments **without** RADIUS/central auth. Supported: **OpenWrt 2
 
 ## Install (binary feed)
 
-See **[docs/binary-feed.md](docs/binary-feed.md)** and **[docs/user/installation.md](docs/user/installation.md)**.
+**Recommended — [binary feed](docs/binary-feed.md).** Run this on the router. It installs both packages.
 
-Feed: https://lucas-albers-lz4.github.io/usrmanage-packages/
+**Verify the signing key before trusting it** (fingerprints are published in [docs/binary-feed.md](docs/binary-feed.md) and the [`usrmanage-packages` README](https://github.com/lucas-albers-lz4/usrmanage-packages)):
 
-## Build from source feed
+| Key file | usign Key ID | SHA-256 |
+|----------|-------------|---------|
+| `public.key` (opkg) | `f4345260b7ec740d` | `c40bc217f793623e75ea6c77ddb4610b3c6fd64ba3934741ac28754d0e0f970d` |
+| `usrmanage-feed.rsa.pub` (apk) | — | `4bb7f1bf54d95b9c490b8c1d5394c347a4db408ecb811a0bab8c4aea2747e5c7` |
+
+**OpenWrt 24.10 (opkg):**
+
+```sh
+wget -O /tmp/usrmanage.key https://lucas-albers-lz4.github.io/usrmanage-packages/public.key
+echo 'c40bc217f793623e75ea6c77ddb4610b3c6fd64ba3934741ac28754d0e0f970d  /tmp/usrmanage.key' | sha256sum -c - || { echo "FINGERPRINT MISMATCH"; exit 1; }
+opkg-key add /tmp/usrmanage.key
+echo 'src/gz usrmanage https://lucas-albers-lz4.github.io/usrmanage-packages/24.10' >> /etc/opkg/customfeeds.conf
+opkg update && opkg install usrmanage luci-app-usrmanage
+```
+
+**OpenWrt 25.12 (apk):**
+
+```sh
+wget -O /tmp/usrmanage-feed.rsa.pub https://lucas-albers-lz4.github.io/usrmanage-packages/usrmanage-feed.rsa.pub
+echo '4bb7f1bf54d95b9c490b8c1d5394c347a4db408ecb811a0bab8c4aea2747e5c7  /tmp/usrmanage-feed.rsa.pub' | sha256sum -c - || { echo "FINGERPRINT MISMATCH"; exit 1; }
+mkdir -p /etc/apk/keys
+cp /tmp/usrmanage-feed.rsa.pub /etc/apk/keys/usrmanage-feed.rsa.pub
+echo 'https://lucas-albers-lz4.github.io/usrmanage-packages/25.12/all/packages.adb' \
+  >> /etc/apk/repositories.d/usrmanage.list
+apk update && apk add usrmanage luci-app-usrmanage
+```
+
+**After install:** create your first admin user — [installation guide](docs/user/installation.md#first-admin-user).
+
+<details>
+<summary>Other install methods</summary>
+
+**GitHub Releases:** download the package for your OpenWrt version and install manually — [installation guide](docs/user/installation.md#github-release-manual-download).
+
+**Build from source feed** (firmware builders):
 
 ```sh
 echo "src-link usrmanage /absolute/path/to/usrmanage/openwrt-feed" >> feeds.conf
 ./scripts/feeds update usrmanage
 ./scripts/feeds install usrmanage luci-app-usrmanage
 ```
+
+</details>
 
 ## CLI (summary)
 
@@ -48,7 +84,7 @@ usrmanage doctor
 | [docs/developer/cli-and-api.md](docs/developer/cli-and-api.md) | CLI / ubus / audit schema |
 | [docs/developer/luci-ux.md](docs/developer/luci-ux.md) | UI, themes, i18n |
 | [docs/developer/testing.md](docs/developer/testing.md) | Unit, integration, Playwright MCP / e2e |
-| [docs/developer/build-matrix.md](docs/developer/build-matrix.md) | SDK 6-cell matrix |
+| [docs/developer/build-matrix.md](docs/developer/build-matrix.md) | SDK 4-cell matrix |
 | [docs/binary-feed.md](docs/binary-feed.md) | Signed opkg/apk feed |
 | [docs/release.md](docs/release.md) | Tag → publish |
 | [docs/github-publish-checklist.md](docs/github-publish-checklist.md) | Secrets / Pages setup |
@@ -59,7 +95,7 @@ usrmanage doctor
 | [docs/supported-releases.md](docs/supported-releases.md) | 24.10 / 25.12 (23.05 → v0.1.2) |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Next steps |
 | [docs/upstream.md](docs/upstream.md) | Upstream OpenWrt path |
-| [docs/security-review.md](docs/security-review.md) | Pre-0.1.0 security review record |
+| [docs/security-review.md](docs/security-review.md) | Security audit ledger |
 
 ## Host checks
 

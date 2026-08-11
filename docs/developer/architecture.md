@@ -80,3 +80,4 @@ Only users listed in the registry are managed. Mutators refuse unmanaged targets
 - [CLI and API](cli-and-api.md)
 - [Threat model](../threat-model.md)
 - [Security](../security.md)
+- [Security audit ledger](../security-review.md)

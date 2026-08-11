@@ -12,7 +12,7 @@ jobs:
   host-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
@@ -23,10 +23,25 @@ jobs:
   z3-verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Z3
         run: sudo apt-get update && sudo apt-get install -y python3-z3
 
       - name: Z3 sanitation suite (--full)
         run: python3 scripts/z3-verify.py --full
+
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      # Lint workflows with a pinned actionlint image (docker run steps,
+      # NOT a job-level container): a job-level container makes
+      # actions/checkout fail with EACCES on the runner's save_state
+      # file (seen on PRs #81-#84). The digest pins 1.7.7.
+      - name: Verify actionlint version (pinned image)
+        run: docker run --rm rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 -version
+
+      - name: Run actionlint on workflows
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 -color

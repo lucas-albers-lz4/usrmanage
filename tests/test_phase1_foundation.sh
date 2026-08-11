@@ -21,6 +21,8 @@ export USRMANAGE_SUDOERS="$TMP/sudoers"
 export USRMANAGE_UID_FLOOR=1000
 export USRMANAGE_SRC=cli
 export USRMANAGE_ACTOR=testhost
+# Hermetic tests rely on USRMANAGE_* path overrides; enable the test-only gate.
+export USRMANAGE_TEST_OVERRIDES=1
 
 mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")"
 touch "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT"
@@ -31,6 +33,7 @@ printf 'ops\n' > "$USRMANAGE_REGISTRY"
 
 # shellcheck disable=SC1090
 . "$LIB"
+. "$ROOT/tests/lib.sh"
 
 fail=0
 ok() { echo "ok: $*"; }
@@ -41,7 +44,7 @@ printf 'a:1\nb:2\n' > "$TMP/atomic.txt"
 chmod 0644 "$TMP/atomic.txt"
 um_atomic_edit "$TMP/atomic.txt" 0644 -F: 'BEGIN{OFS=":"} $1=="b"{$2="9"} {print}'
 grep -qx 'b:9' "$TMP/atomic.txt" && ok "um_atomic_edit rewrites" || bad "um_atomic_edit rewrite"
-_mode=$(stat -c '%a' "$TMP/atomic.txt" 2>/dev/null || ls -l "$TMP/atomic.txt" | awk '{print $1}')
+_mode=$(stat_mode "$TMP/atomic.txt")
 case "$_mode" in
 	*644*|*-rw-r--r--*) ok "um_atomic_edit mode 0644" ;;
 	*) bad "um_atomic_edit mode got $_mode" ;;
@@ -162,20 +165,18 @@ done
 printf 'ops\n' > "$USRMANAGE_REGISTRY"
 chmod 0640 "$USRMANAGE_REGISTRY"
 um_registry_add alice
-_mode=$(stat -c '%a' "$USRMANAGE_REGISTRY")
+_mode=$(stat_mode "$USRMANAGE_REGISTRY")
 [ "$_mode" = "640" ] && ok "registry mode 0640 after add" || bad "registry mode after add: $_mode"
-_own=$(stat -c '%u %g' "$USRMANAGE_REGISTRY" 2>/dev/null \
-	|| ls -ldn "$USRMANAGE_REGISTRY" | awk '{print $3,$4}')
+_own=$(stat_owner "$USRMANAGE_REGISTRY")
 if [ "$(id -u)" = "0" ]; then
 	[ "$_own" = "0 0" ] && ok "registry owner 0:0 after add" || bad "registry owner after add: $_own"
 else
 	ok "registry ownership skip (non-root; chown 0:0 no-op)"
 fi
 um_registry_del alice
-_mode=$(stat -c '%a' "$USRMANAGE_REGISTRY")
+_mode=$(stat_mode "$USRMANAGE_REGISTRY")
 [ "$_mode" = "640" ] && ok "registry mode 0640 after del" || bad "registry mode after del: $_mode"
-_own=$(stat -c '%u %g' "$USRMANAGE_REGISTRY" 2>/dev/null \
-	|| ls -ldn "$USRMANAGE_REGISTRY" | awk '{print $3,$4}')
+_own=$(stat_owner "$USRMANAGE_REGISTRY")
 if [ "$(id -u)" = "0" ]; then
 	[ "$_own" = "0 0" ] && ok "registry owner 0:0 after del" || bad "registry owner after del: $_own"
 else

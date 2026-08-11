@@ -20,6 +20,8 @@ export USRMANAGE_SHADOW="$TMP/shadow"
 export USRMANAGE_GROUP="$TMP/group"
 export USRMANAGE_SUDOERS="$TMP/sudoers"
 export USRMANAGE_DRY_RUN=1
+# Hermetic tests rely on USRMANAGE_* path overrides; enable the test-only gate.
+export USRMANAGE_TEST_OVERRIDES=1
 
 mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")"
 touch "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT"
@@ -31,6 +33,7 @@ printf '%%wheel ALL=(ALL:ALL) ALL\n' > "$USRMANAGE_SUDOERS"
 
 # shellcheck disable=SC1090
 . "$LIB"
+. "$ROOT/tests/lib.sh"
 
 fail=0
 
@@ -49,6 +52,15 @@ um_validate_role root && bad "bad role allowed" || ok "bad role rejected"
 um_validate_password ops 'short' && bad "short pw allowed" || ok "short pw rejected"
 um_validate_password ops 'ops' && bad "username pw allowed" || ok "username pw rejected"
 um_validate_password ops 'goodpass1' && ok "good password" || bad "good password"
+
+# --- env override gate (#72 / #65) ---
+_gate=$( ( unset USRMANAGE_TEST_OVERRIDES; . "$LIB" 2>/dev/null; printf '%s|%s|%s' "$USRMANAGE_PASSWD" "$USRMANAGE_REGISTRY" "$USRMANAGE_UID_FLOOR" ) )
+[ "$_gate" = "/etc/passwd|/etc/usrmanage/users|1000" ] \
+	&& ok "env overrides inert without USRMANAGE_TEST_OVERRIDES" \
+	|| bad "env override gate: got '$_gate'"
+[ "$USRMANAGE_PASSWD" = "$TMP/passwd" ] \
+	&& ok "env overrides honored with USRMANAGE_TEST_OVERRIDES=1" \
+	|| bad "test override not honored (PASSWD=$USRMANAGE_PASSWD)"
 
 um_is_managed ops && ok "ops managed" || bad "ops managed"
 um_is_managed nobody && bad "nobody managed" || ok "unmanaged"
@@ -109,7 +121,7 @@ um_in_wheel ops && bad "ops still in wheel" || ok "ops removed from wheel"
 grep -q '^wheel:x:10:audit$' "$USRMANAGE_GROUP" && ok "wheel members rewritten" || bad "wheel members: $(cat "$USRMANAGE_GROUP")"
 
 um_ensure_dirs
-_mode=$(stat -c '%a' "$USRMANAGE_AUDIT_DIR" 2>/dev/null || stat -f '%OLp' "$USRMANAGE_AUDIT_DIR")
+_mode=$(stat_mode "$USRMANAGE_AUDIT_DIR")
 case "$_mode" in
 	750|0750) ok "audit dir mode 750" ;;
 	*) bad "audit dir mode $_mode (want 750)" ;;
