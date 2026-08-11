@@ -1645,8 +1645,11 @@ um_mut_add() {
 				um_die "error: login_tampered"
 				;;
 			owned)
-				um_audit denied "$_name" denied login_exists_foreign "$_role"
-				um_die "error: login_exists_foreign"
+				# Defensive: owned requires managed+exact ACLs, so this arm is
+				# unreachable for a normal add (user is not managed yet). Keep
+				# a distinct token if classify ever changes.
+				um_audit denied "$_name" denied login_exists "$_role"
+				um_die "error: login_exists"
 				;;
 		esac
 	fi

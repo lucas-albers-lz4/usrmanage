@@ -89,11 +89,8 @@ config login
 	list write '*'
 EOF
 [ "$(um_luci_login_state audit)" = "foreign" ] && ok "foreign detected" || bad "foreign state $(um_luci_login_state audit)"
-if um_with_lock um_mut_set_luci_login audit enable 2>/dev/null; then
-	bad "foreign should refuse enable"
-else
-	ok "foreign refuse enable"
-fi
+_ferr=$(um_with_lock um_mut_set_luci_login audit enable 2>&1) && bad "foreign should refuse enable" || ok "foreign refuse enable"
+printf '%s' "$_ferr" | grep -q 'login_exists_foreign' && ok "foreign denial token" || bad "foreign token: $_ferr"
 
 # tampered marker (wrong password)
 cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
@@ -142,8 +139,63 @@ um_luci_login_remove_owned_best_effort ops || bad "remove_owned failed"
 um_registry_del ops || bad "registry_del failed"
 _idx=$(um_luci_login_ours_index ops 1)
 [ -z "$_idx" ] && ok "del cleanup removes ours login" || bad "orphan login remains idx=$_idx"
-# restore ops for emit test
+# restore ops for remaining tests
 printf 'ops\naudit\nempty\n' > "$USRMANAGE_REGISTRY"
+printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
+
+# Full del → re-add without luci: must not resurrect orphan write ACL.
+# Under DRY_RUN, delete leaves passwd/shadow rows; re-add is registry restore.
+um_with_lock um_mut_set_role ops admin
+um_with_lock um_mut_set_luci_login ops enable
+grep -q "option password '\$p\$ops'" "$USRMANAGE_RPCD_CONFIG" || bad "pre-full-del missing \$p\$ops"
+um_is_managed audit || bad "need second admin before del ops"
+um_with_lock um_mut_del ops 0
+_idx=$(um_luci_login_ours_index ops 1)
+[ -z "$_idx" ] && ok "full del removes luci login" || bad "full del orphan idx=$_idx"
+grep -q "option username 'ops'" "$USRMANAGE_RPCD_CONFIG" && bad "ops login section left after del" || ok "no ops login after del"
+# Re-add without --luci-login (DRY_RUN: passwd still present; restore registry only)
+printf 'ops\naudit\nempty\n' > "$USRMANAGE_REGISTRY"
+printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
+[ "$(um_luci_login_state ops)" = "none" ] && ok "re-add without luci stays none" || bad "re-add state $(um_luci_login_state ops)"
+grep -q "option password '\$p\$ops'" "$USRMANAGE_RPCD_CONFIG" && bad "orphan \$p\$ops after re-add" || ok "no orphan \$p\$ops after re-add"
+
+# Owned + foreign coexistence: demote must drop write on ours via ours_index.
+um_with_lock um_mut_set_luci_login ops enable
+grep -q "list write 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" || bad "owned write missing before foreign"
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+config login
+	option username 'ops'
+	option password '$6$foreign$ops'
+	list read '*'
+	list write '*'
+EOF
+[ "$(um_luci_login_state ops)" = "foreign" ] && ok "owned+foreign aggregate foreign" || bad "aggregate $(um_luci_login_state ops)"
+_ours=$(um_luci_login_ours_index ops)
+[ -n "$_ours" ] && ok "ours_index finds owned amid foreign" || bad "ours_index empty amid foreign"
+um_with_lock um_mut_set_role ops readonly
+# Owned section must no longer grant app write; foreign '*' write may remain.
+if awk '
+	BEGIN { inlogin=0; isops=0; hasmark=0; haswrite=0 }
+	/^config login/ {
+		if (inlogin && isops && hasmark && haswrite) found=1
+		inlogin=1; isops=0; hasmark=0; haswrite=0; next
+	}
+	inlogin && /option username '\''ops'\''/ { isops=1 }
+	inlogin && /option usrmanage '\''1'\''/ { hasmark=1 }
+	inlogin && /list write '\''luci-app-usrmanage'\''/ { haswrite=1 }
+	END { if (inlogin && isops && hasmark && haswrite) found=1; exit !found }
+' "$USRMANAGE_RPCD_CONFIG"; then
+	bad "owned write sticky amid foreign"
+else
+	ok "demote dropped owned write amid foreign"
+fi
+grep -q "option password '\$6\$foreign\$ops'" "$USRMANAGE_RPCD_CONFIG" && ok "foreign section untouched" || bad "foreign section missing"
+[ -n "$(um_luci_login_ours_index ops)" ] && ok "ours still present after demote" || bad "ours lost after demote"
+
+# Reset rpcd leftovers so emit sees none for ops
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_role ops admin
 
 # emit json includes luci_login
 _j=$(um_emit_user_json ops)

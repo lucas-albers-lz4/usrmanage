@@ -226,3 +226,60 @@ msgstr ""
 msgid "yes"
 msgstr ""
 
+msgid "Admin role grants wheel + sudo (full root after password). Write ACL on this app is root-equivalent. Audit log is operational (local + syslog), not compliance-grade evidence."
+msgstr "Die Admin-Rolle gewährt wheel + sudo (voller root nach Passwort). Die Schreib-ACL dieser App ist root-äquivalent. Das Audit-Log ist betrieblich (lokal + syslog), kein compliance-tauglicher Nachweis."
+
+msgid "Allow LuCI web login"
+msgstr "LuCI-Web-Anmeldung erlauben"
+
+msgid "Disable"
+msgstr "Deaktivieren"
+
+msgid "Disable LuCI"
+msgstr "LuCI deaktivieren"
+
+msgid "Disable LuCI login: %s"
+msgstr "LuCI-Anmeldung deaktivieren: %s"
+
+msgid "Elsewhere"
+msgstr "Anderswo"
+
+msgid "Enable"
+msgstr "Aktivieren"
+
+msgid "Enable LuCI"
+msgstr "LuCI aktivieren"
+
+msgid "Enable LuCI login: %s"
+msgstr "LuCI-Anmeldung aktivieren: %s"
+
+msgid "LuCI"
+msgstr "LuCI"
+
+msgid "LuCI login disabled"
+msgstr "LuCI-Anmeldung deaktiviert"
+
+msgid "LuCI login enabled"
+msgstr "LuCI-Anmeldung aktiviert"
+
+msgid "Manage local UNIX/SSH accounts on this device. LuCI web login is optional per user (same UNIX password via $p$)."
+msgstr "Lokale UNIX/SSH-Konten auf diesem Gerät verwalten. LuCI-Web-Anmeldung ist optional je Benutzer (gleiches UNIX-Passwort über $p$)."
+
+msgid "Off"
+msgstr "Aus"
+
+msgid "On"
+msgstr "An"
+
+msgid "Removes the usrmanage-owned web login. SSH still works. If this is your current session, you will be logged out."
+msgstr "Entfernt die von usrmanage verwaltete Web-Anmeldung. SSH funktioniert weiterhin. Wenn dies Ihre aktuelle Sitzung ist, werden Sie abgemeldet."
+
+msgid "Tampered"
+msgstr "Manipuliert"
+
+msgid "This reuses the UNIX password for web login ($p$). Prefer HTTPS and a management network."
+msgstr "Verwendet das UNIX-Passwort erneut für die Web-Anmeldung ($p$). Bevorzugen Sie HTTPS und ein Management-Netzwerk."
+
+msgid "Uses the same UNIX password. Off by default. Exposes this password to the web login path."
+msgstr "Verwendet dasselbe UNIX-Passwort. Standardmäßig aus. Macht dieses Passwort über den Web-Anmeldeweg erreichbar."
+
