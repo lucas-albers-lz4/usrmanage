@@ -1641,18 +1641,41 @@ um_mut_set_role() {
 			um_die "error: wheel_del_failed"
 		}
 	fi
+	_um_set_role_rollback() {
+		if [ "$_cur" = "admin" ]; then
+			um_wheel_add_user "$_name" 2>/dev/null || true
+		else
+			um_wheel_del_user "$_name" 2>/dev/null || true
+		fi
+		if command -v um_luci_login_sync_acls >/dev/null 2>&1; then
+			_rb=$(um_luci_login_state "$_name")
+			# After wheel rollback, re-sync owned ACLs to previous role if still owned/tampered-with-marker.
+			if [ "$_rb" = "owned" ] || [ "$_rb" = "tampered" ]; then
+				um_luci_login_sync_acls "$_name" "$_cur" 2>/dev/null || true
+			fi
+		fi
+	}
 	if command -v um_luci_login_sync_acls >/dev/null 2>&1; then
 		_lst=$(um_luci_login_state "$_name")
-		if [ "$_lst" = "owned" ]; then
+		_ours=$(um_luci_login_ours_index "$_name" 2>/dev/null || true)
+		if [ -n "$_ours" ]; then
 			um_luci_login_sync_acls "$_name" "$_role" || {
+				_um_set_role_rollback
 				um_incomplete_clear
 				um_audit fail "$_name" fail luci_login_sync "$_role"
 				um_die "error: luci_login_sync_failed"
 			}
+		elif [ "$_lst" = "foreign" ] || [ "$_lst" = "tampered" ]; then
+			: # leave foreign/forged alone; UNIX role still changes
 		fi
 	fi
-	if command -v um_session_revoke_required >/dev/null 2>&1; then
-		um_session_revoke_required "$_name"
+	if command -v um_session_revoke_user >/dev/null 2>&1; then
+		if ! um_session_revoke_user "$_name"; then
+			_um_set_role_rollback
+			um_incomplete_clear
+			um_audit fail "$_name" fail session_revoke_unavailable "$_role"
+			um_die "error: session_revoke_unavailable"
+		fi
 	fi
 	um_incomplete_clear
 	um_audit role "$_name" ok "from=${_cur}" "$_role"

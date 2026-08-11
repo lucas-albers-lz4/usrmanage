@@ -3,6 +3,8 @@
 		"description": "Minimal LuCI shell for usrmanage web logins (no luci-base filesystem listing)",
 		"read": {
 			"ubus": {
+				"session": [ "access" ],
+				"luci": [ "getFeatures" ],
 				"uci": [ "get", "changes" ]
 			},
 			"uci": [ "luci", "system" ]

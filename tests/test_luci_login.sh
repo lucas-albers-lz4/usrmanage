@@ -95,7 +95,7 @@ else
 	ok "foreign refuse enable"
 fi
 
-# tampered marker
+# tampered marker (wrong password)
 cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
 
 config login
@@ -105,6 +105,29 @@ config login
 	list read 'luci-app-usrmanage'
 EOF
 [ "$(um_luci_login_state empty)" = "tampered" ] && ok "tampered detected" || bad "tampered state $(um_luci_login_state empty)"
+
+# ACL drift on owned login → tampered; sync repairs
+um_with_lock um_mut_set_luci_login ops enable
+# inject extra ACL grant
+sed -i "/option username 'ops'/,/^config /{ /list write/a\\
+	list write 'luci-app-firewall'
+}" "$USRMANAGE_RPCD_CONFIG" 2>/dev/null || {
+	# portable append after ops write line
+	_awk_tmp=$(mktemp)
+	awk '
+		/^config login/ { inops=0 }
+		/option username '\''ops'\''/ { inops=1 }
+		{ print }
+		inops && /list write '\''luci-app-usrmanage'\''/ {
+			print "\tlist write '\''luci-app-firewall'\''"
+			inops=0
+		}
+	' "$USRMANAGE_RPCD_CONFIG" > "$_awk_tmp" && mv "$_awk_tmp" "$USRMANAGE_RPCD_CONFIG"
+}
+[ "$(um_luci_login_state ops)" = "tampered" ] && ok "ACL drift → tampered" || bad "ACL drift state $(um_luci_login_state ops)"
+um_with_lock um_mut_set_role ops admin
+[ "$(um_luci_login_state ops)" = "owned" ] && ok "set-role sync repairs ACL drift" || bad "repair state $(um_luci_login_state ops)"
+grep -q "luci-app-firewall" "$USRMANAGE_RPCD_CONFIG" && bad "extra ACL still present" || ok "extra ACL removed"
 
 # disable owned
 um_with_lock um_mut_set_luci_login ops disable
