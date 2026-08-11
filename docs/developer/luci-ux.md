@@ -4,11 +4,11 @@ Menu: **System → User Management** (`admin/system/usrmanage`).
 
 ## Layout
 
-1. Banner: UNIX/SSH accounts; LuCI web logins are separate; admin = wheel + sudo
+1. Banner: UNIX/SSH accounts; optional LuCI web login per user (`$p$`); admin = wheel + sudo
 2. Doctor warning banner when self-check fails
 3. Password policy strip (`Password policy: OpenWrt`) — Configure expands preset/toggles (write ACL); **Save** required; read ACL sees name only
-4. User table: Username | UID | Role | Shell | Managed | Actions
-5. Manage actions (write ACL only): Add, Set role, Password, Remove — Add/Change modals show live password checklist for the active policy
+4. User table: Username | UID | Role | Shell | Managed | LuCI | Actions
+5. Manage actions (write ACL only): Add (optional LuCI checkbox), Set role, Password, Enable/Disable LuCI, Remove
 6. Audit panel (read ACL): recent events + Refresh
 
 View-only sessions see the table and audit; mutator controls hidden when write ACL is absent. **Server ACL is authoritative.**

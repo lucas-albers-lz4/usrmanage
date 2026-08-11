@@ -157,7 +157,12 @@ run_password_cli() {
 run_manage_password() {
 	_name=$1
 	_role=$2
-	run_password_cli add "$_name" --role "$_role"
+	_luci=$3
+	if [ "$_luci" = "1" ]; then
+		run_password_cli add "$_name" --role "$_role" --luci-login
+	else
+		run_password_cli add "$_name" --role "$_role"
+	fi
 }
 
 run_passwd() {
@@ -203,9 +208,10 @@ case "$1" in
 		echo '  "policy": {},'
 		echo '  "get_policy": {},'
 		echo '  "set_policy": { "preset": "", "min_length": 8, "reject_username": true, "require_lower": false, "require_upper": false, "require_digit": false, "require_special": false },'
-		echo '  "add": { "name": "", "role": "", "password": "" },'
+		echo '  "add": { "name": "", "role": "", "password": "", "luci_login": false },'
 		echo '  "del": { "name": "", "purge_home": false },'
 		echo '  "set_role": { "name": "", "role": "" },'
+		echo '  "set_luci_login": { "name": "", "enable": false },'
 		echo '  "passwd": { "name": "", "password": "" }'
 		echo '}'
 		;;
@@ -251,7 +257,8 @@ case "$1" in
 			add)
 				_name=$(json_get name)
 				_role=$(json_get role)
-				run_manage_password "$_name" "$_role"
+				_luci=$(json_get_bool luci_login)
+				run_manage_password "$_name" "$_role" "$_luci"
 				;;
 			del)
 				_name=$(json_get name)
@@ -266,6 +273,15 @@ case "$1" in
 				_name=$(json_get name)
 				_role=$(json_get role)
 				run_cli set-role "$_name" --role "$_role" --json
+				;;
+			set_luci_login)
+				_name=$(json_get name)
+				_en=$(json_get_bool enable)
+				if [ "$_en" = "1" ]; then
+					run_cli set-luci-login "$_name" --enable --json
+				else
+					run_cli set-luci-login "$_name" --disable --json
+				fi
 				;;
 			passwd)
 				_name=$(json_get name)

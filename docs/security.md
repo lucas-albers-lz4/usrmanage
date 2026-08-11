@@ -58,14 +58,18 @@ with password required (no NOPASSWD). **Admin role means full root via sudo.** D
 
 **Invariant: never grant `usrmanage` (or the shell script behind it) via a NOPASSWD sudoers rule.** The password gate is what makes `%wheel` require an explicit credential; a NOPASSWD rule would let any member of the allowed set run `usrmanage` as root without a password, and combined with the environment-override gate below that becomes arbitrary root file rewrite.
 
-## LuCI ACL wiring (no auto login in v1)
+## LuCI login lifecycle (opt-in)
 
-Use `luci-app-acl` / `rpcd` login with `$p$username` for UNIX shadow passwords:
+Managed users default to **SSH-only**. Opt-in LuCI logins created by usrmanage:
 
-| LuCI principal | ACL grant |
-|----------------|-----------|
-| Readonly operator | `luci-app-usrmanage` **read** only |
-| Admin operator | `luci-app-usrmanage` **read + write** |
+- Always use `$p$username` (UNIX shadow). Empty or locked (`!`/`*`) shadow hashes are refused — rpcd treats an empty hash as **any password**.
+- Are marked `option usrmanage '1'` and only mutated when marker + registry + `$p$` match.
+- Never grant `*` or `luci-base` write; use fixed role ACL matrix (see [roles-and-acl.md](user/roles-and-acl.md)).
+- Revoke the target user's ubus sessions on disable, role change, delete, and password change (live sessions keep ACLs until destroyed).
+
+Enabling web login makes the SSH/sudo password reachable via unauthenticated `session.login` (often over HTTP). Prefer HTTPS and a management VLAN/VPN. Write ACL on `luci-app-usrmanage` remains root-equivalent.
+
+Manual `luci-app-acl` logins (including separate hash passwords) stay out of scope and are never overwritten.
 
 ## Package lifecycle
 

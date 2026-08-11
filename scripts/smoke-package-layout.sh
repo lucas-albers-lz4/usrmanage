@@ -12,6 +12,7 @@ need() {
 need "$FEED/usrmanage/Makefile"
 need "$FEED/usrmanage/files/usr/sbin/usrmanage"
 need "$FEED/usrmanage/files/usr/lib/usrmanage/usrmanage-lib.sh"
+need "$FEED/usrmanage/files/usr/lib/usrmanage/usrmanage-luci-login.sh"
 need "$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
 need "$FEED/usrmanage/files/etc/usrmanage/users"
 need "$FEED/usrmanage/files/etc/uci-defaults/90-usrmanage"

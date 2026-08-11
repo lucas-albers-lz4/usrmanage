@@ -63,7 +63,7 @@ const callSetPolicy = rpc.declare({
 const callAdd = rpc.declare({
 	object: 'usrmanage',
 	method: 'add',
-	params: [ 'name', 'role', 'password' ],
+	params: [ 'name', 'role', 'password', 'luci_login' ],
 	expect: { '': { ok: true } }
 });
 
@@ -78,6 +78,13 @@ const callSetRole = rpc.declare({
 	object: 'usrmanage',
 	method: 'set_role',
 	params: [ 'name', 'role' ],
+	expect: { '': { ok: true } }
+});
+
+const callSetLuciLogin = rpc.declare({
+	object: 'usrmanage',
+	method: 'set_luci_login',
+	params: [ 'name', 'enable' ],
 	expect: { '': { ok: true } }
 });
 
@@ -326,6 +333,15 @@ return view.extend({
 
 		const rows = users.map(function(u) {
 			const actions = [];
+			const luciState = u.luci_login || 'none';
+			let luciLabel = _('Off');
+			if (luciState === 'owned')
+				luciLabel = _('On');
+			else if (luciState === 'foreign')
+				luciLabel = _('Elsewhere');
+			else if (luciState === 'tampered')
+				luciLabel = _('Tampered');
+
 			if (manage && u.managed) {
 				actions.push(E('button', {
 					'class': 'btn cbi-button',
@@ -339,6 +355,22 @@ return view.extend({
 					'click': ui.createHandlerFn(self, 'handlePasswd', u.name, policyForForms)
 				}, _('Password')));
 				actions.push(' ');
+				if (luciState === 'none') {
+					actions.push(E('button', {
+						'class': 'btn cbi-button',
+						'data-testid': 'usrmanage-luci-enable',
+						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, true)
+					}, _('Enable LuCI')));
+					actions.push(' ');
+				}
+				else if (luciState === 'owned') {
+					actions.push(E('button', {
+						'class': 'btn cbi-button',
+						'data-testid': 'usrmanage-luci-disable',
+						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, false)
+					}, _('Disable LuCI')));
+					actions.push(' ');
+				}
 				actions.push(E('button', {
 					'class': 'btn cbi-button cbi-button-remove',
 					'data-testid': 'usrmanage-remove',
@@ -358,6 +390,7 @@ return view.extend({
 				E('td', { 'class': 'td' }, u.role || ''),
 				E('td', { 'class': 'td' }, u.shell || ''),
 				E('td', { 'class': 'td' }, u.managed ? _('yes') : _('no')),
+				E('td', { 'class': 'td', 'data-testid': 'usrmanage-luci-state' }, luciLabel),
 				E('td', { 'class': 'td' }, actions)
 			]);
 		});
@@ -388,11 +421,12 @@ return view.extend({
 				E('th', { 'class': 'th' }, _('Role')),
 				E('th', { 'class': 'th' }, _('Shell')),
 				E('th', { 'class': 'th' }, _('Managed')),
+				E('th', { 'class': 'th' }, _('LuCI')),
 				E('th', { 'class': 'th' }, _('Actions'))
 			])
 		].concat(rows.length ? rows : [
 			E('tr', { 'class': 'tr' }, [
-				E('td', { 'class': 'td', 'colspan': 6 }, _('No managed users yet.'))
+				E('td', { 'class': 'td', 'colspan': 7 }, _('No managed users yet.'))
 			])
 		]);
 
@@ -416,9 +450,9 @@ return view.extend({
 		return E('div', { 'class': 'cbi-map' }, elChildren([
 			E('h2', {}, _('User Management')),
 			E('div', { 'class': 'cbi-map-descr' }, [
-				_('Manage local UNIX/SSH accounts on this device. LuCI web logins are configured separately (Administration / ACL).'),
+				_('Manage local UNIX/SSH accounts on this device. LuCI web login is optional per user (same UNIX password via $p$).'),
 				E('br'),
-				_('Admin role grants wheel + sudo (full root after password). Audit log is operational (local + syslog), not compliance-grade evidence.')
+				_('Admin role grants wheel + sudo (full root after password). Write ACL on this app is root-equivalent. Audit log is operational (local + syslog), not compliance-grade evidence.')
 			]),
 			doctorBanner,
 			policyStrip,
@@ -624,6 +658,10 @@ return view.extend({
 			'autocomplete': 'new-password',
 			'data-testid': 'usrmanage-add-password-confirm'
 		});
+		const luciCheck = E('input', {
+			'type': 'checkbox',
+			'data-testid': 'usrmanage-add-luci-login'
+		});
 		const addBtn = E('button', {
 			'class': 'btn cbi-button-positive cbi-button-disabled',
 			'disabled': 'disabled',
@@ -642,6 +680,7 @@ return view.extend({
 			const role = roleSelect.value;
 			const p1 = passInput.value;
 			const p2 = pass2Input.value;
+			const wantLuci = !!luciCheck.checked;
 			if (!name) {
 				ui.addNotification(null, E('p', {}, _('Username required')), 'danger');
 				return;
@@ -650,7 +689,7 @@ return view.extend({
 				ui.addNotification(null, E('p', {}, _('Password does not meet the current policy')), 'danger');
 				return;
 			}
-			return callAdd(name, role, p1).then(function(res) {
+			return callAdd(name, role, p1, wantLuci).then(function(res) {
 				passInput.value = '';
 				pass2Input.value = '';
 				return finishMutator(res, _('User added'), self);
@@ -679,12 +718,51 @@ return view.extend({
 					E('label', { 'class': 'cbi-value-title' }, _('Confirm')),
 					E('div', { 'class': 'cbi-value-field' }, pass2Input)
 				]),
+				E('div', { 'class': 'cbi-value' }, [
+					E('label', { 'class': 'cbi-value-title' }, _('Allow LuCI web login')),
+					E('div', { 'class': 'cbi-value-field' }, [
+						luciCheck,
+						E('div', { 'class': 'cbi-value-description' },
+							_('Uses the same UNIX password. Off by default. Exposes this password to the web login path.'))
+					])
+				]),
 				policyBox
 			]),
 			E('div', { 'class': 'right' }, [
 				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
 				' ',
 				addBtn
+			])
+		]);
+	},
+
+	handleLuciLogin: function(name, enable, ev) {
+		const self = this;
+		const title = enable
+			? _('Enable LuCI login: %s').format(name)
+			: _('Disable LuCI login: %s').format(name);
+		const body = enable
+			? _('This reuses the UNIX password for web login ($p$). Prefer HTTPS and a management network.')
+			: _('Removes the usrmanage-owned web login. SSH still works. If this is your current session, you will be logged out.');
+
+		ui.showModal(title, [
+			E('p', {}, body),
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
+				' ',
+				E('button', {
+					'class': enable ? 'btn cbi-button-positive' : 'btn cbi-button-negative',
+					'data-testid': enable ? 'usrmanage-luci-enable-confirm' : 'usrmanage-luci-disable-confirm',
+					'click': ui.createHandlerFn(self, function() {
+						return callSetLuciLogin(name, enable).then(function(res) {
+							return finishMutator(res, enable ? _('LuCI login enabled') : _('LuCI login disabled'), self);
+						}).catch(function(err) {
+							notifyRequestFailed();
+							if (window && window.console)
+								console.error('usrmanage set_luci_login', err);
+						});
+					})
+				}, enable ? _('Enable') : _('Disable'))
 			])
 		]);
 	},

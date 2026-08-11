@@ -49,6 +49,7 @@ define Package/usrmanage/install
 
 	$(INSTALL_DIR) $(1)/usr/lib/usrmanage
 	$(INSTALL_DATA) ./files/usr/lib/usrmanage/usrmanage-lib.sh $(1)/usr/lib/usrmanage/usrmanage-lib.sh
+	$(INSTALL_DATA) ./files/usr/lib/usrmanage/usrmanage-luci-login.sh $(1)/usr/lib/usrmanage/usrmanage-luci-login.sh
 
 	$(INSTALL_DIR) $(1)/etc/sudoers.d
 	$(INSTALL_DATA) ./files/etc/sudoers.d/usrmanage $(1)/etc/sudoers.d/usrmanage
