@@ -1726,18 +1726,14 @@ um_mut_del() {
 			um_die "error: last_admin"
 		fi
 	fi
-	um_tx_begin
 	um_incomplete_set "del:${_name}"
-	um_lock_account "$_name" || um_mut_fail "$_name" "$_role" "" 0 lock "error: lock_failed"
-	um_kill_user_procs "$_name"
-	um_wheel_del_user "$_name" || um_mut_fail "$_name" "$_role" "" 0 wheel_del "error: wheel_del_failed"
-	um_delete_account "$_name" "$_purge" || um_mut_fail "$_name" "$_role" "" 0 delete "error: delete_failed"
-	# Commit before registry_del: purge may have removed the home already, so
-	# EXIT rollback must not recreate passwd/shadow/group without a home.
-	um_tx_commit
-	# Revoke sessions, then drop our rpcd login, then unregister.
-	if command -v um_session_revoke_required >/dev/null 2>&1; then
-		um_session_revoke_required "$_name"
+	# Fail closed before UNIX delete: revoke sessions and drop our rpcd login first.
+	if command -v um_session_revoke_user >/dev/null 2>&1; then
+		if ! um_session_revoke_user "$_name"; then
+			um_incomplete_clear
+			um_audit fail "$_name" fail session_revoke_unavailable "$_role"
+			um_die "error: session_revoke_unavailable"
+		fi
 	fi
 	if command -v um_luci_login_remove_owned_best_effort >/dev/null 2>&1; then
 		um_luci_login_remove_owned_best_effort "$_name" || {
@@ -1746,6 +1742,14 @@ um_mut_del() {
 			um_die "error: luci_login_cleanup_failed"
 		}
 	fi
+	um_tx_begin
+	um_lock_account "$_name" || um_mut_fail "$_name" "$_role" "" 0 lock "error: lock_failed"
+	um_kill_user_procs "$_name"
+	um_wheel_del_user "$_name" || um_mut_fail "$_name" "$_role" "" 0 wheel_del "error: wheel_del_failed"
+	um_delete_account "$_name" "$_purge" || um_mut_fail "$_name" "$_role" "" 0 delete "error: delete_failed"
+	# Commit before registry_del: purge may have removed the home already, so
+	# EXIT rollback must not recreate passwd/shadow/group without a home.
+	um_tx_commit
 	um_registry_del "$_name" || {
 		um_incomplete_clear
 		um_audit fail "$_name" fail registry "$_role"
