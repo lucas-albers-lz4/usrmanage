@@ -8,6 +8,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 "$ROOT/scripts/smoke-package-layout.sh"
 "$ROOT/tests/test_validators.sh"
 "$ROOT/tests/test_mutators.sh"
+"$ROOT/tests/test_luci_login.sh"
 "$ROOT/tests/test_phase1_foundation.sh"
 "$ROOT/tests/test_mutators-busybox-fallback.sh"
 

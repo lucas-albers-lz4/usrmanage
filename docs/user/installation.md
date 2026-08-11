@@ -33,4 +33,5 @@ usrmanage add ops --role admin
 # password via prompt or --password-fd
 ```
 
-Wire LuCI web logins separately with `luci-app-acl` (`$p$ops` for shadow). See [roles-and-acl.md](roles-and-acl.md).
+Wire LuCI for managed users with **Allow LuCI web login** (or `usrmanage set-luci-login`), or manually via `luci-app-acl`. See [roles-and-acl.md](roles-and-acl.md).
+

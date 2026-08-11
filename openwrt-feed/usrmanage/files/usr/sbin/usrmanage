@@ -30,6 +30,9 @@ if [ -z "$LIB" ] || [ ! -f "$LIB" ]; then
 	exit 1
 fi
 
+USRMANAGE_LIB_DIR=$(cd "$(dirname "$LIB")" && pwd)
+export USRMANAGE_LIB_DIR
+
 # shellcheck disable=SC1090
 . "$LIB"
 
@@ -45,8 +48,9 @@ View:
   policy [--json] [--full]
 
 Manage (root):
-  add <user> --role readonly|admin [--password-fd N] [--json]
+  add <user> --role readonly|admin [--luci-login] [--password-fd N] [--json]
   set-role <user> --role readonly|admin [--json]
+  set-luci-login <user> --enable|--disable [--json]
   passwd <user> [--password-fd N] [--json]
   del <user> [--purge-home] [--json]
   set-policy --preset openwrt|standard|strict|custom [options] [--json]
@@ -62,6 +66,8 @@ CMD=
 PASS_FD=
 ROLE=
 PURGE=0
+LUCI_LOGIN=0
+LUCI_LOGIN_MODE=
 NAME=
 LAST=50
 ALL=0
@@ -107,6 +113,18 @@ while [ "$#" -gt 0 ]; do
 			;;
 		--purge-home)
 			PURGE=1
+			shift
+			;;
+		--luci-login)
+			LUCI_LOGIN=1
+			shift
+			;;
+		--enable)
+			LUCI_LOGIN_MODE=enable
+			shift
+			;;
+		--disable)
+			LUCI_LOGIN_MODE=disable
 			shift
 			;;
 		--password-fd)
@@ -261,15 +279,21 @@ case "$CMD" in
 		;;
 	add)
 		um_require_root
-		[ -n "$NAME" ] || um_die "usage: usrmanage add <user> --role readonly|admin"
-		[ -n "$ROLE" ] || um_die "usage: usrmanage add <user> --role readonly|admin"
-		um_with_lock um_mut_add "$NAME" "$ROLE" "$PASS_FD"
+		[ -n "$NAME" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login]"
+		[ -n "$ROLE" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login]"
+		um_with_lock um_mut_add "$NAME" "$ROLE" "$PASS_FD" "$LUCI_LOGIN"
 		;;
 	set-role)
 		um_require_root
 		[ -n "$NAME" ] || um_die "usage: usrmanage set-role <user> --role readonly|admin"
 		[ -n "$ROLE" ] || um_die "usage: usrmanage set-role <user> --role readonly|admin"
 		um_with_lock um_mut_set_role "$NAME" "$ROLE"
+		;;
+	set-luci-login)
+		um_require_root
+		[ -n "$NAME" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable"
+		[ -n "$LUCI_LOGIN_MODE" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable"
+		um_with_lock um_mut_set_luci_login "$NAME" "$LUCI_LOGIN_MODE"
 		;;
 	passwd)
 		um_require_root

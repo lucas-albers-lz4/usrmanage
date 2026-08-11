@@ -1,4 +1,13 @@
 {
+	"luci-app-usrmanage-session": {
+		"description": "Minimal LuCI shell for usrmanage web logins (no luci-base filesystem listing)",
+		"read": {
+			"ubus": {
+				"uci": [ "get", "changes" ]
+			},
+			"uci": [ "luci", "system" ]
+		}
+	},
 	"luci-app-usrmanage": {
 		"description": "Grant access to local UNIX user management",
 		"read": {
@@ -8,7 +17,7 @@
 		},
 		"write": {
 			"ubus": {
-				"usrmanage": [ "add", "del", "set_role", "passwd", "get_policy", "set_policy" ]
+				"usrmanage": [ "add", "del", "set_role", "passwd", "get_policy", "set_policy", "set_luci_login" ]
 			}
 		}
 	}

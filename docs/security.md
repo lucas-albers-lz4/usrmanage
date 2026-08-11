@@ -47,14 +47,18 @@ Do **not** copy stock `luci setPassword` `echo \| passwd` shell interpolation pa
 
 with password required (no NOPASSWD). **Admin role means full root via sudo.** Document this for auditors and customers.
 
-## LuCI ACL wiring (no auto login in v1)
+## LuCI login lifecycle (opt-in)
 
-Use `luci-app-acl` / `rpcd` login with `$p$username` for UNIX shadow passwords:
+Managed users default to **SSH-only**. Opt-in LuCI logins created by usrmanage:
 
-| LuCI principal | ACL grant |
-|----------------|-----------|
-| Readonly operator | `luci-app-usrmanage` **read** only |
-| Admin operator | `luci-app-usrmanage` **read + write** |
+- Always use `$p$username` (UNIX shadow). Empty or locked (`!`/`*`) shadow hashes are refused — rpcd treats an empty hash as **any password**.
+- Are marked `option usrmanage '1'` and only mutated when marker + registry + `$p$` match.
+- Never grant `*` or `luci-base` write; use fixed role ACL matrix (see [roles-and-acl.md](user/roles-and-acl.md)).
+- Revoke the target user's ubus sessions on disable, role change, delete, and password change (live sessions keep ACLs until destroyed).
+
+Enabling web login makes the SSH/sudo password reachable via unauthenticated `session.login` (often over HTTP). Prefer HTTPS and a management VLAN/VPN. Write ACL on `luci-app-usrmanage` remains root-equivalent.
+
+Manual `luci-app-acl` logins (including separate hash passwords) stay out of scope and are never overwritten.
 
 ## Package lifecycle
 

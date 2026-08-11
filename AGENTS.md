@@ -8,7 +8,7 @@ OpenWrt **local UNIX user management** (CLI + LuCI): managed users, readonly vs 
 - Password policy factory default: **OpenWrt** (min 8, reject username). Stricter presets/toggles apply only after explicit LuCI **Save** (or CLI `set-policy`).
 - Read ACL: policy **name/label only**. Write ACL: `get_policy` / `set_policy` + mutators.
 - Passwords: never on argv or in audit/logs; LuCI → rpcd → `--password-fd` / stdin only.
-- LuCI web logins are **not** auto-created; wire via `luci-app-acl` (`$p$user`).
+- LuCI web logins for managed users are **opt-in** (`set-luci-login` / Add checkbox); owned logins use `$p$user` only. Manual `luci-app-acl` still supported for foreign principals.
 - Admin = full root via sudo after password (no NOPASSWD) — by design.
 
 ## Code conventions

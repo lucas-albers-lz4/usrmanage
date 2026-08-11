@@ -7,6 +7,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 shellcheck -s sh \
 	"$ROOT/openwrt-feed/usrmanage/files/usr/sbin/usrmanage" \
 	"$ROOT/openwrt-feed/usrmanage/files/usr/lib/usrmanage/usrmanage-lib.sh" \
+	"$ROOT/openwrt-feed/usrmanage/files/usr/lib/usrmanage/usrmanage-luci-login.sh" \
 	"$ROOT/openwrt-feed/usrmanage/files/etc/uci-defaults/90-usrmanage" \
 	"$ROOT/openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage" \
 	"$ROOT/scripts/smoke-package-layout.sh" \

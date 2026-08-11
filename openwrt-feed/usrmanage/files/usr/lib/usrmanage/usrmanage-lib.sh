@@ -25,6 +25,14 @@
 : "${USRMANAGE_SRC:=cli}"
 : "${USRMANAGE_ACTOR:=}"
 : "${USRMANAGE_DRY_RUN:=0}"
+: "${USRMANAGE_LIB_DIR:=/usr/lib/usrmanage}"
+: "${USRMANAGE_RPCD_CONFIG:=/etc/config/rpcd}"
+
+# Opt-in LuCI login helpers (issue #86)
+if [ -f "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh" ]; then
+	# shellcheck disable=SC1090,SC1091
+	. "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh"
+fi
 
 # Effective password policy (populated by um_policy_load)
 UM_POL_PRESET=openwrt
@@ -1342,11 +1350,16 @@ um_emit_user_json() {
 	_role=$(um_role_of "$_u")
 	_locked=false
 	um_user_locked "$_u" && _locked=true
+	_luci=none
+	if command -v um_luci_login_state >/dev/null 2>&1; then
+		_luci=$(um_luci_login_state "$_u")
+	fi
 	_nu=$(printf '%s' "$_u" | um_json_escape)
 	_nh=$(printf '%s' "$_home" | um_json_escape)
 	_ns=$(printf '%s' "$_shell" | um_json_escape)
-	printf '{"name":"%s","uid":%s,"gid":%s,"role":"%s","shell":"%s","home":"%s","managed":%s,"locked":%s}' \
-		"$_nu" "$_uid" "$_gid" "$_role" "$_ns" "$_nh" "$_managed" "$_locked"
+	_nl=$(printf '%s' "$_luci" | um_json_escape)
+	printf '{"name":"%s","uid":%s,"gid":%s,"role":"%s","shell":"%s","home":"%s","managed":%s,"locked":%s,"luci_login":"%s"}' \
+		"$_nu" "$_uid" "$_gid" "$_role" "$_ns" "$_nh" "$_managed" "$_locked" "$_nl"
 }
 
 um_cmd_list() {
@@ -1532,6 +1545,7 @@ um_mut_add() {
 	_name=$1
 	_role=$2
 	_pfd=$3
+	_luci_login=${4:-0}
 	um_mut_require_valid_username "$_name" "$_role"
 	um_validate_role "$_role" || {
 		um_audit denied "$_name" denied invalid_role
@@ -1545,6 +1559,28 @@ um_mut_add() {
 		um_audit denied "$_name" denied wheel_missing "$_role"
 		um_die "error: wheel_missing"
 	}
+	if [ "$_luci_login" = "1" ] && command -v um_luci_login_state >/dev/null 2>&1; then
+		um_rpcd_pending_ok || {
+			um_audit denied "$_name" denied rpcd_pending_changes "$_role"
+			um_die "error: rpcd_pending_changes"
+		}
+		_pre=$(um_luci_login_state "$_name")
+		case "$_pre" in
+			none) ;;
+			foreign)
+				um_audit denied "$_name" denied login_exists_foreign "$_role"
+				um_die "error: login_exists_foreign"
+				;;
+			tampered)
+				um_audit denied "$_name" denied login_tampered "$_role"
+				um_die "error: login_tampered"
+				;;
+			owned)
+				um_audit denied "$_name" denied login_exists_foreign "$_role"
+				um_die "error: login_exists_foreign"
+				;;
+		esac
+	fi
 	_home="${USRMANAGE_HOME_ROOT}/${_name}"
 	_home_existed=0
 	[ -e "$_home" ] && _home_existed=1
@@ -1553,14 +1589,23 @@ um_mut_add() {
 	um_create_user "$_name" "$_role" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" create "error: create_failed"
 	um_set_password "$_name" "$_pfd" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 	um_registry_add "$_name" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" registry "error: registry_failed"
+	if [ "$_luci_login" = "1" ] && command -v um_luci_login_enable_user >/dev/null 2>&1; then
+		if ! um_luci_login_enable_user "$_name"; then
+			um_luci_login_remove_owned_best_effort "$_name" 2>/dev/null || true
+			um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" luci_login \
+				"error: ${UM_LUCI_ERR:-luci_login_failed}"
+		fi
+	fi
 	um_tx_commit
 	um_incomplete_clear
 	um_audit grant "$_name" ok "" "$_role"
+	_luci_st=none
+	command -v um_luci_login_state >/dev/null 2>&1 && _luci_st=$(um_luci_login_state "$_name")
 	if [ "${JSON_OUT:-0}" = "1" ]; then
-		printf '{"ok":true,"name":"%s","role":"%s"}\n' \
-			"$(printf '%s' "$_name" | um_json_escape)" "$_role"
+		printf '{"ok":true,"name":"%s","role":"%s","luci_login":"%s"}\n' \
+			"$(printf '%s' "$_name" | um_json_escape)" "$_role" "$_luci_st"
 	else
-		printf 'ok: added %s role=%s\n' "$_name" "$_role"
+		printf 'ok: added %s role=%s luci_login=%s\n' "$_name" "$_role" "$_luci_st"
 	fi
 }
 
@@ -1596,6 +1641,19 @@ um_mut_set_role() {
 			um_die "error: wheel_del_failed"
 		}
 	fi
+	if command -v um_luci_login_sync_acls >/dev/null 2>&1; then
+		_lst=$(um_luci_login_state "$_name")
+		if [ "$_lst" = "owned" ]; then
+			um_luci_login_sync_acls "$_name" "$_role" || {
+				um_incomplete_clear
+				um_audit fail "$_name" fail luci_login_sync "$_role"
+				um_die "error: luci_login_sync_failed"
+			}
+		fi
+	fi
+	if command -v um_session_revoke_required >/dev/null 2>&1; then
+		um_session_revoke_required "$_name"
+	fi
 	um_incomplete_clear
 	um_audit role "$_name" ok "from=${_cur}" "$_role"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
@@ -1618,6 +1676,9 @@ um_mut_passwd() {
 		um_audit fail "$_name" fail password
 		um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 	}
+	if command -v um_session_revoke_required >/dev/null 2>&1; then
+		um_session_revoke_required "$_name"
+	fi
 	um_incomplete_clear
 	um_audit passwd "$_name" ok "" "$(um_role_of "$_name")"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
@@ -1655,6 +1716,16 @@ um_mut_del() {
 		um_audit fail "$_name" fail registry "$_role"
 		um_die "error: registry_failed"
 	}
+	if command -v um_luci_login_remove_owned_best_effort >/dev/null 2>&1; then
+		um_luci_login_remove_owned_best_effort "$_name" || {
+			um_incomplete_clear
+			um_audit fail "$_name" fail luci_login_cleanup "$_role"
+			um_die "error: luci_login_cleanup_failed"
+		}
+	fi
+	if command -v um_session_revoke_required >/dev/null 2>&1; then
+		um_session_revoke_required "$_name"
+	fi
 	um_incomplete_clear
 	um_audit remove "$_name" ok "" "$_role"
 	if [ "${JSON_OUT:-0}" = "1" ]; then

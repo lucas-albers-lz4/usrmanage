@@ -300,3 +300,79 @@ msgstr ""
 msgid "yes"
 msgstr ""
 
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Off"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "On"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Elsewhere"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Tampered"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Enable LuCI"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Disable LuCI"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "LuCI"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Manage local UNIX/SSH accounts on this device. LuCI web login is optional per user (same UNIX password via $p$)."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Admin role grants wheel + sudo (full root after password). Write ACL on this app is root-equivalent. Audit log is operational (local + syslog), not compliance-grade evidence."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Allow LuCI web login"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Uses the same UNIX password. Off by default. Exposes this password to the web login path."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Enable LuCI login: %s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Disable LuCI login: %s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "This reuses the UNIX password for web login ($p$). Prefer HTTPS and a management network."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Removes the usrmanage-owned web login. SSH still works. If this is your current session, you will be logged out."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "LuCI login enabled"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "LuCI login disabled"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Enable"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Disable"
+msgstr ""
