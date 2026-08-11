@@ -20,7 +20,6 @@
 
 - [ ] #15 docs WebP screenshots (clean lab; WIP branch `feat/15-docs-screenshots`)
 - [ ] Release tag after lab acceptance (`docs/release.md`)
-- [ ] [#86](https://github.com/lucas-albers-lz4/usrmanage/issues/86) opt-in LuCI login lifecycle (in progress on `feat/luci-login-lifecycle`)
 
 ## Later
 
