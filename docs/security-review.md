@@ -19,14 +19,14 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh` | 2026-08-09 | [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) S1/S2/S4, [#65](https://github.com/lucas-albers-lz4/usrmanage/issues/65) P2 |
-| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-09 | [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) S3 |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh` | 2026-08-09 | none |
+| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-09 | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-09 | none |
-| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-09 | [#65](https://github.com/lucas-albers-lz4/usrmanage/issues/65) P1 |
-| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-09 | [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R1/R3/R5 |
-| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-09 | [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R2/R4 |
-| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-09 | [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R4 |
-| Operator trust bootstrap | `docs/binary-feed.md`, published feed keys | 2026-08-09 | [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64) |
+| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-09 | none |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-09 | none |
+| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-09 | none |
+| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-09 | none |
+| Operator trust bootstrap | `docs/binary-feed.md`, published feed keys | 2026-08-09 | none |
 | QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-09 | none — lab-only fixtures and passwords are by design, never shipped |
 
 ## How to re-verify (current gates)
@@ -83,15 +83,19 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 ## Open findings
 
-One row per open tracking issue. Close the row out here when the issue closes.
+None. All findings from the 2026-08-09 passes are resolved. See [Resolved findings](#resolved-findings) below. The one deferred item, [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) S2 (no `flock -w` wait timeout), is an accepted BusyBox constraint. See [Accepted residuals](#accepted-residuals).
 
-| Issue | Area | Summary |
-|-------|------|---------|
-| [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) | CLI / rpcd | S1 BRE `grep` on usernames (`um_passwd_line`, `um_user_locked`, `um_is_managed`); S2 no `flock` wait timeout; S3 unvalidated `$RPC_SESSION` in `session_actor`; S4 unset `$_role` in first validity audit |
-| [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) | CI / release | R1 `workflow_dispatch` input interpolated into `run:`; R2 usign secret mode drops to 0644; R3 mutable action tags (CodeQL alert already dismissed as fleet standard — decision to revisit, not a new find); R4 unpinned usign / index script / SDK digests; R5 no workflow linter beyond CodeQL |
-| [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64) | Operator trust | Feed signing key fingerprints not published for out-of-band verification |
-| [#65](https://github.com/lucas-albers-lz4/usrmanage/issues/65) | Product | P1 `USRMANAGE_*` path overrides are ungated (latent if a NOPASSWD sudo rule is ever added); P2 password silently truncated at first newline |
-| [#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66) | Tooling | Host gate not fully runnable on macOS (GNU `stat`, PATH-pinned fallback test) |
+## Resolved findings
+
+Resolved by the audit remediation wave. Close the tracking issue when the fix lands.
+
+| Issue | Area | Resolved by |
+|-------|------|-------------|
+| [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) S1/S3/S4 | CLI / rpcd | [PR #80](https://github.com/lucas-albers-lz4/usrmanage/pull/80) — `grep -F` username lookups, rpcd session hex whitelist, role resolution before audit |
+| [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R1–R5 | CI / release | [PR #78](https://github.com/lucas-albers-lz4/usrmanage/pull/78) + [PR #79](https://github.com/lucas-albers-lz4/usrmanage/pull/79) + [PR #82](https://github.com/lucas-albers-lz4/usrmanage/pull/82) — env-routing, usign key 0600, SHA-pins + actionlint gate, tooling pins |
+| [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64) | Operator trust | [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81) — key fingerprints published in the README, [binary-feed.md](binary-feed.md), and the feed README. Install snippets verify the SHA-256. |
+| [#65](https://github.com/lucas-albers-lz4/usrmanage/issues/65) P1/P2 | Product | [PR #83](https://github.com/lucas-albers-lz4/usrmanage/pull/83) — test-only env-override gate and multi-line / control-char password rejection |
+| [#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66) | Tooling | [PR #84](https://github.com/lucas-albers-lz4/usrmanage/pull/84) — portable stat helper, flock shim, and skip reasons. The full gate runs on macOS. |
 
 ## Accepted residuals
 
@@ -132,9 +136,9 @@ Scope: `openwrt-feed/usrmanage`, `openwrt-feed/luci-app-usrmanage`, docs, host t
 
 Residual items from this pass (still accepted unless noted later): ubus password hop, UI write-ACL hint vs server ACL, best-effort process kill, non-tamper-evident local audit.
 
-### Issue #3 — Zen-MCR criticals / majors (fixed)
+### Issue #3 — Critical and major findings (fixed)
 
-Tracking: [issue #3](https://github.com/lucas-albers-lz4/usrmanage/issues/3). Criticals C1–C7 landed in [PR #4](https://github.com/lucas-albers-lz4/usrmanage/pull/4); Fix-now majors in [PR #5](https://github.com/lucas-albers-lz4/usrmanage/pull/5); LuCI error detail (M8) in [PR #7](https://github.com/lucas-albers-lz4/usrmanage/pull/7); host mutator/lock/rpcd tests (M9) and remaining Later items in follow-up PRs (#10/#11 and later hardening).
+Tracking: [issue #3](https://github.com/lucas-albers-lz4/usrmanage/issues/3). Critical findings C1–C7 landed in [PR #4](https://github.com/lucas-albers-lz4/usrmanage/pull/4); major findings in [PR #5](https://github.com/lucas-albers-lz4/usrmanage/pull/5); the LuCI error-detail finding (M8) in [PR #7](https://github.com/lucas-albers-lz4/usrmanage/pull/7); host mutator/lock/rpcd tests (M9) and the remaining lower-priority items in follow-up PRs (#10/#11 and later hardening).
 
 | ID | Finding | Status |
 |----|---------|--------|
@@ -180,7 +184,7 @@ Confirmed still holding, no change needed: audit field injection (#3 C1) — aud
 3. Diff the surface against [Controls in force](#controls-in-force). Anything new — mutator, rpcd method, file-write path, workflow step, release input — needs a named guard and a proof, or it is a finding.
 4. Re-run the gates in [How to re-verify](#how-to-re-verify-current-gates) and reproduce each finding before filing it. Findings in this repo are expected to come with the command that demonstrates them. Check dismissed CodeQL alerts too — a "new" finding may already have a recorded decision.
 5. File one tracking issue per theme with the `security` label, using an ID table (`S1`, `R1`, `P1`) so the ledger and the issue can reference the same rows. One issue plus one PR per hardening batch.
-6. In the same PR: append a dated entry under [Audit history](#audit-history), refresh the coverage map dates, and add or close rows in [Open findings](#open-findings).
+6. In the same PR: append a dated entry under [Audit history](#audit-history), refresh the coverage map dates, and add or close rows in [Open findings](#open-findings). Closed rows move to [Resolved findings](#resolved-findings).
 7. Sibling repos (e.g. fwlive) may share patterns; treat cross-repo notes as candidates, not as an audit of that repo.
 
 ## Related

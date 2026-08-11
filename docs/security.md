@@ -82,7 +82,7 @@ BusyBox `flock` has no wait-timeout (`-w`). A stuck holder blocks concurrent man
 
 ## Binary feed trust
 
-Installing from the [signed feed](binary-feed.md) currently bootstraps trust on first use: the operator downloads the signing public key over HTTPS from the same origin that serves the packages. Publishing fingerprints so that download can be verified out of band is tracked in [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64). Until then, prefer installing on a network you trust, and keep `ca-bundle` present so the HTTPS fetch is actually validated.
+Installing from the [signed feed](binary-feed.md) bootstraps trust on first use. The operator downloads the signing public key over HTTPS from the same origin that serves the packages. The key fingerprints are published for out-of-band verification. See the key table in [binary-feed.md](binary-feed.md) and the [README](../README.md) ([#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64), fixed in [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81)). The install snippets verify the SHA-256 before trusting the key. Prefer installing on a network you trust, and keep `ca-bundle` present so the HTTPS fetch is actually validated.
 
 ## Future reviews
 

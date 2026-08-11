@@ -31,7 +31,7 @@ Runs shellcheck, link check, package layout, validators, mutators, and (if `node
 | `node` | theme / i18n / parity tests (skipped with a warning if absent) | `brew install node` |
 | `python3` + `z3` | `scripts/z3-verify.py` | `pip install -r requirements-z3.txt` / `apt install python3-z3` |
 
-On stock macOS, `smoke-host.sh` stops at the first missing tool, so install `flock` before trusting a green run. Even with it, two stages still fail on macOS — `test_phase1_foundation.sh` (GNU `stat -c`) and `test_mutators-busybox-fallback.sh` (pins `PATH=/usr/bin:/bin`, which hides Homebrew binaries). Both are portability gaps in the tests, not product bugs; tracked in [#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66). Linux CI runs all stages.
+On stock macOS, `smoke-host.sh` stops at the first missing tool, so install `flock` before trusting a green run. Two stages previously failed on macOS: `test_phase1_foundation.sh` (GNU `stat -c`) and `test_mutators-busybox-fallback.sh` (it pins `PATH=/usr/bin:/bin`, which hides Homebrew binaries). [PR #84](https://github.com/lucas-albers-lz4/usrmanage/pull/84) fixed both with a portable stat helper, a flock absolute-path shim, and explicit skip reasons ([#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66)). The full gate now runs on macOS. Linux CI runs all stages.
 
 The shell stages and `smoke-host.sh` export `USRMANAGE_TEST_OVERRIDES=1` — the **test-only gate** that enables the `USRMANAGE_*` path overrides in the lib (issue #72 / #65). Outside the harness those overrides are inert.
 
