@@ -900,15 +900,18 @@ um_password_write() {
 	return $_rc
 }
 
-um_set_password_from_fd() {
+um_password_capture_fd() {
+	# um_password_capture_fd <user> <fd>
+	# Read password once from FD (no echo to logs) and stage it in
+	# UM_PASSWORD_STAGED. The whole fd is validated, not just the first line:
+	# an embedded (or trailing) newline must fail explicitly instead of
+	# silently truncating the secret (#72 P2). Policy failures return 1 with
+	# UM_POL_FAIL_REASON set and leave the staged value empty.
 	_u=$1
 	_fd=$2
-	# Read password once from FD (no echo to logs). The whole fd is
-	# validated, not just the first line: an embedded (or trailing) newline
-	# must fail explicitly instead of silently truncating the secret (#72 P2).
-	_pass=
+	UM_PASSWORD_STAGED=
 	# shellcheck disable=SC2039
-	IFS= read -r _pass <&"$_fd" || true
+	IFS= read -r UM_PASSWORD_STAGED <&"$_fd" || true
 	if [ ! -t "$_fd" ]; then
 		# Non-TTY fd: any second line (even an empty one) means the caller
 		# sent a multi-line value — reject before touching the account.
@@ -916,27 +919,23 @@ um_set_password_from_fd() {
 		IFS= read -r _rest <&"$_fd" && _has_more=1
 		_rest=
 		if [ "$_has_more" = "1" ]; then
-			_pass=
+			UM_PASSWORD_STAGED=
 			UM_POL_FAIL_REASON=multi_line
 			return 1
 		fi
 	fi
-	um_validate_password "$_u" "$_pass" || {
-		_pass=
+	um_validate_password "$_u" "$UM_PASSWORD_STAGED" || {
+		UM_PASSWORD_STAGED=
 		return 1
 	}
-	if [ "$USRMANAGE_DRY_RUN" = "1" ]; then
-		_pass=
-		return 0
-	fi
-	um_password_write "$_u" "$_pass"
-	_rc=$?
-	_pass=
-	return $_rc
+	return 0
 }
 
-um_set_password_prompt() {
+um_password_capture_prompt() {
+	# um_password_capture_prompt <user> — interactive TTY prompt; stages the
+	# accepted value in UM_PASSWORD_STAGED.
 	_u=$1
+	UM_PASSWORD_STAGED=
 	if [ ! -t 0 ]; then
 		um_err "error: no TTY; use --password-fd"
 		return 1
@@ -963,14 +962,35 @@ um_set_password_prompt() {
 		return 1
 	}
 	_p2=
-	if [ "$USRMANAGE_DRY_RUN" = "1" ]; then
-		_p1=
-		return 0
-	fi
-	um_password_write "$_u" "$_p1"
-	_rc=$?
+	UM_PASSWORD_STAGED=$_p1
 	_p1=
+	return 0
+}
+
+um_password_commit() {
+	# um_password_commit <user> — write the staged password to shadow
+	# (skipped in DRY_RUN) and scrub the staged value.
+	_u=$1
+	_rc=0
+	if [ "$USRMANAGE_DRY_RUN" != "1" ]; then
+		um_password_write "$_u" "$UM_PASSWORD_STAGED"
+		_rc=$?
+	fi
+	UM_PASSWORD_STAGED=
 	return $_rc
+}
+
+um_set_password_from_fd() {
+	_u=$1
+	_fd=$2
+	um_password_capture_fd "$_u" "$_fd" || return 1
+	um_password_commit "$_u"
+}
+
+um_set_password_prompt() {
+	_u=$1
+	um_password_capture_prompt "$_u" || return 1
+	um_password_commit "$_u"
 }
 
 um_lock_account() {
@@ -1766,12 +1786,27 @@ um_mut_passwd() {
 	um_mut_require_valid_username "$_name" "$_role"
 	um_mut_require_managed "$_name" "$_role"
 	um_mut_require_exists "$_name" "$_role" not_found
+	# Policy gate before any state change (issue #92): a rejected password must
+	# not destroy the target's live LuCI sessions or touch the shadow hash.
+	# The fd/prompt is consumed exactly once (staged); never read twice.
+	if [ -n "$_pfd" ]; then
+		um_password_capture_fd "$_name" "$_pfd" || {
+			um_audit fail "$_name" fail password
+			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+		}
+	else
+		um_password_capture_prompt "$_name" || {
+			um_audit fail "$_name" fail password
+			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+		}
+	fi
 	um_incomplete_set "passwd:${_name}"
-	# Revoke first so a failed revoke cannot leave live sessions after a password change.
+	# Revoke before write so a failed revoke cannot leave live sessions after
+	# a password change; policy already validated above.
 	if command -v um_session_revoke_required >/dev/null 2>&1; then
 		um_session_revoke_required "$_name"
 	fi
-	um_set_password "$_name" "$_pfd" || {
+	um_password_commit "$_name" || {
 		um_incomplete_clear
 		um_audit fail "$_name" fail password
 		um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
