@@ -92,8 +92,8 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Login section written in a libuci-valid form the awk parser cannot see | Fail-closed `um_rpcd_config_parsable` refuses state/enable/disable/reset/del when indented, abbreviated, or quoted-type sections are present | host | `tests/test_luci_login.sh` (indented / abbreviated / quoted) |
 | `/etc/config/rpcd` mode preserved on rewrite / rollback | Capture dest mode in `um_rpcd_atomic_replace` (default `0600`); `um_tx_restore_one` has a dedicated `rpcd` arm at `0600` | host | `tests/test_luci_login.sh` (enable/disable/reset + forced rollback) |
 | Live session keeps old ACLs after disable / role / del / passwd | `um_session_revoke_user` destroys matching ubus SIDs (`@.values.username` then `@.data.username`) | lab | `scripts/qemu-smoke-usrmanage.sh` (issue #95) — host DRY_RUN skips ubus and is **not** proof |
-| Same-role / ACL-repair `set-role` leaves elevated live sessions | **Open** — sync via `um_luci_login_ours_index` without revoke ([#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1) | host (+ lab) | pending fix + test |
-| `set-luci-login` multi-index rewrite crash window | `um_tx_begin` / `um_tx_commit` around enable/disable/reset (rpcd in snapshot set) | host | `tests/test_luci_login.sh` |
+| Same-role / ACL-repair `set-role` leaves elevated live sessions | After `um_luci_login_sync_acls` in set-role (including same-role), `_um_set_role_revoke` runs fail-closed | host | `tests/test_luci_login.sh` |
+| `set-luci-login` multi-index rewrite crash window | **Open** — incomplete marker only; no `um_tx_*` ([#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) L2) | host | pending fix + test |
 | New `session.login` denied after disable; demote drops write on re-login | **Open proveable_next** ([#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107)) | lab | extend qemu-smoke |
 | rpcd pending UCI changes during enable/disable | Refuse when `uci changes rpcd` non-empty | host | `tests/test_luci_login.sh` |
 
@@ -110,11 +110,10 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 From the 2026-08-12 exhaustive pass ([security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md)). All reproduced locally. Implement via simpler-model PRs; use `/review-security` on those PRs.
 
-**Implementation order (remaining): #105 (L3 then L1) → #107.**
+**Implementation order (remaining): #107.**
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
-| [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) | L1, L3 | Low | Session ACL / DiD | Same-role set-role sync without revoke (severity revised down); `um_shadow_hash_usable` missing `grep -F` |
 | [#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107) | P1, P2 | — | Lab proof | Post-disable login deny + demote write-ACL drop asserts |
 
 Prior Aug-9 findings are resolved. L4/L5/L6/L7 resolved in this remediation wave.
@@ -125,6 +124,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
+| [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1/L3 | Session ACL / DiD | same-role revoke after sync; `grep -F` in `um_shadow_hash_usable` |
 | [#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) L2 | Integrity | `um_tx_*` wrap on `um_mut_set_luci_login` |
 | [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4 | Ownership / revocation | fail-closed `um_rpcd_config_parsable` + host tests per syntax form |
 | [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) L5/L6 | On-device file modes | mode-preserving `um_rpcd_atomic_replace` + `um_tx_restore_one` rpcd arm; audit rotate under `umask 077` + mode asserts |

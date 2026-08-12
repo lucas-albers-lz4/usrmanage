@@ -17,7 +17,7 @@
 um_shadow_hash_usable() {
 	# Non-empty, not locked (!/*). Empty hash ⇒ rpcd accepts any password.
 	_u=$1
-	_sh=$(grep -m1 "^${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null | cut -d: -f2)
+	_sh=$(grep -m1 -F "${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null | cut -d: -f2)
 	[ -n "$_sh" ] || return 1
 	case "$_sh" in
 		'!'*|'*'*) return 1 ;;

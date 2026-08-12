@@ -159,9 +159,22 @@ sed -i "/option username 'ops'/,/^config /{ /list write/a\\
 	' "$USRMANAGE_RPCD_CONFIG" > "$_awk_tmp" && mv "$_awk_tmp" "$USRMANAGE_RPCD_CONFIG"
 }
 [ "$(um_luci_login_state ops)" = "tampered" ] && ok "ACL drift → tampered" || bad "ACL drift state $(um_luci_login_state ops)"
+# L3: um_shadow_hash_usable must use grep -F (DiD / #105)
+grep -n 'um_shadow_hash_usable' -A6 "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh" \
+	| grep -q 'grep -m1 -F' && ok "L3 shadow hash usable uses grep -F" \
+	|| bad "L3 um_shadow_hash_usable missing grep -F"
 um_with_lock um_mut_set_role ops admin
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "set-role sync repairs ACL drift" || bad "repair state $(um_luci_login_state ops)"
 grep -q "luci-app-firewall" "$USRMANAGE_RPCD_CONFIG" && bad "extra ACL still present" || ok "extra ACL removed"
+# L1: same-role branch must revoke after sync (source + repaired ACLs)
+awk '
+	/Same-role transition/ { inblock=1 }
+	inblock && /_um_set_role_sync_acls/ { saw_sync=1 }
+	inblock && saw_sync && /_um_set_role_revoke/ { found=1 }
+	inblock && /^	fi$/ { inblock=0 }
+	END { exit found ? 0 : 1 }
+' "$LIB" && ok "L1 same-role path revokes after sync" \
+	|| bad "L1 same-role missing revoke after sync"
 
 # disable owned
 um_with_lock um_mut_set_luci_login ops disable
