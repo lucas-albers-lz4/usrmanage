@@ -510,7 +510,10 @@ _mktemp_err=$(um_luci_login_state ops 2>&1) && {
 # enable succeed and make this assertion vacuous).
 _mktemp_enterr=$(um_with_lock um_mut_set_luci_login ops enable 2>&1) && bad "enable after mktemp fail should be denied" || ok "enable denied on mktemp failure"
 export TMPDIR="$_old_tmpdir"
-printf '%s' "$_mktemp_enterr" | grep -q 'luci_login_state' && ok "mktemp failure denial token" || bad "mktemp failure token: $_mktemp_enterr"
+# With um_tx_* wrap (L2), a broken TMPDIR fails at tx_begin (snapdir mktemp)
+# before the state helper — either denial is correct fail-closed behavior.
+printf '%s' "$_mktemp_enterr" | grep -qE 'luci_login_state|tx_snapshot_failed' \
+	&& ok "mktemp failure denial token" || bad "mktemp failure token: $_mktemp_enterr"
 # Verify state check still works after TMPDIR is restored
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "state works after TMPDIR restore" || bad "state after restore $(um_luci_login_state ops)"
 
