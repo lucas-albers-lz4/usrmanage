@@ -152,11 +152,16 @@ _admin_login="$(ssh_guest 'ubus call session login "{\"username\":\"umdemote\",\
 	|| die "admin session login as umdemote failed"
 _admin_sid="$(printf '%s' "$_admin_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_admin_sid" ]] || die "no admin session id"
-# Pre-demote: write ACL should be present for admin.
+# Pre-demote: require an explicit write grant so P2 cannot false-green.
 _admin_write="$(ssh_guest "ubus call session access \"{\\\"ubus_rpc_session\\\":\\\"${_admin_sid}\\\",\\\"scope\\\":\\\"access-group\\\",\\\"object\\\":\\\"luci-app-usrmanage\\\",\\\"function\\\":\\\"write\\\"}\"")" \
-	|| true
-printf '%s' "$_admin_write" | grep -q 'true\|1\|access' \
-	|| ok "admin write probe soft-ok (access API shape may vary: ${_admin_write:0:80})"
+	|| die "admin session access probe failed"
+if printf '%s' "$_admin_write" | grep -qiE '"access"[[:space:]]*:[[:space:]]*false'; then
+	die "admin session lacks luci-app-usrmanage write before demote (got: ${_admin_write})"
+fi
+if ! printf '%s' "$_admin_write" | grep -qiE '"access"[[:space:]]*:[[:space:]]*true|"write"[[:space:]]*:[[:space:]]*true|^true$'; then
+	die "admin write grant not confirmed before demote (got: ${_admin_write})"
+fi
+ok "umdemote admin has luci-app-usrmanage write before demote"
 
 ssh_guest 'usrmanage set-role umdemote --role readonly' \
 	|| die "demote umdemote failed"
@@ -172,10 +177,14 @@ _ro_login="$(ssh_guest 'ubus call session login "{\"username\":\"umdemote\",\"pa
 	|| die "readonly re-login as umdemote failed"
 _ro_sid="$(printf '%s' "$_ro_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_ro_sid" ]] || die "no readonly session id"
-_ro_write="$(ssh_guest "ubus call session access \"{\\\"ubus_rpc_session\\\":\\\"${_ro_sid}\\\",\\\"scope\\\":\\\"access-group\\\",\\\"object\\\":\\\"luci-app-usrmanage\\\",\\\"function\\\":\\\"write\\\"}\" 2>/dev/null || true")"
-# Must not grant write — false / empty / Access denied are all acceptable denies.
+_ro_write="$(ssh_guest "ubus call session access \"{\\\"ubus_rpc_session\\\":\\\"${_ro_sid}\\\",\\\"scope\\\":\\\"access-group\\\",\\\"object\\\":\\\"luci-app-usrmanage\\\",\\\"function\\\":\\\"write\\\"}\"")" \
+	|| die "readonly session access probe failed"
+# Explicit deny required — empty/failed output must not count as pass.
 if printf '%s' "$_ro_write" | grep -qiE '"access"[[:space:]]*:[[:space:]]*true|"write"[[:space:]]*:[[:space:]]*true|^true$'; then
 	die "readonly session still has luci-app-usrmanage write (got: ${_ro_write})"
+fi
+if ! printf '%s' "$_ro_write" | grep -qiE '"access"[[:space:]]*:[[:space:]]*false'; then
+	die "readonly write deny not confirmed (got: ${_ro_write})"
 fi
 ok "demote drops luci-app-usrmanage write on re-login (P2)"
 

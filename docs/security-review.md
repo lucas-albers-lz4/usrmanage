@@ -27,7 +27,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-09 | none |
 | Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-12 | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, published feed keys | 2026-08-09 | none |
-| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login deep dive) | [#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107) proveable_next (lab asserts) — fixtures remain lab-only by design |
+| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login deep dive) | [#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107) P1/P2 lab asserts landed (canonical owned sections); full disable proof still blocked on [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4 — fixtures remain lab-only by design |
 
 ## How to re-verify (current gates)
 
@@ -94,7 +94,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Live session keeps old ACLs after disable / role / del / passwd | `um_session_revoke_user` destroys matching ubus SIDs (`@.values.username` then `@.data.username`) | lab | `scripts/qemu-smoke-usrmanage.sh` (issue #95) — host DRY_RUN skips ubus and is **not** proof |
 | Same-role / ACL-repair `set-role` leaves elevated live sessions | After `um_luci_login_sync_acls` in set-role (including same-role), `_um_set_role_revoke` runs fail-closed | host | `tests/test_luci_login.sh` |
 | `set-luci-login` multi-index rewrite crash window | **Open** — incomplete marker only; no `um_tx_*` ([#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) L2) | host | pending fix + test |
-| New `session.login` denied after disable; demote drops write on re-login | qemu-smoke asserts post-disable login fail (P1) and demote write-ACL drop (P2) | lab | `scripts/qemu-smoke-usrmanage.sh` (#107) |
+| New `session.login` denied after disable; demote drops write on re-login | lab for **canonical** owned login sections (P1/P2) | lab | `scripts/qemu-smoke-usrmanage.sh` (#107) |
 | rpcd pending UCI changes during enable/disable | Refuse when `uci changes rpcd` non-empty | host | `tests/test_luci_login.sh` |
 
 ### Supply chain
