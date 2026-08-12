@@ -166,11 +166,11 @@ export FEED_PUBLISH_IPKG_INDEX_CACHE="$cache_dir"
 # fetch the REAL upstream script once, save to a stable file (curl -o keeps
 # the exact bytes incl. trailing newline — do NOT use $(...) which strips).
 real_file="$TMP/real-ipkg-make-index.sh"
-if curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/4f7e6e554be2aef6a55be36f9f954d56705eb2ee/scripts/ipkg-make-index.sh' -o "$real_file" 2>/dev/null && [[ -s "$real_file" ]]; then
+if curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/0b795ce79e23b553aa184080c390f9ce92a2b6d4/scripts/ipkg-make-index.sh' -o "$real_file" 2>/dev/null && [[ -s "$real_file" ]]; then
 	exp="$(sha256sum "$real_file" | awk '{print $1}')"
 	# attacker: seed name -> symlink to the LEGIT file (hash checks pass)
-	ln -sf "$real_file" "$cache_dir/ipkg-make-index-24.10.5.sh"
-	got_file="$(feed_publish_ipkg_index_script 24.10.5)"
+	ln -sf "$real_file" "$cache_dir/ipkg-make-index-24.10.8.sh"
+	got_file="$(feed_publish_ipkg_index_script 24.10.8)"
 	got_sum="$(sha256sum "$got_file" | awk '{print $1}')"
 	got_type="$(stat -c '%F' "$got_file")"
 	if [[ "$got_sum" == "$exp" ]] && [[ "$got_type" == "regular file" ]]; then
@@ -202,9 +202,9 @@ CURL
 chmod +x "$TMP/bin/curl"
 export MOCK_CURL_LOG="$TMP/curl.log"
 : > "$MOCK_CURL_LOG"
-rm -f "$cache_dir/ipkg-make-index-24.10.5.sh"   # drop the TOCTOU symlink
-cp "$real_file" "$cache_dir/ipkg-make-index-24.10.5.sh"
-got_file="$(PATH="$TMP/bin:$PATH" MOCK_CURL_LOG="$MOCK_CURL_LOG" feed_publish_ipkg_index_script 24.10.5)"
+rm -f "$cache_dir/ipkg-make-index-24.10.8.sh"   # drop the TOCTOU symlink
+cp "$real_file" "$cache_dir/ipkg-make-index-24.10.8.sh"
+got_file="$(PATH="$TMP/bin:$PATH" MOCK_CURL_LOG="$MOCK_CURL_LOG" feed_publish_ipkg_index_script 24.10.8)"
 got_sum="$(sha256sum "$got_file" | awk '{print $1}')"
 refetch_count="$(wc -l < "$MOCK_CURL_LOG" 2>/dev/null || echo 0)"
 if [[ "$got_sum" == "$exp" ]] && [[ "$refetch_count" == "0" ]]; then

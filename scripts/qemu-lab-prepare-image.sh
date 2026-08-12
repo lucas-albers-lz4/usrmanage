@@ -7,14 +7,14 @@
 # - clear root password
 # - network.lan.proto=dhcp for slirp
 #
-# Usage: sudo OWRT_IMG=lab/images/openwrt-x86-64-24.10.5.img ./scripts/qemu-lab-prepare-image.sh
+# Usage: sudo OWRT_IMG=lab/images/openwrt-x86-64-24.10.8.img ./scripts/qemu-lab-prepare-image.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export OWRT_LAB_NET_MODE="${OWRT_LAB_NET_MODE:-dhcp}"
 # shellcheck source=lib/qemu-lab-net.sh
 source "${ROOT}/scripts/lib/qemu-lab-net.sh"
-IMG="${OWRT_IMG:-${ROOT}/lab/images/openwrt-x86-64-24.10.5.img}"
+IMG="${OWRT_IMG:-${ROOT}/lab/images/openwrt-x86-64-24.10.8.img}"
 MNT="/mnt/owrt-usrmanage-lab"
 LAB_MASK="${OWRT_LAB_SUBNET#*/}"
 

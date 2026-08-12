@@ -32,8 +32,8 @@ feed_publish_feed_dir() {
 	case "$(sdk_matrix_version_label "$1")" in
 		21.02.7) printf '%s' '21.02' ;;
 		22.03.7) printf '%s' '22.03' ;;
-		24.10.5) printf '%s' '24.10' ;;
-		25.12.0) printf '%s' '25.12' ;;
+		24.10.8) printf '%s' '24.10' ;;
+		25.12.5) printf '%s' '25.12' ;;
 		*) sdk_matrix_version_label "$1" ;;
 	esac
 }
@@ -68,8 +68,8 @@ feed_publish_release_key() {
 	case "$1" in
 		21.02.7) printf '%s' '21.02' ;;
 		22.03.7) printf '%s' '22.03' ;;
-		24.10.5) printf '%s' '24.10' ;;
-		25.12.0) printf '%s' '25.12' ;;
+		24.10.8) printf '%s' '24.10' ;;
+		25.12.5) printf '%s' '25.12' ;;
 		*) printf '%s' "$1" ;;
 	esac
 }
@@ -151,16 +151,16 @@ feed_publish_ipkg_index_script() {
 	local cache ref sha_expected tmp actual seed
 	cache="${FEED_PUBLISH_IPKG_INDEX_CACHE:-/tmp/usrmanage-ipkg-make-index}"
 	case "$ver_label" in
-		24.10.5)
-			ref='4f7e6e554be2aef6a55be36f9f954d56705eb2ee' # tag v24.10.5
+		24.10.8)
+			ref='0b795ce79e23b553aa184080c390f9ce92a2b6d4' # tag v24.10.8
 			sha_expected='f19c5013c38d2dc54a95457dd372cb4b6a077ca6ddf7ef3da982b7b6e49b6d06'
 			;;
-		25.12.0)
-			ref='4da53efc2fe744601e6189492dbd06b8930d72b8' # tag v25.12.0
+		25.12.5)
+			ref='f0a60eee2fe051741c643ea6118718aae1ef17fb' # tag v25.12.5
 			sha_expected='f19c5013c38d2dc54a95457dd372cb4b6a077ca6ddf7ef3da982b7b6e49b6d06'
 			;;
 		*)
-			echo "ipkg-make-index: unsupported version label: ${ver_label} (24.10.5 / 25.12.0 only)" >&2
+			echo "ipkg-make-index: unsupported version label: ${ver_label} (24.10.8 / 25.12.5 only)" >&2
 			return 1
 			;;
 	esac

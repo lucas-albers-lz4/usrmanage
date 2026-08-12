@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run OpenWrt x86/64 disk image in QEMU (KVM when available).
 #
-#   OWRT_RELEASE=24.10.5 ./scripts/run-openwrt-x86-qemu.sh
+#   OWRT_RELEASE=24.10.8 ./scripts/run-openwrt-x86-qemu.sh
 #   ./scripts/run-openwrt-x86-qemu.sh --stop
 #
 # LuCI http://localhost:8080/cgi-bin/luci/
