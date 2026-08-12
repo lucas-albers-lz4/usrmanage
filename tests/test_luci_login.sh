@@ -61,9 +61,11 @@ else
 fi
 
 # locked shadow (!) refused
+_np_before=$(grep -c 'no_password' "$USRMANAGE_AUDIT" 2>/dev/null || true)
 _lerr=$(um_with_lock um_mut_set_luci_login locked enable 2>&1) && bad "locked ! should refuse enable" || ok "locked ! refused"
 printf '%s' "$_lerr" | grep -q 'no_password' && ok "locked ! denial token" || bad "locked ! token: $_lerr"
-grep -q 'no_password' "$USRMANAGE_AUDIT" && ok "locked ! audited" || bad "locked ! not audited"
+_np_after=$(grep -c 'no_password' "$USRMANAGE_AUDIT" 2>/dev/null || true)
+[ "$_np_after" -gt "$_np_before" ] && ok "locked ! audited" || bad "locked ! audit count $_np_before -> $_np_after"
 # locked shadow (*) refused
 _awk_tmp=$(mktemp)
 awk -F: 'BEGIN{OFS=":"} $1=="locked"{$2="*"} {print}' "$USRMANAGE_SHADOW" > "$_awk_tmp" && mv "$_awk_tmp" "$USRMANAGE_SHADOW"
