@@ -20,19 +20,20 @@ export USRMANAGE_SHADOW="$TMP/shadow"
 export USRMANAGE_GROUP="$TMP/group"
 export USRMANAGE_SUDOERS="$TMP/sudoers"
 export USRMANAGE_RPCD_CONFIG="$TMP/rpcd"
+export USRMANAGE_HOME_ROOT="$TMP/home"
 export USRMANAGE_DRY_RUN=1
 export USRMANAGE_SRC=cli
 export USRMANAGE_ACTOR=testhost
 export USRMANAGE_TEST_OVERRIDES=1
 export JSON_OUT=0
 
-mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")"
+mkdir -p "$USRMANAGE_ETC" "$USRMANAGE_AUDIT_DIR" "$(dirname "$USRMANAGE_LOCK")" "$TMP/bin" "$USRMANAGE_HOME_ROOT"
 touch "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT"
 # Usable shadow hash (not empty / locked) — C1 gate
-printf 'root:x:0:0:root:/root:/bin/ash\nops:x:1002:1002:ops:/home/ops:/bin/ash\naudit:x:1001:1001:audit:/home/audit:/bin/ash\nempty:x:1003:1003:empty:/home/empty:/bin/ash\n' > "$USRMANAGE_PASSWD"
-printf 'root:$6$salt$hash:0:99999:7:::\nops:$6$salt$ophash:0:99999:7:::\naudit:$6$salt$auhash:0:99999:7:::\nempty::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
+printf 'root:x:0:0:root:/root:/bin/ash\nops:x:1002:1002:ops:/home/ops:/bin/ash\naudit:x:1001:1001:audit:/home/audit:/bin/ash\nempty:x:1003:1003:empty:/home/empty:/bin/ash\nlocked:x:1004:1004:locked:/home/locked:/bin/ash\n' > "$USRMANAGE_PASSWD"
+printf 'root:$6$salt$hash:0:99999:7:::\nops:$6$salt$ophash:0:99999:7:::\naudit:$6$salt$auhash:0:99999:7:::\nempty::0:99999:7:::\nlocked:!:0:99999:7:::\n' > "$USRMANAGE_SHADOW"
 printf 'root:x:0:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
-printf 'ops\naudit\nempty\n' > "$USRMANAGE_REGISTRY"
+printf 'ops\naudit\nempty\nlocked\n' > "$USRMANAGE_REGISTRY"
 printf '%%wheel ALL=(ALL:ALL) ALL\n' > "$USRMANAGE_SUDOERS"
 printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
 
@@ -58,6 +59,40 @@ if grep -q 'no_password' "$USRMANAGE_AUDIT" 2>/dev/null; then
 else
 	bad "no_password not audited"
 fi
+
+# locked shadow (!) refused
+_np_before=$(grep -c 'no_password' "$USRMANAGE_AUDIT" 2>/dev/null || true)
+_lerr=$(um_with_lock um_mut_set_luci_login locked enable 2>&1) && bad "locked ! should refuse enable" || ok "locked ! refused"
+printf '%s' "$_lerr" | grep -q 'no_password' && ok "locked ! denial token" || bad "locked ! token: $_lerr"
+_np_after=$(grep -c 'no_password' "$USRMANAGE_AUDIT" 2>/dev/null || true)
+[ "$_np_after" -gt "$_np_before" ] && ok "locked ! audited" || bad "locked ! audit count $_np_before -> $_np_after"
+# locked shadow (*) refused
+_awk_tmp=$(mktemp)
+awk -F: 'BEGIN{OFS=":"} $1=="locked"{$2="*"} {print}' "$USRMANAGE_SHADOW" > "$_awk_tmp" && mv "$_awk_tmp" "$USRMANAGE_SHADOW"
+_np_before=$(grep -c 'no_password' "$USRMANAGE_AUDIT" 2>/dev/null || true)
+_lerr=$(um_with_lock um_mut_set_luci_login locked enable 2>&1) && bad "locked * should refuse enable" || ok "locked * refused"
+printf '%s' "$_lerr" | grep -q 'no_password' && ok "locked * denial token" || bad "locked * token: $_lerr"
+_np_after=$(grep -c 'no_password' "$USRMANAGE_AUDIT" 2>/dev/null || true)
+[ "$_np_after" -gt "$_np_before" ] && ok "locked * audited" || bad "locked * audit count $_np_before -> $_np_after"
+
+# pending UCI changes refuse enable (stub uci on PATH)
+cat > "$TMP/bin/uci" <<'UCI'
+#!/bin/sh
+if [ "$1" = "changes" ] && [ "$2" = "rpcd" ]; then
+	echo "rpcd.@login[0].username='staged'"
+	exit 0
+fi
+exit 0
+UCI
+chmod +x "$TMP/bin/uci"
+_oldpath=$PATH
+export PATH="$TMP/bin:$PATH"
+_perr=$(um_with_lock um_mut_set_luci_login ops enable 2>&1) && bad "pending uci should refuse enable" || ok "pending uci refused enable"
+printf '%s' "$_perr" | grep -q 'rpcd_pending_changes' && ok "pending denial token" || bad "pending token: $_perr"
+_perr=$(um_with_lock um_mut_set_luci_login ops disable 2>&1) && bad "pending uci should refuse disable" || ok "pending uci refused disable"
+printf '%s' "$_perr" | grep -q 'rpcd_pending_changes' && ok "pending disable denial token" || bad "pending disable token: $_perr"
+rm -f "$TMP/bin/uci"
+export PATH="$_oldpath"
 
 # enable owned login
 um_with_lock um_mut_set_luci_login ops enable
@@ -141,7 +176,7 @@ um_registry_del ops || bad "registry_del failed"
 _idx=$(um_luci_login_ours_index ops 1)
 [ -z "$_idx" ] && ok "del cleanup removes ours login" || bad "orphan login remains idx=$_idx"
 # restore ops for remaining tests
-printf 'ops\naudit\nempty\n' > "$USRMANAGE_REGISTRY"
+printf 'ops\naudit\nempty\nlocked\n' > "$USRMANAGE_REGISTRY"
 printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
 
 # Full del → um_mut_add without luci: must not resurrect orphan write ACL.
@@ -209,6 +244,63 @@ um_with_lock um_mut_set_role ops admin
 # emit json includes luci_login
 _j=$(um_emit_user_json ops)
 printf '%s' "$_j" | grep -q '"luci_login":"none"' && ok "emit luci_login" || bad "emit json: $_j"
+
+# um_mut_add with luci_login=1 → owned readonly (no write ACL).
+# DRY_RUN skips create/password writes; briefly use the busybox-fallback style
+# PATH (no useradd) plus a hermetic chpasswd stub so only TMP files are touched.
+_flock_abs=$(command -v flock) || bad "flock missing for add-with-luci"
+ln -sf "$_flock_abs" "$TMP/bin/flock"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/bin/passwd"
+cat > "$TMP/bin/chpasswd" <<'CHP'
+#!/bin/sh
+IFS= read -r line || exit 1
+u=${line%%:*}
+_tmp=$(mktemp)
+awk -F: -v u="$u" 'BEGIN{OFS=":"} $1==u{$2="$6$testsalt$testhash"} {print}' \
+	"$USRMANAGE_SHADOW" > "$_tmp" || exit 1
+if grep -q "^${u}:" "$_tmp"; then
+	mv "$_tmp" "$USRMANAGE_SHADOW"
+else
+	rm -f "$_tmp"
+	printf '%s:$6$testsalt$testhash:0:99999:7:::\n' "$u" >> "$USRMANAGE_SHADOW" || exit 1
+fi
+chmod 0600 "$USRMANAGE_SHADOW" 2>/dev/null || true
+exit 0
+CHP
+chmod +x "$TMP/bin/passwd" "$TMP/bin/chpasswd"
+_oldpath=$PATH
+export PATH="$TMP/bin:/usr/bin:/bin"
+if command -v useradd >/dev/null 2>&1; then
+	bad "useradd still on PATH for add-with-luci"
+else
+	ok "add-with-luci PATH hides useradd"
+fi
+USRMANAGE_DRY_RUN=0
+printf 'goodpass12\n' | um_with_lock um_mut_add luciadd readonly 0 1
+USRMANAGE_DRY_RUN=1
+export PATH="$_oldpath"
+rm -f "$TMP/bin/passwd" "$TMP/bin/chpasswd" "$TMP/bin/flock"
+um_is_managed luciadd && ok "add-with-luci registered" || bad "luciadd not managed"
+grep -q '^luciadd:\$6\$testsalt\$testhash:' "$USRMANAGE_SHADOW" && ok "add-with-luci shadow hash" || bad "luciadd shadow: $(grep '^luciadd:' "$USRMANAGE_SHADOW" 2>/dev/null || true)"
+[ "$(um_luci_login_state luciadd)" = "owned" ] && ok "add-with-luci → owned" || bad "add-with-luci state $(um_luci_login_state luciadd)"
+grep -q "option password '\$p\$luciadd'" "$USRMANAGE_RPCD_CONFIG" && ok "add-with-luci \$p\$luciadd" || bad "missing \$p\$luciadd"
+grep -q "option usrmanage '1'" "$USRMANAGE_RPCD_CONFIG" && ok "add-with-luci marker" || bad "add-with-luci missing marker"
+grep -q "list read 'luci-app-usrmanage-session'" "$USRMANAGE_RPCD_CONFIG" && ok "add-with-luci session ACL" || bad "add-with-luci missing session ACL"
+# readonly must not get app write; ignore unrelated sections by checking luciadd block
+if awk '
+	BEGIN { inlogin=0; isadd=0; haswrite=0 }
+	/^config login/ {
+		if (inlogin && isadd && haswrite) found=1
+		inlogin=1; isadd=0; haswrite=0; next
+	}
+	inlogin && /option username '\''luciadd'\''/ { isadd=1 }
+	inlogin && /list write '\''luci-app-usrmanage'\''/ { haswrite=1 }
+	END { if (inlogin && isadd && haswrite) found=1; exit !found }
+' "$USRMANAGE_RPCD_CONFIG"; then
+	bad "readonly add-with-luci has write ACL"
+else
+	ok "readonly add-with-luci has no write ACL"
+fi
 
 [ "$fail" = "0" ] || exit 1
 echo "luci-login tests: ok"
