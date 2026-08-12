@@ -666,6 +666,23 @@ printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_
 um_with_lock um_mut_set_luci_login ops enable
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "L4 canonical: enable → owned" \
 	|| bad "L4 canonical enable state"
+# --- L2: set-luci-login wraps rpcd mutations in um_tx_* (#106) ---
+
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_luci_login ops enable
+[ "$(um_luci_login_state ops)" = "owned" ] || bad "L2 pre: owned"
+# Simulate crash mid-disable: begin tx, mutate, rollback without commit.
+_before=$(cat "$USRMANAGE_RPCD_CONFIG")
+um_tx_begin
+printf 'config rpcd\n\toption socket /torn\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_tx_rollback
+_after=$(cat "$USRMANAGE_RPCD_CONFIG")
+[ "$_before" = "$_after" ] && ok "L2 tx rollback restores prior rpcd" \
+	|| bad "L2 rollback did not restore rpcd"
+grep -q 'um_tx_begin' "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh" \
+	&& grep -q 'um_tx_commit' "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh" \
+	&& ok "L2 um_mut_set_luci_login uses um_tx_*" \
+	|| bad "L2 missing um_tx wrap in set-luci-login"
 
 [ "$fail" = "0" ] || exit 1
 echo "luci-login tests: ok"

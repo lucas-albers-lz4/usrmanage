@@ -781,6 +781,8 @@ um_luci_login_remove_owned_best_effort() {
 
 um_mut_set_luci_login() {
 	# um_mut_set_luci_login <user> <enable|disable|reset>
+	# Wrap rpcd mutations in um_tx_* so a SIGKILL mid multi-index rewrite can
+	# restore the prior /etc/config/rpcd from the snapshot (issue #106 L2).
 	_ull_name=$1
 	_ull_mode=$2
 	um_mut_require_valid_username "$_ull_name" ""
@@ -789,29 +791,38 @@ um_mut_set_luci_login() {
 	case "$_ull_mode" in
 		enable|1|on)
 			um_incomplete_set "luci-login:${_ull_name}:enable"
+			um_tx_begin
 			um_luci_login_enable_user "$_ull_name" || {
+				um_tx_rollback || true
 				um_incomplete_clear
 				um_audit luci_login "$_ull_name" denied "mode=enable" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
 				um_die "error: ${UM_LUCI_ERR:-luci_login_failed}"
 			}
+			um_tx_commit
 			um_incomplete_clear
 			;;
 		disable|0|off)
 			um_incomplete_set "luci-login:${_ull_name}:disable"
+			um_tx_begin
 			um_luci_login_disable_user "$_ull_name" || {
+				um_tx_rollback || true
 				um_incomplete_clear
 				um_audit luci_login "$_ull_name" denied "mode=disable" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
 				um_die "error: ${UM_LUCI_ERR:-luci_login_failed}"
 			}
+			um_tx_commit
 			um_incomplete_clear
 			;;
 		reset)
 			um_incomplete_set "luci-login:${_ull_name}:reset"
+			um_tx_begin
 			um_luci_login_reset_user "$_ull_name" || {
+				um_tx_rollback || true
 				um_incomplete_clear
 				um_audit luci_login "$_ull_name" denied "mode=reset" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
 				um_die "error: ${UM_LUCI_ERR:-luci_login_failed}"
 			}
+			um_tx_commit
 			um_incomplete_clear
 			;;
 		*)
