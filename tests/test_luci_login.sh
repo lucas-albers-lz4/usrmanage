@@ -39,6 +39,7 @@ printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_
 
 # shellcheck disable=SC1090
 . "$LIB"
+. "$ROOT/tests/lib.sh"
 
 fail=0
 ok() { echo "ok: $*"; }
@@ -516,6 +517,50 @@ printf '%s' "$_mktemp_enterr" | grep -q 'luci_login_state' && ok "mktemp failure
 # --- Fix 5 (m5): top-level luci_login audit event ---
 
 grep -q 'luci_login.*ok.*mode=enable' "$USRMANAGE_AUDIT" && ok "top-level luci_login audit on enable" || bad "luci_login enable audit missing"
+
+# --- L5: /etc/config/rpcd mode preserved across enable/disable/reset/rollback ---
+
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+chmod 0600 "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_luci_login ops enable
+_mode=$(stat_mode "$USRMANAGE_RPCD_CONFIG")
+[ "$_mode" = "600" ] && ok "rpcd mode 0600 after enable" || bad "rpcd mode after enable: $_mode"
+um_with_lock um_mut_set_luci_login ops disable
+_mode=$(stat_mode "$USRMANAGE_RPCD_CONFIG")
+[ "$_mode" = "600" ] && ok "rpcd mode 0600 after disable" || bad "rpcd mode after disable: $_mode"
+um_with_lock um_mut_set_luci_login ops enable
+um_with_lock um_mut_set_luci_login ops reset
+_mode=$(stat_mode "$USRMANAGE_RPCD_CONFIG")
+[ "$_mode" = "600" ] && ok "rpcd mode 0600 after reset" || bad "rpcd mode after reset: $_mode"
+
+# Forced rollback must restore rpcd at 0600 (not the passwd|group 0644 arm).
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+chmod 0600 "$USRMANAGE_RPCD_CONFIG"
+um_tx_begin
+printf 'config rpcd\n\toption socket /changed\n\n' > "$USRMANAGE_RPCD_CONFIG"
+chmod 0644 "$USRMANAGE_RPCD_CONFIG"
+um_tx_rollback
+_mode=$(stat_mode "$USRMANAGE_RPCD_CONFIG")
+[ "$_mode" = "600" ] && ok "rpcd mode 0600 after tx rollback" || bad "rpcd mode after rollback: $_mode"
+grep -q 'option socket /var/run/ubus/ubus.sock' "$USRMANAGE_RPCD_CONFIG" \
+	&& ok "rpcd content restored on rollback" || bad "rpcd content not restored"
+
+# --- L6: audit rotate writes under umask 077 + ends at 0640 ---
+
+: "${USRMANAGE_AUDIT_MAX_BYTES:=131072}"
+_old_max=$USRMANAGE_AUDIT_MAX_BYTES
+USRMANAGE_AUDIT_MAX_BYTES=64
+# Oversize the audit log so rotate triggers.
+dd if=/dev/zero bs=1 count=200 of="$USRMANAGE_AUDIT" 2>/dev/null \
+	|| head -c 200 /dev/zero > "$USRMANAGE_AUDIT"
+chmod 0640 "$USRMANAGE_AUDIT"
+umask 022
+um_audit_rotate_if_needed
+_mode=$(stat_mode "$USRMANAGE_AUDIT")
+[ "$_mode" = "640" ] && ok "audit mode 0640 after rotate" || bad "audit mode after rotate: $_mode"
+[ ! -f "${USRMANAGE_AUDIT}.1" ] && ok "audit rotate leaves no .1 leftover" \
+	|| bad "audit .1 leftover after rotate"
+USRMANAGE_AUDIT_MAX_BYTES=$_old_max
 
 [ "$fail" = "0" ] || exit 1
 echo "luci-login tests: ok"
