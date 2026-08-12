@@ -1778,7 +1778,13 @@ um_mut_set_role() {
 	}
 	_um_set_role_sync_acls() {
 		if command -v um_luci_login_sync_acls >/dev/null 2>&1; then
-			_lst=$(um_luci_login_state "$_name") || _lst=unknown
+			_lst=$(um_luci_login_state "$_name") || {
+				_um_set_role_rollback
+				um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
+				um_incomplete_clear
+				um_audit fail "$_name" fail rpcd_config_unparsable "$_role"
+				um_die "error: rpcd_config_unparsable"
+			}
 			_ours=$(um_luci_login_ours_index "$_name" 2>/dev/null || true)
 			if [ -n "$_ours" ]; then
 				um_luci_login_sync_acls "$_name" "$_role" || {

@@ -89,7 +89,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 |------------------|-------|-------|-------|
 | Empty / locked shadow accepted for web login | Refuse enable when hash empty or `!`/`*` | host | `tests/test_luci_login.sh` |
 | Adopt foreign / tampered `luci-app-acl` login | Ownership conjunction (`usrmanage=1` + `$p$user` + managed registry) — **holds only for canonical UCI syntax**; see [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4 | host | `tests/test_luci_login.sh` |
-| Login section written in a libuci-valid form the awk parser cannot see | **Open** — indented / `c`-abbreviated / quoted-type sections invisible; `disable` reports `ok` while the login authenticates ([#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4) | host | pending fail-closed validator or `uci`-based enumeration |
+| Login section written in a libuci-valid form the awk parser cannot see | Fail-closed `um_rpcd_config_parsable` refuses state/enable/disable/reset/del when indented, abbreviated, or quoted-type sections are present | host | `tests/test_luci_login.sh` (indented / abbreviated / quoted) |
 | `/etc/config/rpcd` mode preserved on rewrite / rollback | Capture dest mode in `um_rpcd_atomic_replace` (default `0600`); `um_tx_restore_one` has a dedicated `rpcd` arm at `0600` | host | `tests/test_luci_login.sh` (enable/disable/reset + forced rollback) |
 | Live session keeps old ACLs after disable / role / del / passwd | `um_session_revoke_user` destroys matching ubus SIDs (`@.values.username` then `@.data.username`) | lab | `scripts/qemu-smoke-usrmanage.sh` (issue #95) — host DRY_RUN skips ubus and is **not** proof |
 | Same-role / ACL-repair `set-role` leaves elevated live sessions | **Open** — sync via `um_luci_login_ours_index` without revoke ([#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1) | host (+ lab) | pending fix + test |
@@ -110,16 +110,15 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 From the 2026-08-12 exhaustive pass ([security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md)). All reproduced locally. Implement via simpler-model PRs; use `/review-security` on those PRs.
 
-**Implementation order (remaining): #108 → #106 → #105 (L3 then L1) → #107.**
+**Implementation order (remaining): #106 → #105 (L3 then L1) → #107.**
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
-| [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) | L4 | Medium | Ownership / revocation | awk parser narrower than libuci (indented / `c`-abbreviated / quoted-type sections invisible) — `disable` reports `ok` while the login still authenticates |
 | [#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) | L2 | Low-Med | Integrity | `set-luci-login` lacks tx snapshot for multi-index rpcd rewrite |
 | [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) | L1, L3 | Low | Session ACL / DiD | Same-role set-role sync without revoke (severity revised down); `um_shadow_hash_usable` missing `grep -F` |
-| [#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107) | P1, P2 | — | Lab proof | Post-disable login deny + demote write-ACL drop asserts; blocked on #108 |
+| [#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107) | P1, P2 | — | Lab proof | Post-disable login deny + demote write-ACL drop asserts |
 
-Prior Aug-9 findings are resolved. L5/L6/L7 resolved in this remediation wave.
+Prior Aug-9 findings are resolved. L4/L5/L6/L7 resolved in this remediation wave.
 
 ## Resolved findings
 
@@ -127,6 +126,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
+| [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4 | Ownership / revocation | fail-closed `um_rpcd_config_parsable` + host tests per syntax form |
 | [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) L5/L6 | On-device file modes | mode-preserving `um_rpcd_atomic_replace` + `um_tx_restore_one` rpcd arm; audit rotate under `umask 077` + mode asserts |
 | [#111](https://github.com/lucas-albers-lz4/usrmanage/issues/111) L7 | Op lock availability | `um_lock_open` creates/tightens lock to `0600` before `flock` |
 | [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) S1/S3/S4 | CLI / rpcd | [PR #80](https://github.com/lucas-albers-lz4/usrmanage/pull/80) — `grep -F` username lookups, rpcd session hex whitelist, role resolution before audit |
