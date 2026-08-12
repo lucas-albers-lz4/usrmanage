@@ -129,8 +129,68 @@ if ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_sid}\\\"}
 fi
 ok "umrev session destroyed after disable"
 
+# P1 (#107): after disable, a *new* session.login as that user must fail.
+if ssh_guest 'ubus call session login "{\"username\":\"umrev\",\"password\":\"LabRevoke1!\"}"' >/dev/null 2>&1; then
+	die "post-disable session.login as umrev succeeded (login must be denied)"
+fi
+ok "post-disable session.login denied (P1)"
+
 ssh_guest 'usrmanage del umrev' || die "del umrev failed"
 ok "del umrev"
+
+# P2 (#107): demote admin→readonly with owned LuCI login; new login has no write
+# on luci-app-usrmanage (access-group write probe).
+ssh_guest 'usrmanage del umdemote >/dev/null 2>&1 || true'
+ssh_guest 'printf "LabDemote1!\n" | usrmanage add umdemote --role admin --password-fd 0' \
+	|| die "add umdemote failed"
+ok "add umdemote admin for demote ACL probe"
+ssh_guest 'usrmanage set-luci-login umdemote --enable' \
+	|| die "set-luci-login umdemote --enable failed"
+ok "umdemote luci login enabled"
+
+_admin_login="$(ssh_guest 'ubus call session login "{\"username\":\"umdemote\",\"password\":\"LabDemote1!\"}"')" \
+	|| die "admin session login as umdemote failed"
+_admin_sid="$(printf '%s' "$_admin_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
+[[ -n "$_admin_sid" ]] || die "no admin session id"
+# Pre-demote: require an explicit write grant so P2 cannot false-green.
+_admin_write="$(ssh_guest "ubus call session access \"{\\\"ubus_rpc_session\\\":\\\"${_admin_sid}\\\",\\\"scope\\\":\\\"access-group\\\",\\\"object\\\":\\\"luci-app-usrmanage\\\",\\\"function\\\":\\\"write\\\"}\"")" \
+	|| die "admin session access probe failed"
+if printf '%s' "$_admin_write" | grep -qiE '"access"[[:space:]]*:[[:space:]]*false'; then
+	die "admin session lacks luci-app-usrmanage write before demote (got: ${_admin_write})"
+fi
+if ! printf '%s' "$_admin_write" | grep -qiE '"access"[[:space:]]*:[[:space:]]*true|"write"[[:space:]]*:[[:space:]]*true|^true$'; then
+	die "admin write grant not confirmed before demote (got: ${_admin_write})"
+fi
+ok "umdemote admin has luci-app-usrmanage write before demote"
+
+ssh_guest 'usrmanage set-role umdemote --role readonly' \
+	|| die "demote umdemote failed"
+ok "umdemote demoted to readonly"
+
+# Prior admin SID must be destroyed by demote revoke.
+if ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_admin_sid}\\\"}\"" >/dev/null 2>&1; then
+	die "admin session still alive after demote"
+fi
+ok "umdemote admin session destroyed after demote"
+
+_ro_login="$(ssh_guest 'ubus call session login "{\"username\":\"umdemote\",\"password\":\"LabDemote1!\"}"')" \
+	|| die "readonly re-login as umdemote failed"
+_ro_sid="$(printf '%s' "$_ro_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
+[[ -n "$_ro_sid" ]] || die "no readonly session id"
+_ro_write="$(ssh_guest "ubus call session access \"{\\\"ubus_rpc_session\\\":\\\"${_ro_sid}\\\",\\\"scope\\\":\\\"access-group\\\",\\\"object\\\":\\\"luci-app-usrmanage\\\",\\\"function\\\":\\\"write\\\"}\"")" \
+	|| die "readonly session access probe failed"
+# Explicit deny required — empty/failed output must not count as pass.
+if printf '%s' "$_ro_write" | grep -qiE '"access"[[:space:]]*:[[:space:]]*true|"write"[[:space:]]*:[[:space:]]*true|^true$'; then
+	die "readonly session still has luci-app-usrmanage write (got: ${_ro_write})"
+fi
+if ! printf '%s' "$_ro_write" | grep -qiE '"access"[[:space:]]*:[[:space:]]*false'; then
+	die "readonly write deny not confirmed (got: ${_ro_write})"
+fi
+ok "demote drops luci-app-usrmanage write on re-login (P2)"
+
+ssh_guest 'usrmanage set-luci-login umdemote --disable' || true
+ssh_guest 'usrmanage del umdemote' || die "del umdemote failed"
+ok "del umdemote"
 
 # LuCI assets + ubus
 ssh_guest 'test -f /www/luci-static/resources/view/system/usrmanage.js' \
