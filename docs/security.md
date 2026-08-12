@@ -80,7 +80,9 @@ Manual `luci-app-acl` logins (including separate hash passwords) stay out of sco
 
 ## Account file write safety (v0.1.3+)
 
-Mutations run under `flock`. Multi-file create/delete snapshots passwd/shadow/group/registry and restores on failure. Atomic replaces use `umask 077` temps, then fixed modes (`shadow` 0600, `passwd`/`group` 0644) and `chown 0:0` before `mv`. Interactive `passwd` prompts may echo if `stty` is absent on stock images; prefer `--password-fd`.
+Mutations run under `flock`. Multi-file create/delete/set-role snapshots passwd/shadow/group/registry/rpcd and restores on failure. Atomic replaces use `umask 077` temps, then fixed modes (`shadow` 0600, `passwd`/`group` 0644) and `chown 0:0` before `mv`. Interactive `passwd` prompts may echo if `stty` is absent on stock images; prefer `--password-fd`.
+
+Rollback is EXIT-trap based: it covers process crashes and `um_die` paths, but **not SIGKILL or power loss**. After a hard kill, `doctor` reports any orphaned `usrmanage-tx.*` snapshot directory so the operator can restore manually (accepted residual, [#96](https://github.com/lucas-albers-lz4/usrmanage/issues/96)). Snapshots live in `${TMPDIR:-/tmp}` (tmpfs) — manual recovery applies only if the snapshot survives until the operator acts. `um_mut_del` additionally commits before `um_registry_del` (purge may have removed the home); the post-commit registry window is guarded by the `incomplete` marker, not the snapshot.
 
 BusyBox `flock` has no wait-timeout (`-w`). A stuck holder blocks concurrent manage commands indefinitely until the holder exits or the device reboots; `doctor` can surface lock-held state. See [security-review.md](security-review.md) (accepted BusyBox constraint).
 

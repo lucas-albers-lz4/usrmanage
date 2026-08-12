@@ -50,7 +50,7 @@ ACL: read (view) vs write (manage). View-only sessions see the page without muta
 - Confirm username
 - Optional: purge home directory
 - Block last managed admin
-- Explains sequence: lock → terminate sessions → delete account
+- Explains sequence: revoke LuCI sessions → lock → terminate sessions → delete account
 
 ## View-only mode
 - Add / Role / Passwd / Remove hidden or disabled with “read only”
