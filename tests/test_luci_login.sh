@@ -67,8 +67,11 @@ grep -q 'no_password' "$USRMANAGE_AUDIT" && ok "locked ! audited" || bad "locked
 # locked shadow (*) refused
 _awk_tmp=$(mktemp)
 awk -F: 'BEGIN{OFS=":"} $1=="locked"{$2="*"} {print}' "$USRMANAGE_SHADOW" > "$_awk_tmp" && mv "$_awk_tmp" "$USRMANAGE_SHADOW"
+_np_before=$(grep -c 'no_password' "$USRMANAGE_AUDIT" 2>/dev/null || true)
 _lerr=$(um_with_lock um_mut_set_luci_login locked enable 2>&1) && bad "locked * should refuse enable" || ok "locked * refused"
 printf '%s' "$_lerr" | grep -q 'no_password' && ok "locked * denial token" || bad "locked * token: $_lerr"
+_np_after=$(grep -c 'no_password' "$USRMANAGE_AUDIT" 2>/dev/null || true)
+[ "$_np_after" -gt "$_np_before" ] && ok "locked * audited" || bad "locked * audit count $_np_before -> $_np_after"
 
 # pending UCI changes refuse enable (stub uci on PATH)
 cat > "$TMP/bin/uci" <<'UCI'
@@ -276,6 +279,7 @@ USRMANAGE_DRY_RUN=1
 export PATH="$_oldpath"
 rm -f "$TMP/bin/passwd" "$TMP/bin/chpasswd" "$TMP/bin/flock"
 um_is_managed luciadd && ok "add-with-luci registered" || bad "luciadd not managed"
+grep -q '^luciadd:\$6\$testsalt\$testhash:' "$USRMANAGE_SHADOW" && ok "add-with-luci shadow hash" || bad "luciadd shadow: $(grep '^luciadd:' "$USRMANAGE_SHADOW" 2>/dev/null || true)"
 [ "$(um_luci_login_state luciadd)" = "owned" ] && ok "add-with-luci → owned" || bad "add-with-luci state $(um_luci_login_state luciadd)"
 grep -q "option password '\$p\$luciadd'" "$USRMANAGE_RPCD_CONFIG" && ok "add-with-luci \$p\$luciadd" || bad "missing \$p\$luciadd"
 grep -q "option usrmanage '1'" "$USRMANAGE_RPCD_CONFIG" && ok "add-with-luci marker" || bad "add-with-luci missing marker"
