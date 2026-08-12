@@ -16,8 +16,9 @@
 
 um_shadow_hash_usable() {
 	# Non-empty, not locked (!/*). Empty hash ⇒ rpcd accepts any password.
+	# First-field match only (avoid unanchored "${user}:" substring hits).
 	_u=$1
-	_sh=$(grep -m1 -F "${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null | cut -d: -f2)
+	_sh=$(awk -F: -v u="$_u" '$1 == u { print $2; exit }' "$USRMANAGE_SHADOW" 2>/dev/null)
 	[ -n "$_sh" ] || return 1
 	case "$_sh" in
 		'!'*|'*'*) return 1 ;;
