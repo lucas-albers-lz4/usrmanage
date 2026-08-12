@@ -19,15 +19,15 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh` | 2026-08-09 | none |
-| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-09 | none |
-| LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-09 | none |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-12 | none |
+| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-12 | none |
+| LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-12 | none |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-09 | none |
 | CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-09 | none |
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-09 | none |
-| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-09 | none |
+| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-12 | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, published feed keys | 2026-08-09 | none |
-| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-09 | none — lab-only fixtures and passwords are by design, never shipped |
+| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 | none — lab-only fixtures and passwords are by design, never shipped |
 
 ## How to re-verify (current gates)
 
@@ -35,7 +35,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 |---------|----------------|
 | `./scripts/smoke-host.sh` | shellcheck, package layout, link check, validators, mutators-under-lock, rpcd argv (password-safe stub), busybox fallback, theme/i18n/parity |
 | `python3 scripts/z3-verify.py --full` | Formal proof of username / actor grammars (empty, length, deny-list, injection alphabet) |
-| `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → add/list/set-role/passwd/del → audit → last-admin → LuCI/ubus |
+| `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → add/list/set-role/passwd/del → audit → last-admin → **LuCI session revoke** (create session → disable → SID destroyed) → LuCI/ubus |
 | `gh api repos/:owner/:repo/code-scanning/alerts` | CodeQL findings, **including dismissed ones** — check before filing, a finding may already have a decision |
 
 Notes:
@@ -46,41 +46,60 @@ Notes:
 
 ## Controls in force
 
-Living reference, not a snapshot of one review. A new mutator, rpcd method, file-write path, or release step is not done until it has a named guard in one of these tables and a proof.
+Living reference, not a snapshot of one review. A new mutator, rpcd method, file-write path, or release step is not done until it has a named guard in one of these tables and a **proof of the matching class**.
+
+**Proof class** (required column):
+
+| Class | Meaning | Satisfied by |
+|-------|---------|--------------|
+| `host` | Property can be demonstrated without a live OpenWrt guest | Host tests under `tests/`, Z3, or shellcheck gates in `smoke-host.sh` |
+| `lab` | Property depends on real ubus / rpcd / LuCI / package install | `qemu-smoke-*.sh` (or documented lab run) on a supported guest |
+| `manual` | One-time or operator-facing check | Dated review note or published fingerprint table |
+
+**False-green rule:** if a host test skips the security path (`USRMANAGE_DRY_RUN=1`, missing `ubus`/`jsonfilter`, argv stub), it must **not** be listed as Proof for a `lab`-class control. List it as “host harness only” and keep the lab proof (or an open release-blocking issue).
 
 ### Exploit
 
-| Attack surface | Guard | Proof |
-|----------------|-------|-------|
-| Shell / command injection via username | Strict charset (`a-z0-9_-`, 1–32, deny-list) gates mutators and `show` | `tests/test_validators.sh` · Z3 P1 |
-| Password in argv / `ps` / logs | `--password-fd` or stdin; rpcd pipes fd 0; never audit/syslog | `tests/test_mutators.sh` stub argv |
-| Audit field injection (actor/src) | Whitelist + 64-char cap (`um_actor_resolve`, `sanitize_actor`); audit tokens may contain `=` but never a space, so no new field can be introduced | #3 C1 · Z3 P2 |
-| Unquoted argv rpcd → CLI | Explicit argv per ubus method | #3 C2 · `tests/test_mutators.sh` |
-| View → manage escalation | Split rpcd ACL; server authoritative | `acl.d/luci-app-usrmanage.json` |
-| Non-root mutators | `um_require_root` before manage commands | `tests/test_validators.sh` |
-| XSS via username / audit text in LuCI | DOM via LuCI `E()`; no `innerHTML` | Manual review of `usrmanage.js` |
+| Attack surface | Guard | Class | Proof |
+|----------------|-------|-------|-------|
+| Shell / command injection via username | Strict charset (`a-z0-9_-`, 1–32, deny-list) gates mutators and `show` | host | `tests/test_validators.sh` · Z3 P1 |
+| Password in argv / `ps` / logs | `--password-fd` or stdin; rpcd pipes fd 0; never audit/syslog | host | `tests/test_mutators.sh` stub argv |
+| Audit field injection (actor/src) | Whitelist + 64-char cap (`um_actor_resolve`, `sanitize_actor`); audit tokens may contain `=` but never a space, so no new field can be introduced | host | #3 C1 · Z3 P2 |
+| Unquoted argv rpcd → CLI | Explicit argv per ubus method | host | #3 C2 · `tests/test_mutators.sh` |
+| View → manage escalation | Split rpcd ACL; server authoritative | host | `acl.d/luci-app-usrmanage.json` |
+| Non-root mutators | `um_require_root` before manage commands | host | `tests/test_validators.sh` |
+| XSS via username / audit text in LuCI | DOM via LuCI `E()`; no `innerHTML` | manual | Manual review of `usrmanage.js` |
 
 ### Integrity / login safety
 
-| Failure scenario | Guard | Proof |
-|------------------|-------|-------|
-| Concurrent mutators on account files | Whole-mutator exclusive `flock` (`um_with_lock`) | `tests/test_mutators.sh` |
-| Crash mid-mutation | Snapshot / EXIT rollback (`um_tx_*`) over passwd+shadow+group+registry+rpcd (create/delete/set-role). Del commits BEFORE `um_registry_del` (purge may remove the home) — the post-commit registry window is covered by the `incomplete` marker, not the snapshot | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` |
-| Torn file writes | `umask 077` temp → fixed mode/`chown 0:0` → `mv` | `tests/test_phase1_foundation.sh` |
-| SIGKILL / power loss mid-mutation | **Accepted residual**: EXIT-trap rollback cannot run; `doctor` reports orphaned `usrmanage-tx.*` snapdirs for manual recovery. Snapdirs live in `${TMPDIR:-/tmp}` (tmpfs) — recovery applies only if the snapshot survives until the operator acts (#96, #100) | `um_doctor_checks` |
-| Demote/delete last managed admin | `um_count_managed_admins` deny | `tests/test_mutators.sh` · QEMU smoke |
-| Incomplete op with no record | `incomplete` marker + `doctor`; failed restore keeps snapdir | `um_doctor_checks` · architecture docs |
-| Broken sudoers fragment | Minimal static `%wheel` rule; `doctor` runs `visudo -cf` | `um_doctor_checks` |
-| Upgrade/remove wiping managed state | `users`, sudoers, UCI config are conffiles | package Makefile |
+| Failure scenario | Guard | Class | Proof |
+|------------------|-------|-------|-------|
+| Concurrent mutators on account files | Whole-mutator exclusive `flock` (`um_with_lock`) | host | `tests/test_mutators.sh` |
+| Crash mid-mutation | Snapshot / EXIT rollback (`um_tx_*`) over passwd+shadow+group+registry+rpcd (create/delete/set-role). Del commits BEFORE `um_registry_del` (purge may remove the home) — the post-commit registry window is covered by the `incomplete` marker, not the snapshot | host | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` |
+| Torn file writes | `umask 077` temp → fixed mode/`chown 0:0` → `mv` | host | `tests/test_phase1_foundation.sh` |
+| SIGKILL / power loss mid-mutation | **Accepted residual**: EXIT-trap rollback cannot run; `doctor` reports orphaned `usrmanage-tx.*` snapdirs for manual recovery. Snapdirs live in `${TMPDIR:-/tmp}` (tmpfs) — recovery applies only if the snapshot survives until the operator acts (#96, #100) | host | `um_doctor_checks` |
+| Demote/delete last managed admin | `um_count_managed_admins` deny | host | `tests/test_mutators.sh` · QEMU smoke |
+| Incomplete op with no record | `incomplete` marker + `doctor`; failed restore keeps snapdir | host | `um_doctor_checks` · architecture docs |
+| Broken sudoers fragment | Minimal static `%wheel` rule; `doctor` runs `visudo -cf` | host | `um_doctor_checks` |
+| Upgrade/remove wiping managed state | `users`, sudoers, UCI config are conffiles | host | package Makefile |
+
+### LuCI login lifecycle
+
+| Failure scenario | Guard | Class | Proof |
+|------------------|-------|-------|-------|
+| Empty / locked shadow accepted for web login | Refuse enable when hash empty or `!`/`*` | host | `tests/test_luci_login.sh` |
+| Adopt foreign / tampered `luci-app-acl` login | Ownership conjunction (`usrmanage=1` + `$p$user` + managed registry) | host | `tests/test_luci_login.sh` |
+| Live session keeps old ACLs after disable / role / del / passwd | `um_session_revoke_user` destroys matching ubus SIDs (`@.values.username` then `@.data.username`) | lab | `scripts/qemu-smoke-usrmanage.sh` (issue #95) — host DRY_RUN skips ubus and is **not** proof |
+| rpcd pending UCI changes during enable/disable | Refuse when `uci changes rpcd` non-empty | host | `tests/test_luci_login.sh` |
 
 ### Supply chain
 
-| Failure scenario | Guard | Proof |
-|------------------|-------|-------|
-| Unsigned or third-party-signed feed | opkg `usign` + apk RSA signing in the publish job; keys validated before use | `scripts/validate-feed-keys.sh` |
-| Signing secret leaking into the published feed | Staging copies public key material only | `feed_publish_copy_keys` |
-| Silently altered build inputs | Pinned SDK matrix and `scripts/feeds.lock/` feed pins (see [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R4 for the remaining mutable pins) | `sdk_matrix_feeds_ready` lock stamp |
-| Non-reproducible release artifacts | `SOURCE_DATE_EPOCH` from the tag commit + repro gate | `scripts/verify-reproducible-build.sh` |
+| Failure scenario | Guard | Class | Proof |
+|------------------|-------|-------|-------|
+| Unsigned or third-party-signed feed | opkg `usign` + apk RSA signing in the publish job; keys validated before use | host | `scripts/validate-feed-keys.sh` |
+| Signing secret leaking into the published feed | Staging copies public key material only | host | `feed_publish_copy_keys` |
+| Silently altered build inputs | Pinned SDK matrix and `scripts/feeds.lock/` feed pins (see [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R4 for the remaining mutable pins) | host | `sdk_matrix_feeds_ready` lock stamp |
+| Non-reproducible release artifacts | `SOURCE_DATE_EPOCH` from the tag commit + repro gate | host | `scripts/verify-reproducible-build.sh` |
 
 ## Open findings
 
@@ -97,6 +116,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 | [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64) | Operator trust | [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81) — key fingerprints published in the README, [binary-feed.md](binary-feed.md), and the feed README. Install snippets verify the SHA-256. |
 | [#65](https://github.com/lucas-albers-lz4/usrmanage/issues/65) P1/P2 | Product | [PR #83](https://github.com/lucas-albers-lz4/usrmanage/pull/83) — test-only env-override gate and multi-line / control-char password rejection |
 | [#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66) | Tooling | [PR #84](https://github.com/lucas-albers-lz4/usrmanage/pull/84) — portable stat helper, flock shim, and skip reasons. The full gate runs on macOS. |
+| [#95](https://github.com/lucas-albers-lz4/usrmanage/issues/95) | Lab / LuCI login | [PR #103](https://github.com/lucas-albers-lz4/usrmanage/pull/103) — qemu-smoke asserts live session revoke; `@.values.username` verified on 24.10.8 |
 
 ## Accepted residuals
 
@@ -178,15 +198,31 @@ Scope: the surfaces the two prior passes never opened — `.github/workflows/`, 
 
 Confirmed still holding, no change needed: audit field injection (#3 C1) — audit tokens accept `=` but never a space, so a hostile username cannot introduce a new space-delimited field; LuCI renders every user-controlled string through `E()`; and no secret key material reaches the published feed staging directory.
 
+### 2026-08-12 — Process failure review (post LuCI login / #95)
+
+Scope: how design locks and “security done” claims were allowed to merge without matching proofs — especially after the LuCI login lifecycle (PRs #87/#89) and zen-MCR findings #92–#98.
+
+**Failures observed:**
+
+1. **Repeated find→fix waves** (#3, shadow-free #42/#49, Aug-9 #61–#65, LuCI login #92–#98) instead of requiring pre-merge proof for new security surfaces.
+2. **Unchecked lab boxes on feature PRs** that already claimed security locks (PR #87 listed session revoke; “Demote/disable revokes live ubus session” stayed unchecked at merge).
+3. **DRY_RUN / stub false-green** — `USRMANAGE_DRY_RUN=1` makes `um_session_revoke_user` return 0 without ubus; host tests counted as coverage while the live path was unproven (#95).
+4. **Lab verification scoped out of P0** (#90) without a release-blocking follow-up — became #95 only after another MCR pass.
+5. **Coverage map lag** — new LuCI login surface dates were not bumped on the feature PR; lab-class controls were not called out until after merge.
+
+**Process changes** (this revision of the ledger): proof-class column (`host` | `lab` | `manual`); false-green rule; feature PR gate and pre-merge review trigger in [Review procedure](#review-procedure); LuCI login lifecycle rows under [Controls in force](#controls-in-force); session revoke marked `lab` with qemu-smoke proof from #95 / PR #103.
+
 ## Review procedure
 
 1. Read this file and [threat-model.md](threat-model.md) first. Do not reopen the #3 won't-fix bucket or the [Accepted residuals](#accepted-residuals) without new evidence.
-2. Pick the surface with the **oldest date in the [coverage map](#surface-coverage-map)**. A pass that only re-reads the CLI is a pass that finds nothing new.
-3. Diff the surface against [Controls in force](#controls-in-force). Anything new — mutator, rpcd method, file-write path, workflow step, release input — needs a named guard and a proof, or it is a finding.
-4. Re-run the gates in [How to re-verify](#how-to-re-verify-current-gates) and reproduce each finding before filing it. Findings in this repo are expected to come with the command that demonstrates them. Check dismissed CodeQL alerts too — a "new" finding may already have a recorded decision.
+2. Pick the surface with the **oldest date in the [coverage map](#surface-coverage-map)**. A pass that only re-reads the CLI is a pass that finds nothing new. **New surfaces start dated on the feature PR** that introduces them — do not leave them undated until a later periodic pass.
+3. Diff the surface against [Controls in force](#controls-in-force). Anything new — mutator, rpcd method, file-write path, workflow step, release input, session/ACL write — needs a named guard, a **proof class**, and a proof of that class, or it is a finding.
+4. Re-run the gates in [How to re-verify](#how-to-re-verify-current-gates) and reproduce each finding before filing it. Findings in this repo are expected to come with the command that demonstrates them. Check dismissed CodeQL alerts too — a "new" finding may already have a recorded decision. Apply the **false-green rule**: DRY_RUN/stub skips are not proof of `lab`-class controls.
 5. File one tracking issue per theme with the `security` label, using an ID table (`S1`, `R1`, `P1`) so the ledger and the issue can reference the same rows. One issue plus one PR per hardening batch.
 6. In the same PR: append a dated entry under [Audit history](#audit-history), refresh the coverage map dates, and add or close rows in [Open findings](#open-findings). Closed rows move to [Resolved findings](#resolved-findings).
-7. Sibling repos (e.g. fwlive) may share patterns; treat cross-repo notes as candidates, not as an audit of that repo.
+7. **Feature PR gate** (auth / session / password / rpcd / ACL / sudoers / signing): the same PR updates Controls in force + coverage map for touched surfaces. Design locks that need the guest require either (a) an automated `qemu-smoke` assertion in-tree, or (b) an open `security`/`bug` issue that **blocks release acceptance** — not a silent unchecked checkbox. Do not close the parent feature as fully accepted while lab locks remain open.
+8. **Pre-merge review trigger:** any PR that adds a mutator, rpcd method, session/ACL write, or release/signing step gets a security-review pass against this ledger *before* merge (Cursor security-review / Bugbot when available), not only post-merge external MCR.
+9. Sibling repos (e.g. fwlive) may share patterns; treat cross-repo notes as candidates, not as an audit of that repo.
 
 ## Related
 

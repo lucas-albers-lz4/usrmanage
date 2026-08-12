@@ -30,7 +30,7 @@ OpenWrt **local UNIX user management** (CLI + LuCI): managed users, readonly vs 
 
 ### Security reviews
 
-[docs/security-review.md](docs/security-review.md) is the **single source of truth** for review state — surface coverage map (what was reviewed and when), controls in force, open findings, accepted residuals, and the review procedure. Start there, do not re-derive scope, and do not reopen accepted residuals or the #3 won't-fix bucket without new evidence.
+[docs/security-review.md](docs/security-review.md) is the **single source of truth** for review state — surface coverage map (what was reviewed and when), controls in force (with **proof class** `host` | `lab` | `manual`), open findings, accepted residuals, and the review procedure. Start there, do not re-derive scope, and do not reopen accepted residuals or the #3 won't-fix bucket without new evidence. Feature PRs that touch auth/session/password/rpcd/ACL/signing must update the ledger in the same PR; `lab`-class locks need qemu-smoke or a release-blocking open issue (DRY_RUN/host stubs are not proof).
 
 Findings carry the `security` label and use ID tables (`S1`, `R1`, `P1`) so issues and ledger rows line up. Every review PR updates the coverage map dates and the open-findings table.
 
