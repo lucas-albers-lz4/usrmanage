@@ -224,11 +224,37 @@ um_luci_login_classify_row() {
 	fi
 }
 
+um_rpcd_config_parsable() {
+	# Fail closed when /etc/config/rpcd contains a libuci-valid form that
+	# um_rpcd_login_dump's awk grammar cannot see (L4 / issue #108):
+	# indented section headers, single-letter keyword abbreviations, or a
+	# quoted section type. Never report state=none / disable=ok for such a file.
+	_ull_cfg=$USRMANAGE_RPCD_CONFIG
+	[ -f "$_ull_cfg" ] || return 0
+	# Indented config/option/list section header (libuci skip_whitespace first).
+	if grep -qE '^[[:space:]]+config[[:space:]]' "$_ull_cfg" 2>/dev/null; then
+		return 1
+	fi
+	# Abbreviated keywords: lone c / o / l as the first word (optionally indented).
+	if grep -qE '^[[:space:]]*[col]([[:space:]]|$)' "$_ull_cfg" 2>/dev/null; then
+		return 1
+	fi
+	# Quoted section type: config 'login' / config "login"
+	if grep -qE '^config[[:space:]]+["'\'']' "$_ull_cfg" 2>/dev/null; then
+		return 1
+	fi
+	return 0
+}
+
 um_luci_login_state() {
 	# um_luci_login_state <user> → none|owned|foreign|tampered
 	# Returns 1 on internal failure (e.g. mktemp) — callers must treat
 	# this as a hard error, never as 'none' (issue #97 M6).
 	_ull_name=$1
+	um_rpcd_config_parsable || {
+		um_audit fail "$_ull_name" fail rpcd_config_unparsable
+		return 1
+	}
 	_owned=0
 	_foreign=0
 	_tampered=0
@@ -392,6 +418,11 @@ um_luci_login_enable_user() {
 	_ull_name=$1
 	_ull_role=$(um_role_of "$_ull_name")
 	UM_LUCI_ERR=
+	um_rpcd_config_parsable || {
+		um_audit denied "$_ull_name" denied rpcd_config_unparsable "$_ull_role"
+		UM_LUCI_ERR=rpcd_config_unparsable
+		return 1
+	}
 	um_rpcd_pending_ok || {
 		um_audit denied "$_ull_name" denied rpcd_pending_changes "$_ull_role"
 		UM_LUCI_ERR=rpcd_pending_changes
@@ -481,6 +512,11 @@ um_luci_login_disable_user() {
 	_ull_name=$1
 	_ull_role=$(um_role_of "$_ull_name" 2>/dev/null || printf 'readonly')
 	UM_LUCI_ERR=
+	um_rpcd_config_parsable || {
+		um_audit denied "$_ull_name" denied rpcd_config_unparsable "$_ull_role"
+		UM_LUCI_ERR=rpcd_config_unparsable
+		return 1
+	}
 	um_rpcd_pending_ok || {
 		um_audit denied "$_ull_name" denied rpcd_pending_changes "$_ull_role"
 		UM_LUCI_ERR=rpcd_pending_changes
@@ -619,6 +655,11 @@ um_luci_login_reset_user() {
 	_ull_name=$1
 	_ull_role=$(um_role_of "$_ull_name" 2>/dev/null || printf 'readonly')
 	UM_LUCI_ERR=
+	um_rpcd_config_parsable || {
+		um_audit denied "$_ull_name" denied rpcd_config_unparsable "$_ull_role"
+		UM_LUCI_ERR=rpcd_config_unparsable
+		return 1
+	}
 	um_rpcd_pending_ok || {
 		um_audit denied "$_ull_name" denied rpcd_pending_changes "$_ull_role"
 		UM_LUCI_ERR=rpcd_pending_changes
@@ -691,6 +732,10 @@ um_luci_login_remove_owned_best_effort() {
 	# Used on del: remove marker+$p$ section even after unregister.
 	# Handles multiple matching indexes (issue #98 m6).
 	_ull_name=$1
+	um_rpcd_config_parsable || {
+		um_audit fail "$_ull_name" fail rpcd_config_unparsable
+		return 1
+	}
 	_ull_idxs=$(um_luci_login_ours_index "$_ull_name" 1)
 	[ -n "$_ull_idxs" ] || return 0
 	_ull_dir=$(dirname "$USRMANAGE_RPCD_CONFIG")
