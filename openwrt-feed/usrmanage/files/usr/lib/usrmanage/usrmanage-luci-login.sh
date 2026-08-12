@@ -37,11 +37,15 @@ um_rpcd_pending_ok() {
 # --- session revoke ----------------------------------------------------------
 
 um_session_revoke_user() {
-	# Destroy ubus sessions whose data.username matches. Required when ubus
+	# Destroy ubus sessions whose username matches. Required when ubus
 	# exists; DRY_RUN without jsonfilter skips (host tests). A host without
 	# ubus has no LuCI sessions to revoke, so a missing ubus binary is treated
 	# as success (issue #92). Fail closed on device if ubus exists but
 	# list/query tooling is unavailable.
+	#
+	# Username field path (QEMU 24.10.8 lab, issue #95): session get exposes
+	# @.values.username; session login replies use data.username. Keep both
+	# jsonfilter fallbacks for compatibility across rpcd shapes.
 	_u=$1
 	if ! command -v ubus >/dev/null 2>&1; then
 		return 0
