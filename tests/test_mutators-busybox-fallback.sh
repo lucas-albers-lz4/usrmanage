@@ -9,6 +9,7 @@ export USRMANAGE_ETC="$TMP/etc" USRMANAGE_REGISTRY="$TMP/etc/users" USRMANAGE_AU
 export USRMANAGE_AUDIT="$TMP/log/audit.log" USRMANAGE_LOCK="$TMP/lock/usrmanage.lock"
 export USRMANAGE_INCOMPLETE="$TMP/etc/incomplete" USRMANAGE_PASSWD="$TMP/passwd"
 export USRMANAGE_SHADOW="$TMP/shadow" USRMANAGE_GROUP="$TMP/group" USRMANAGE_SUDOERS="$TMP/sudoers"
+export USRMANAGE_RPCD_CONFIG="$TMP/rpcd"
 export USRMANAGE_HOME_ROOT="$TMP/home" USRMANAGE_UID_FLOOR=1000 USRMANAGE_SHELL=/bin/sh
 export USRMANAGE_SRC=cli USRMANAGE_ACTOR=testhost USRMANAGE_DRY_RUN=0
 # Hermetic tests rely on USRMANAGE_* path overrides; enable the test-only gate.
@@ -18,6 +19,7 @@ touch "$USRMANAGE_REGISTRY" "$USRMANAGE_AUDIT" "$USRMANAGE_SUDOERS"
 printf 'root:x:0:0:root:/root:/bin/sh\n' > "$USRMANAGE_PASSWD"
 printf 'root:::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
 printf 'root:x:0:\nwheel:x:10:\n' > "$USRMANAGE_GROUP"
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
 chmod 0644 "$USRMANAGE_PASSWD" "$USRMANAGE_GROUP"
 chmod 0600 "$USRMANAGE_SHADOW"
 

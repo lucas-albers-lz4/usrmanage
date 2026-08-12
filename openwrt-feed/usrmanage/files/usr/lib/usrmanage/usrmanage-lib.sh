@@ -622,8 +622,9 @@ um_incomplete_clear() {
 	rm -f "$USRMANAGE_INCOMPLETE"
 }
 
-# Multi-file transaction snapshots (shadow-free create/delete). Restored on
-# EXIT unless um_tx_commit runs. Paths honor USRMANAGE_*.
+# Multi-file transaction snapshots (create/delete/set-role; includes rpcd for
+# opt-in LuCI logins). Restored on EXIT unless um_tx_commit runs. Paths honor
+# USRMANAGE_*.
 # EXIT hook is installed once. BusyBox ash/dash cannot reliably chain a prior
 # EXIT trap via $(trap | grep) capture (empty inside command substitution), so
 # we do not attempt chaining. The shipped CLI installs no prior EXIT trap;
@@ -659,7 +660,9 @@ um_tx_snap_one() {
 }
 
 um_tx_begin() {
-	# Snapshot passwd/shadow/group/registry for rollback on failure.
+	# Snapshot passwd/shadow/group/registry/rpcd for rollback on failure. rpcd
+	# carries the opt-in LuCI login config so mutators that drop or rewrite
+	# owned web logins stay inside the rollback blast radius (issue #94 M3).
 	# Install EXIT hook + ACTIVE before the snap loop so a mid-begin
 	# um_die still cleans the snapdir (via rollback incomplete-begin path).
 	if [ "${UM_TX_ACTIVE:-0}" = "1" ]; then
@@ -674,6 +677,7 @@ um_tx_begin() {
 	um_tx_snap_one "$USRMANAGE_SHADOW" shadow || um_die "error: tx_snapshot_failed"
 	um_tx_snap_one "$USRMANAGE_GROUP" group || um_die "error: tx_snapshot_failed"
 	um_tx_snap_one "$USRMANAGE_REGISTRY" registry || um_die "error: tx_snapshot_failed"
+	um_tx_snap_one "$USRMANAGE_RPCD_CONFIG" rpcd || um_die "error: tx_snapshot_failed"
 	# Marker: rollback treats missing .complete as aborted begin (discard snapdir).
 	touch "${UM_TX_SNAPDIR}/.complete" || um_die "error: tx_snapshot_failed"
 }
@@ -690,7 +694,7 @@ um_tx_restore_one() {
 	cp "${UM_TX_SNAPDIR}/${_tx_label}" "$_tx_dst" || return 1
 	case "$_tx_label" in
 		shadow) chmod 0600 "$_tx_dst" 2>/dev/null || true ;;
-		passwd|group) chmod 0644 "$_tx_dst" 2>/dev/null || true ;;
+		passwd|group|rpcd) chmod 0644 "$_tx_dst" 2>/dev/null || true ;;
 		registry) chmod 0640 "$_tx_dst" 2>/dev/null || true ;;
 	esac
 	chown 0:0 "$_tx_dst" 2>/dev/null || true
@@ -715,6 +719,7 @@ um_tx_rollback() {
 	um_tx_restore_one "$USRMANAGE_SHADOW" shadow || _ok=0
 	um_tx_restore_one "$USRMANAGE_GROUP" group || _ok=0
 	um_tx_restore_one "$USRMANAGE_REGISTRY" registry || _ok=0
+	um_tx_restore_one "$USRMANAGE_RPCD_CONFIG" rpcd || _ok=0
 	UM_TX_ACTIVE=0
 	if [ "$_ok" != "1" ]; then
 		# Keep snapdir for CLI/doctor recovery (tmpfs until reboot).
@@ -1720,19 +1725,9 @@ um_mut_set_role() {
 		fi
 	fi
 	um_incomplete_set "set-role:${_name}:${_role}"
-	if [ "$_role" = "admin" ]; then
-		um_wheel_add_user "$_name" || {
-			um_incomplete_clear
-			um_audit fail "$_name" fail wheel_add "$_role"
-			um_die "error: wheel_add_failed"
-		}
-	else
-		um_wheel_del_user "$_name" || {
-			um_incomplete_clear
-			um_audit fail "$_name" fail wheel_del "$_role"
-			um_die "error: wheel_del_failed"
-		}
-	fi
+	# Crash-atomic under the tx snapshot: a kill between the wheel change and
+	# the rpcd ACL rewrite restores both on any failure (issue #96 M5).
+	um_tx_begin
 	_um_set_role_rollback() {
 		if [ "$_cur" = "admin" ]; then
 			um_wheel_add_user "$_name" 2>/dev/null || true
@@ -1740,35 +1735,76 @@ um_mut_set_role() {
 			um_wheel_del_user "$_name" 2>/dev/null || true
 		fi
 		if command -v um_luci_login_sync_acls >/dev/null 2>&1; then
-			_rb=$(um_luci_login_state "$_name")
+			_rb=$(um_luci_login_state "$_name") || _rb=unknown
 			# After wheel rollback, re-sync owned ACLs to previous role if still owned/tampered-with-marker.
 			if [ "$_rb" = "owned" ] || [ "$_rb" = "tampered" ]; then
-				um_luci_login_sync_acls "$_name" "$_cur" 2>/dev/null || true
+				# m7: never swallow an ACL rollback-sync failure — record it.
+				if ! um_luci_login_sync_acls "$_name" "$_cur" 2>/dev/null; then
+					um_audit fail "$_name" fail luci_login_rollback "$_cur"
+				fi
 			fi
 		fi
 	}
-	if command -v um_luci_login_sync_acls >/dev/null 2>&1; then
-		_lst=$(um_luci_login_state "$_name")
-		_ours=$(um_luci_login_ours_index "$_name" 2>/dev/null || true)
-		if [ -n "$_ours" ]; then
-			um_luci_login_sync_acls "$_name" "$_role" || {
+	_um_set_role_sync_acls() {
+		if command -v um_luci_login_sync_acls >/dev/null 2>&1; then
+			_lst=$(um_luci_login_state "$_name") || _lst=unknown
+			_ours=$(um_luci_login_ours_index "$_name" 2>/dev/null || true)
+			if [ -n "$_ours" ]; then
+				um_luci_login_sync_acls "$_name" "$_role" || {
+					_um_set_role_rollback
+					um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
+					um_incomplete_clear
+					um_audit fail "$_name" fail luci_login_sync "$_role"
+					um_die "error: luci_login_sync_failed"
+				}
+			elif [ "$_lst" = "foreign" ] || [ "$_lst" = "tampered" ]; then
+				: # leave foreign/forged alone; UNIX role still changes
+			fi
+		fi
+	}
+	_um_set_role_revoke() {
+		if command -v um_session_revoke_user >/dev/null 2>&1; then
+			if ! um_session_revoke_user "$_name"; then
 				_um_set_role_rollback
+				um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 				um_incomplete_clear
-				um_audit fail "$_name" fail luci_login_sync "$_role"
-				um_die "error: luci_login_sync_failed"
-			}
-		elif [ "$_lst" = "foreign" ] || [ "$_lst" = "tampered" ]; then
-			: # leave foreign/forged alone; UNIX role still changes
+				um_audit fail "$_name" fail session_revoke_unavailable "$_role"
+				um_die "error: session_revoke_unavailable"
+			fi
 		fi
-	fi
-	if command -v um_session_revoke_user >/dev/null 2>&1; then
-		if ! um_session_revoke_user "$_name"; then
+	}
+	if [ "$_cur" = "readonly" ] && [ "$_role" = "admin" ]; then
+		# Promote: wheel first, then web ACL grant, so a kill never grants the
+		# write ACL before wheel membership.
+		um_wheel_add_user "$_name" || {
 			_um_set_role_rollback
+			um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 			um_incomplete_clear
-			um_audit fail "$_name" fail session_revoke_unavailable "$_role"
-			um_die "error: session_revoke_unavailable"
-		fi
+			um_audit fail "$_name" fail wheel_add "$_role"
+			um_die "error: wheel_add_failed"
+		}
+		_um_set_role_sync_acls
+		_um_set_role_revoke
+	elif [ "$_cur" = "admin" ] && [ "$_role" = "readonly" ]; then
+		# Demote: revoke live sessions before the ACL rewrite (m1) and drop the
+		# web ACL before wheel, so a kill never leaves a demoted admin
+		# web-write-capable (M5 fail-safe direction).
+		_um_set_role_revoke
+		_um_set_role_sync_acls
+		um_wheel_del_user "$_name" || {
+			_um_set_role_rollback
+			um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
+			um_incomplete_clear
+			um_audit fail "$_name" fail wheel_del "$_role"
+			um_die "error: wheel_del_failed"
+		}
+	else
+		# Same-role transition (e.g. readonly -> readonly): no wheel change —
+		# a same-role set must never grant or revoke sudo. Only sync ACLs to
+		# repair any drift (owned login matrix follows the role).
+		_um_set_role_sync_acls
 	fi
+	um_tx_commit
 	um_incomplete_clear
 	um_audit role "$_name" ok "from=${_cur}" "$_role"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
@@ -1835,22 +1871,21 @@ um_mut_del() {
 		fi
 	fi
 	um_incomplete_set "del:${_name}"
-	# Fail closed before UNIX delete: revoke sessions and drop our rpcd login first.
+	# Fail closed before UNIX delete: revoke sessions and drop our rpcd login
+	# first. Both run inside the tx so a failed delete (e.g. lock_failed) rolls
+	# the web login back too — an interrupted del must leave the account alive
+	# WITH its login (issue #94 M3).
+	um_tx_begin
 	if command -v um_session_revoke_user >/dev/null 2>&1; then
 		if ! um_session_revoke_user "$_name"; then
-			um_incomplete_clear
-			um_audit fail "$_name" fail session_revoke_unavailable "$_role"
-			um_die "error: session_revoke_unavailable"
+			um_mut_fail "$_name" "$_role" "" 0 session_revoke_unavailable "error: session_revoke_unavailable"
 		fi
 	fi
 	if command -v um_luci_login_remove_owned_best_effort >/dev/null 2>&1; then
-		um_luci_login_remove_owned_best_effort "$_name" || {
-			um_incomplete_clear
-			um_audit fail "$_name" fail luci_login_cleanup "$_role"
-			um_die "error: luci_login_cleanup_failed"
-		}
+		if ! um_luci_login_remove_owned_best_effort "$_name"; then
+			um_mut_fail "$_name" "$_role" "" 0 luci_login_cleanup "error: luci_login_cleanup_failed"
+		fi
 	fi
-	um_tx_begin
 	um_lock_account "$_name" || um_mut_fail "$_name" "$_role" "" 0 lock "error: lock_failed"
 	um_kill_user_procs "$_name"
 	um_wheel_del_user "$_name" || um_mut_fail "$_name" "$_role" "" 0 wheel_del "error: wheel_del_failed"

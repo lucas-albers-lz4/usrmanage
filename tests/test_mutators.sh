@@ -20,6 +20,7 @@ export USRMANAGE_PASSWD="$TMP/passwd"
 export USRMANAGE_SHADOW="$TMP/shadow"
 export USRMANAGE_GROUP="$TMP/group"
 export USRMANAGE_SUDOERS="$TMP/sudoers"
+export USRMANAGE_RPCD_CONFIG="$TMP/rpcd"
 export USRMANAGE_DRY_RUN=1
 export USRMANAGE_SRC=cli
 export USRMANAGE_ACTOR=testhost
@@ -33,6 +34,7 @@ printf 'root:::0:99999:7:::\nops:::0:99999:7:::\naudit:::0:99999:7:::\n' > "$USR
 printf 'root:x:0:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
 printf 'ops\naudit\n' > "$USRMANAGE_REGISTRY"
 printf '%%wheel ALL=(ALL:ALL) ALL\n' > "$USRMANAGE_SUDOERS"
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
 
 # shellcheck disable=SC1090
 . "$LIB"

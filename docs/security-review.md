@@ -65,8 +65,9 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Failure scenario | Guard | Proof |
 |------------------|-------|-------|
 | Concurrent mutators on account files | Whole-mutator exclusive `flock` (`um_with_lock`) | `tests/test_mutators.sh` |
-| Crash mid-mutation | Snapshot / EXIT rollback (`um_tx_*`) over passwd+shadow+group+registry | `tests/test_phase1_foundation.sh` |
+| Crash mid-mutation | Snapshot / EXIT rollback (`um_tx_*`) over passwd+shadow+group+registry+rpcd (create/delete/set-role). Del commits BEFORE `um_registry_del` (purge may remove the home) — the post-commit registry window is covered by the `incomplete` marker, not the snapshot | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` |
 | Torn file writes | `umask 077` temp → fixed mode/`chown 0:0` → `mv` | `tests/test_phase1_foundation.sh` |
+| SIGKILL / power loss mid-mutation | **Accepted residual**: EXIT-trap rollback cannot run; `doctor` reports orphaned `usrmanage-tx.*` snapdirs for manual recovery. Snapdirs live in `${TMPDIR:-/tmp}` (tmpfs) — recovery applies only if the snapshot survives until the operator acts (#96, #100) | `um_doctor_checks` |
 | Demote/delete last managed admin | `um_count_managed_admins` deny | `tests/test_mutators.sh` · QEMU smoke |
 | Incomplete op with no record | `incomplete` marker + `doctor`; failed restore keeps snapdir | `um_doctor_checks` · architecture docs |
 | Broken sudoers fragment | Minimal static `%wheel` rule; `doctor` runs `visudo -cf` | `um_doctor_checks` |
@@ -126,7 +127,7 @@ Scope: `openwrt-feed/usrmanage`, `openwrt-feed/luci-app-usrmanage`, docs, host t
 | Split read/write rpcd ACL | Pass — `list/show/audit/doctor/policy` vs write methods |
 | Managed-user registry | Pass — `/etc/usrmanage/users` |
 | Last managed admin guard | Pass — demote/delete |
-| Lock → kill → delete sequence | Pass — `um_mut_del` |
+| Revoke → lock → kill → delete sequence | Pass — `um_mut_del` (session revoke + rpcd login removal precede lock/delete; both inside the tx snapshot) |
 | Exclusive op lock | Pass — `flock` (no mkdir fallback) |
 | Password not in argv | Pass — `--password-fd` / stdin |
 | Actor attribution | Pass — CLI id; LuCI session best-effort / `unknown` |

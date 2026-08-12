@@ -18,6 +18,7 @@ export USRMANAGE_PASSWD="$TMP/passwd"
 export USRMANAGE_SHADOW="$TMP/shadow"
 export USRMANAGE_GROUP="$TMP/group"
 export USRMANAGE_SUDOERS="$TMP/sudoers"
+export USRMANAGE_RPCD_CONFIG="$TMP/rpcd"
 export USRMANAGE_UID_FLOOR=1000
 export USRMANAGE_SRC=cli
 export USRMANAGE_ACTOR=testhost
@@ -30,6 +31,7 @@ printf 'root:x:0:0:root:/root:/bin/ash\nops:x:1000:1000:ops:/home/ops:/bin/ash\n
 printf 'root:::0:99999:7:::\nops:!::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
 printf 'root:x:0:\nops:x:1000:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
 printf 'ops\n' > "$USRMANAGE_REGISTRY"
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
 
 # shellcheck disable=SC1090
 . "$LIB"
@@ -99,6 +101,13 @@ printf 'root:x:0:0:root:/root:/bin/ash\nbad:x:1000:1000::/:/bin/ash\n' > "$USRMA
 um_tx_rollback
 grep -q 'bad:' "$USRMANAGE_PASSWD" && bad "tx rollback left bad user" || ok "tx rollback restores passwd"
 grep -qx 'ops' "$USRMANAGE_REGISTRY" && ok "tx rollback restores registry" || bad "registry not restored"
+
+# rpcd config is part of the snapshot (issue #94 M3): rollback restores it too.
+um_tx_begin
+printf 'config login\n\toption username '\''x'\''\n' >> "$USRMANAGE_RPCD_CONFIG"
+um_tx_rollback
+grep -q "option username 'x'" "$USRMANAGE_RPCD_CONFIG" && bad "tx rollback left rpcd login" || ok "tx rollback restores rpcd config"
+grep -q 'config rpcd' "$USRMANAGE_RPCD_CONFIG" && ok "rpcd fixture intact" || bad "rpcd fixture lost"
 
 um_tx_begin
 printf 'changed\n' > "$USRMANAGE_REGISTRY"

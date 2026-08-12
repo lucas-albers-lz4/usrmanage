@@ -43,7 +43,7 @@ Passwords may traverse ubus JSON once (platform limitation) then are piped to CL
 | Delete last managed admin | Count managed wheel members; deny |
 | View→manage escalation | Split rpcd ACL; server enforces write |
 | Mutate unmanaged/foreign users | Registry gate on mutators |
-| Concurrent corrupt registry / account files | `flock` exclusive lock + multi-file tx snapshot/rollback |
+| Concurrent corrupt registry / account files | `flock` exclusive lock + multi-file tx snapshot/rollback (incl. rpcd, set-role) |
 | Incomplete remove after crash | `incomplete` marker + `doctor` (+ keep snapdir on failed restore) |
 | Audit claimed as compliance evidence | Documented as operational only |
 | CSRF / session replay | LuCI/rpcd platform responsibility |

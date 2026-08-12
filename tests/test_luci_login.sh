@@ -302,5 +302,94 @@ else
 	ok "readonly add-with-luci has no write ACL"
 fi
 
+# --- M3: failed del rolls back the rpcd login removal (issue #94) ---
+um_with_lock um_mut_set_luci_login ops enable
+[ "$(um_luci_login_state ops)" = "owned" ] && ok "M3 pre: ops login owned" || bad "M3 pre: ops login $(um_luci_login_state ops)"
+um_is_managed audit || bad "M3 pre: second admin missing for del ops"
+if (
+	# um_lock_account failing after the login removal must roll the whole
+	# delete back, including the rpcd login.
+	um_lock_account() { return 1; }
+	um_with_lock um_mut_del ops 0 >/dev/null 2>&1
+); then
+	bad "M3: lock-failed del should be denied"
+else
+	ok "M3: lock-failed del denied"
+fi
+um_is_managed ops && ok "M3: ops still managed after rollback" || bad "M3: ops unregistered after rollback"
+[ "$(um_luci_login_state ops)" = "owned" ] && ok "M3: rpcd login rolled back with account" || bad "M3: rpcd login lost after rollback: $(um_luci_login_state ops)"
+grep -q "option password '\$p\$ops'" "$USRMANAGE_RPCD_CONFIG" && ok "M3: ops login section present after rollback" || bad "M3: ops login section missing after rollback"
+grep -q 'reason=lock$' "$USRMANAGE_AUDIT" && ok "M3: lock failure audited" || bad "M3: lock failure not audited"
+
+# --- M5/m1: demote ordering — revoke sessions BEFORE the ACL rewrite, and
+# drop the web ACL BEFORE wheel (fail-safe crash direction) ---
+_ord="$TMP/role_order"
+rm -f "$_ord"
+(
+	um_session_revoke_user() { printf 'revoke\n' >> "$_ord"; return 0; }
+	um_luci_login_sync_acls() { printf 'sync-acls\n' >> "$_ord"; return 0; }
+	um_wheel_del_user() { printf 'wheel-del\n' >> "$_ord"; return 0; }
+	um_with_lock um_mut_set_role ops readonly
+)
+_ord_seq=$(tr -d '\n' < "$_ord" 2>/dev/null)
+if [ "$_ord_seq" = "revokesync-aclswheel-del" ]; then
+	ok "M5/m1: demote order revoke→ACL→wheel"
+else
+	bad "M5/m1: demote order got '$_ord_seq'"
+fi
+
+# --- M5/m7: failed promote rolls back BOTH wheel and ACLs, and a
+# rollback-sync failure is audited (not swallowed) ---
+um_with_lock um_mut_set_role ops readonly
+[ "$(um_luci_login_state ops)" = "owned" ] && ok "M5 pre: ops owned readonly" || bad "M5 pre: ops state $(um_luci_login_state ops)"
+um_in_wheel ops && bad "M5 pre: ops still in wheel" || ok "M5 pre: ops readonly"
+: > "$USRMANAGE_AUDIT"
+if (
+	# Simulate a partial promote: the ACL sync GRANTS the write ACL (mutation
+	# happened) and then fails. Only tx rollback can undo the granted write
+	# ACL — the assertion below must fail on a non-transactional impl.
+	um_luci_login_sync_acls() {
+		# Append the write grant to ops' login section (real mutation).
+		_ll_awk_tmp=$(mktemp "${TMPDIR:-/tmp}/um-rpcd-test.XXXXXX") || return 1
+		awk '
+			/^config login/ { inlogin=1; print; next }
+			inlogin && /option username '\''ops'\''/ { isops=1; print; next }
+			inlogin && isops && /^[ 	]*list write/ { next }
+			inlogin && isops && /option usrmanage/ {
+				print
+				print "	list write '\''luci-app-usrmanage'\''"
+				next
+			}
+			{ print }
+		' "$USRMANAGE_RPCD_CONFIG" > "$_ll_awk_tmp" || { rm -f "$_ll_awk_tmp"; return 1; }
+		um_rpcd_atomic_replace "$_ll_awk_tmp" "$USRMANAGE_RPCD_CONFIG" || { rm -f "$_ll_awk_tmp"; return 1; }
+		rm -f "$_ll_awk_tmp"
+		return 1
+	}
+	um_with_lock um_mut_set_role ops admin >/dev/null 2>&1
+); then
+	bad "M5: failed promote should be denied"
+else
+	ok "M5: failed promote denied"
+fi
+um_in_wheel ops && bad "M5: ops left in wheel after failed promote" || ok "M5: wheel rolled back after failed promote"
+if awk '
+	BEGIN { inlogin=0; isops=0; hasmark=0; haswrite=0 }
+	/^config login/ {
+		if (inlogin && isops && hasmark && haswrite) found=1
+		inlogin=1; isops=0; hasmark=0; haswrite=0; next
+	}
+	inlogin && /option username '\''ops'\''/ { isops=1 }
+	inlogin && /option usrmanage '\''1'\''/ { hasmark=1 }
+	inlogin && /list write '\''luci-app-usrmanage'\''/ { haswrite=1 }
+	END { if (inlogin && isops && hasmark && haswrite) found=1; exit !found }
+' "$USRMANAGE_RPCD_CONFIG"; then
+	bad "M5: write ACL granted despite failed promote"
+else
+	ok "M5: no write ACL after failed promote"
+fi
+grep -q 'reason=luci_login_sync$' "$USRMANAGE_AUDIT" && ok "M5: sync failure audited" || bad "M5: sync failure not audited"
+grep -q 'reason=luci_login_rollback$' "$USRMANAGE_AUDIT" && ok "m7: rollback-sync failure audited" || bad "m7: rollback-sync failure not audited"
+
 [ "$fail" = "0" ] || exit 1
 echo "luci-login tests: ok"

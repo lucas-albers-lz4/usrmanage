@@ -61,12 +61,13 @@ Only users listed in the registry are managed. Mutators refuse unmanaged targets
 ## Removal sequence
 
 1. Policy checks (managed, not last admin, not system)
-2. Lock account
-3. Terminate user processes (best-effort)
-4. Remove from `wheel`
-5. Delete account (`userdel`; home kept unless `--purge-home`)
-6. Registry update
-7. Audit `remove` / `fail` / `denied`
+2. Revoke LuCI sessions + remove owned rpcd login (fail-closed; inside the tx snapshot)
+3. Lock account
+4. Terminate user processes (best-effort)
+5. Remove from `wheel`
+6. Delete account (`userdel`; home kept unless `--purge-home`)
+7. Registry update
+8. Audit `remove` / `fail` / `denied`
 
 ## Passwords
 
