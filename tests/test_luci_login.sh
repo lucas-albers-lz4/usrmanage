@@ -504,9 +504,11 @@ export TMPDIR="$_nonexistent"
 _mktemp_err=$(um_luci_login_state ops 2>&1) && {
 	bad "mktemp failure should not succeed"
 } || ok "mktemp failure returns non-zero"
-export TMPDIR="$_old_tmpdir"
-# Enable should be denied when state check fails
+# Enable must be denied while the state check still fails — keep the broken
+# TMPDIR in effect THROUGH the mutator call (restoring it first would let the
+# enable succeed and make this assertion vacuous).
 _mktemp_enterr=$(um_with_lock um_mut_set_luci_login ops enable 2>&1) && bad "enable after mktemp fail should be denied" || ok "enable denied on mktemp failure"
+export TMPDIR="$_old_tmpdir"
 printf '%s' "$_mktemp_enterr" | grep -q 'luci_login_state' && ok "mktemp failure denial token" || bad "mktemp failure token: $_mktemp_enterr"
 # Verify state check still works after TMPDIR is restored
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "state works after TMPDIR restore" || bad "state after restore $(um_luci_login_state ops)"

@@ -1701,7 +1701,7 @@ um_mut_add() {
 	um_audit grant "$_name" ok "" "$_role"
 	_luci_st=none
 	if command -v um_luci_login_state >/dev/null 2>&1; then
-		_luci_st=$(um_luci_login_state "$_name") || _luci_st=none
+		_luci_st=$(um_luci_login_state "$_name") || _luci_st=error
 	fi
 	if [ "${JSON_OUT:-0}" = "1" ]; then
 		printf '{"ok":true,"name":"%s","role":"%s","luci_login":"%s"}\n' \
