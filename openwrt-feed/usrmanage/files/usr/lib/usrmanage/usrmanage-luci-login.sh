@@ -38,14 +38,13 @@ um_rpcd_pending_ok() {
 
 um_session_revoke_user() {
 	# Destroy ubus sessions whose data.username matches. Required when ubus
-	# exists; DRY_RUN without ubus/jsonfilter skips (host tests). Fail closed
-	# on device if list/query tooling is unavailable.
+	# exists; DRY_RUN without jsonfilter skips (host tests). A host without
+	# ubus has no LuCI sessions to revoke, so a missing ubus binary is treated
+	# as success (issue #92). Fail closed on device if ubus exists but
+	# list/query tooling is unavailable.
 	_u=$1
 	if ! command -v ubus >/dev/null 2>&1; then
-		if [ "${USRMANAGE_DRY_RUN:-0}" = "1" ]; then
-			return 0
-		fi
-		return 1
+		return 0
 	fi
 	if ! command -v jsonfilter >/dev/null 2>&1; then
 		if [ "${USRMANAGE_DRY_RUN:-0}" = "1" ]; then
@@ -59,11 +58,16 @@ um_session_revoke_user() {
 	_sid_list=$(printf '%s' "$_raw" | grep -oE '"[0-9a-f]{32}"' | tr -d '"' | sort -u)
 	for _sid in $_sid_list; do
 		[ -n "$_sid" ] || continue
-		_su=$(ubus call session get "{\"ubus_rpc_session\":\"${_sid}\"}" 2>/dev/null \
-			| jsonfilter -e '@.values.username' 2>/dev/null) || _su=
-		[ -n "$_su" ] || _su=$(ubus call session get "{\"ubus_rpc_session\":\"${_sid}\"}" 2>/dev/null \
-			| jsonfilter -e '@.data.username' 2>/dev/null) || _su=
-		[ "$_su" = "$_u" ] || continue
+		# One ubus call per session; capture its exit status separately so a
+		# failed query fails closed (a live session could survive otherwise).
+		# A missing/empty username field is a skip, NOT a failure (rpcd's own
+		# sessions and other principals have no username).
+		_su=$(ubus call session get "{\"ubus_rpc_session\":\"${_sid}\"}" 2>/dev/null)
+		_rc=$?
+		[ "$_rc" = "0" ] || return 1
+		_su2=$(printf '%s' "$_su" | jsonfilter -e '@.values.username' 2>/dev/null) || _su2=
+		[ -n "$_su2" ] || _su2=$(printf '%s' "$_su" | jsonfilter -e '@.data.username' 2>/dev/null) || _su2=
+		[ "$_su2" = "$_u" ] || continue
 		ubus call session destroy "{\"ubus_rpc_session\":\"${_sid}\"}" >/dev/null 2>&1 || return 1
 	done
 	return 0

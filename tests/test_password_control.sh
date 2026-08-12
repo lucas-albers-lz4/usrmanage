@@ -177,6 +177,36 @@ JF
 	echo "$_out" | grep -q '"ok":true' && ok "rpcd clean password accepted" || bad "rpcd clean pw json: $_out"
 	grep -q '\$6\$testmark\$fakehash' "$USRMANAGE_SHADOW" && ok "rpcd clean password hash written" || bad "rpcd clean pw hash not written"
 	[ "$(shadow_hash)" != "$_orig" ] && ok "rpcd clean password hash changed" || bad "rpcd clean pw hash unchanged"
+
+	# Issue #92: a policy-FAILING rpcd change must not revoke LuCI sessions and
+	# must not touch the shadow hash. Stub ubus records any session-revoke
+	# attempt (marker file); policy is validated before revoke, so a rejected
+	# password never reaches ubus.
+	cat > "$TMP/bin/ubus" <<'UBUS'
+#!/bin/sh
+printf 'revoke_attempted\n' >> "${USRMANAGE_REVOKE_MARKER:-/dev/null}" 2>/dev/null
+printf '{}'
+exit 0
+UBUS
+	chmod +x "$TMP/bin/ubus"
+	export USRMANAGE_REVOKE_MARKER="$TMP/revoke.marker"
+	rm -f "$USRMANAGE_REVOKE_MARKER"
+
+	_orig=$(shadow_hash)
+	_out=$(sh "$RPCD" call passwd '{"name":"ops","password":"short1"}' 2>/dev/null) || true
+	echo "$_out" | grep -q '"ok":false' && ok "rpcd policy-fail ok:false" || bad "rpcd policy-fail json: $_out"
+	echo "$_out" | grep -q 'password_policy' && ok "rpcd policy-fail error token" || bad "rpcd policy-fail error: $_out"
+	[ "$(shadow_hash)" = "$_orig" ] && ok "rpcd policy-fail hash unchanged" || bad "rpcd policy-fail hash changed"
+	[ ! -f "$USRMANAGE_REVOKE_MARKER" ] && ok "rpcd policy-fail did not revoke sessions" || bad "rpcd policy-fail revoked sessions"
+
+	# Control: clean rpcd change with ubus present still attempts revoke.
+	rm -f "$USRMANAGE_REVOKE_MARKER"
+	_out=$(sh "$RPCD" call passwd '{"name":"ops","password":"NewSecret2"}' 2>/dev/null) || true
+	echo "$_out" | grep -q '"ok":true' && ok "rpcd clean password accepted (ubus stub)" || bad "rpcd clean pw ubus json: $_out"
+	[ -f "$USRMANAGE_REVOKE_MARKER" ] && ok "rpcd clean password attempted revoke" || bad "rpcd clean pw did not revoke"
+
+	rm -f "$TMP/bin/ubus" "$USRMANAGE_REVOKE_MARKER"
+	unset USRMANAGE_REVOKE_MARKER
 else
 	echo "skip: rpcd->CLI pipeline test (needs root; CI runs non-root)"
 fi
