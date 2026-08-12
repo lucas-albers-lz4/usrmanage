@@ -74,7 +74,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 | Failure scenario | Guard | Class | Proof |
 |------------------|-------|-------|-------|
-| Concurrent mutators on account files | Whole-mutator exclusive `flock` (`um_with_lock`) | host | `tests/test_mutators.sh` |
+| Concurrent mutators on account files | Whole-mutator exclusive `flock` (`um_with_lock`) | host | `tests/test_mutators.sh`. Open: the lock file is world-readable, so an unprivileged local user can hold it indefinitely — [#111](https://github.com/lucas-albers-lz4/usrmanage/issues/111) L7 |
 | Crash mid-mutation | Snapshot / EXIT rollback (`um_tx_*`) over passwd+shadow+group+registry+rpcd (create/delete/set-role). Del commits BEFORE `um_registry_del` (purge may remove the home) — the post-commit registry window is covered by the `incomplete` marker, not the snapshot | host | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` |
 | Torn file writes | `umask 077` temp → fixed mode/`chown 0:0` → `mv` (`um_atomic_edit`). **Not universal:** `um_rpcd_atomic_replace` and `um_audit_rotate_if_needed` bypass it ([#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) L5/L6) | host | `tests/test_phase1_foundation.sh` — no test asserts resulting **modes** |
 | SIGKILL / power loss mid-mutation | **Accepted residual**: EXIT-trap rollback cannot run; `doctor` reports orphaned `usrmanage-tx.*` snapdirs for manual recovery. Snapdirs live in `${TMPDIR:-/tmp}` (tmpfs) — recovery applies only if the snapshot survives until the operator acts (#96, #100) | host | `um_doctor_checks` |
@@ -119,8 +119,9 @@ From the 2026-08-12 exhaustive pass ([security-audit-luci-login-2026-08-12.md](s
 | [#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) | L2 | Low-Med | Integrity | `set-luci-login` lacks tx snapshot for multi-index rpcd rewrite |
 | [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) | L1, L3 | Low | Session ACL / DiD | Same-role set-role sync without revoke (severity revised down); `um_shadow_hash_usable` missing `grep -F` |
 | [#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107) | P1, P2 | — | Lab proof | Post-disable login deny + demote write-ACL drop asserts; blocked on #108 |
+| [#111](https://github.com/lucas-albers-lz4/usrmanage/issues/111) | L7 | Low-Med | On-device file modes / availability | `/var/lock/usrmanage.lock` created 0644 by `9>`; `flock(2)` works on a read-only fd, so a managed unprivileged user can hold it and block every mutator — including their own revocation — until reboot |
 
-Prior Aug-9 findings are resolved. [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) S2 (no `flock -w`) remains an accepted BusyBox constraint. See [Accepted residuals](#accepted-residuals).
+Prior Aug-9 findings are resolved.
 
 ## Resolved findings
 
@@ -144,7 +145,7 @@ Do not re-open without new evidence.
 | Password traverses ubus JSON once (LuCI → rpcd) | Platform pattern (same as stock LuCI `setPassword`); TLS ops guidance; never argv/logs after |
 | Local `audit.log` not tamper-evident | Root can rewrite any local file; operational claim only |
 | `userdel -r` may follow symlinked home on purge | Matches stock tools; avoid `--purge-home` on untrusted homes |
-| No `flock -w` timeout | BusyBox constraint; see #61 S2 for optional diagnostics |
+| No `flock -w` timeout | BusyBox constraint; see #61 S2 for optional diagnostics. **Narrowed 2026-08-12:** this was accepted on the premise that a stuck holder is a *trusted* process that will eventually exit. It is not — the lock file is 0644, so any local UID can become the holder deliberately ([#111](https://github.com/lucas-albers-lz4/usrmanage/issues/111) L7). The BusyBox constraint stays accepted; the reachability does not |
 | UI `hasWriteAcl` best-effort | Server ACL is authoritative |
 | Best-effort process kill on delete | Account lock still blocks new logins |
 | Admin role means full root via sudo | Product lock, by design — see [AGENTS.md](../AGENTS.md) |
@@ -239,6 +240,10 @@ Scope: LuCI login lifecycle, session revoke, ACL ownership, set-role interaction
 
 - [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) **L4** — the ownership model rests on an awk parser narrower than libuci (indented, `c`-abbreviated, and quoted-type sections are invisible). `disable` returns `ok` and audits `luci_revoke … result=ok` while the login still authenticates; `del` can leave a crypt-hash web credential behind after the UNIX account is gone; the `login_exists_foreign` guard is bypassed on `enable`.
 - [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) **L5/L6** — `um_rpcd_atomic_replace` hardcodes `chmod 0644`, downgrading `/etc/config/rpcd` from the `0600` OpenWrt ships via `INSTALL_CONF`, on the first `set-luci-login`. Same temp-file/mode class as #63 R2, which was fixed in the release pipeline and never swept on-device. `um_audit_rotate_if_needed` has the same shape.
+
+**Follow-on, same day, from the sibling repo.** Auditing `fwlive` with these three classes in hand (temp-file mode loss, unswept fix classes, hand-parsed platform formats) surfaced a fourth instance of the file-mode class that points back here: [#111](https://github.com/lucas-albers-lz4/usrmanage/issues/111) **L7** — `um_with_lock` creates `/var/lock/usrmanage.lock` via `9>` under the ambient umask (0644), and `flock(2)` grants `LOCK_EX` on a read-only descriptor. A managed unprivileged user can therefore hold the op lock and block every mutator, including the `del`/`set-role` that would revoke them, until reboot. This is new evidence against the accepted `flock -w` residual, which had assumed the holder is trusted. The same construct and fix apply in [fwlive#167](https://github.com/lucas-albers-lz4/fwlive/issues/167).
+
+The file-mode class has now produced four instances (#63 R2, #109 L5, #109 L6, #111 L7) and no test in this repo has ever asserted the mode of a file the package writes. That argues for running rule 1 of the prevention plan as a single sweep across every file `usrmanage` creates, rather than reactively per report.
 
 L1 severity revised Medium → Low (drift requires a prior root write). Non-findings re-confirmed: CLI arg parser cannot be turned into option injection from ubus, rpcd argv/password path, audit token grammar, no XSS sink in the view, ACL split, env-override gate, symlink refusal on home create/remove, sudoers `0440` static `%wheel`, SHA-pinned CI. Prevention plan: [security-prevention-plan.md](security-prevention-plan.md).
 
