@@ -159,9 +159,36 @@ sed -i "/option username 'ops'/,/^config /{ /list write/a\\
 	' "$USRMANAGE_RPCD_CONFIG" > "$_awk_tmp" && mv "$_awk_tmp" "$USRMANAGE_RPCD_CONFIG"
 }
 [ "$(um_luci_login_state ops)" = "tampered" ] && ok "ACL drift → tampered" || bad "ACL drift state $(um_luci_login_state ops)"
+# L3: um_shadow_hash_usable must match first field only (DiD / #105)
+grep -n 'um_shadow_hash_usable' -A8 "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh" \
+	| grep -q '\$1 == u' && ok "L3 shadow hash usable uses first-field awk" \
+	|| bad "L3 um_shadow_hash_usable missing first-field match"
+# Substring collision: short user must not inherit another account's hash.
+printf 'ba:GOODHASH:0:0:99999:7:::\n' > "$USRMANAGE_SHADOW"
+printf 'a:!:0:0:99999:7:::\n' >> "$USRMANAGE_SHADOW"
+if um_shadow_hash_usable a; then
+	bad "L3 substring: locked 'a' must not match 'ba:' line"
+else
+	ok "L3 substring: first-field match refuses locked 'a'"
+fi
+printf 'a:REALHASH:0:0:99999:7:::\n' > "$USRMANAGE_SHADOW"
+printf 'ba:OTHER:0:0:99999:7:::\n' >> "$USRMANAGE_SHADOW"
+um_shadow_hash_usable a && ok "L3 first-field: real 'a' hash usable" \
+	|| bad "L3 first-field: real 'a' refused"
+# Restore fixture shadow for the rest of the suite.
+printf 'root:$6$salt$hash:0:99999:7:::\nops:$6$salt$ophash:0:99999:7:::\naudit:$6$salt$auhash:0:99999:7:::\nempty::0:99999:7:::\nlocked:!:0:99999:7:::\n' > "$USRMANAGE_SHADOW"
 um_with_lock um_mut_set_role ops admin
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "set-role sync repairs ACL drift" || bad "repair state $(um_luci_login_state ops)"
 grep -q "luci-app-firewall" "$USRMANAGE_RPCD_CONFIG" && bad "extra ACL still present" || ok "extra ACL removed"
+# L1: same-role branch must revoke after sync (source + repaired ACLs)
+awk '
+	/Same-role transition/ { inblock=1 }
+	inblock && /_um_set_role_sync_acls/ { saw_sync=1 }
+	inblock && saw_sync && /_um_set_role_revoke/ { found=1 }
+	inblock && /^	fi$/ { inblock=0 }
+	END { exit found ? 0 : 1 }
+' "$LIB" && ok "L1 same-role path revokes after sync" \
+	|| bad "L1 same-role missing revoke after sync"
 
 # disable owned
 um_with_lock um_mut_set_luci_login ops disable

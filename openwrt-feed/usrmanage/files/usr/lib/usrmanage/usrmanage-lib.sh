@@ -1837,9 +1837,10 @@ um_mut_set_role() {
 		}
 	else
 		# Same-role transition (e.g. readonly -> readonly): no wheel change —
-		# a same-role set must never grant or revoke sudo. Only sync ACLs to
-		# repair any drift (owned login matrix follows the role).
+		# a same-role set must never grant or revoke sudo. Sync ACLs to repair
+		# drift, then revoke live sessions so elevated ACLs cannot linger (L1).
 		_um_set_role_sync_acls
+		_um_set_role_revoke
 	fi
 	um_tx_commit
 	um_incomplete_clear
