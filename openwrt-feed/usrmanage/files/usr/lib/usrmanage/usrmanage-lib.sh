@@ -586,9 +586,20 @@ um_audit_rotate_if_needed() {
 	[ -n "$_sz" ] || return 0
 	if [ "$_sz" -gt "$USRMANAGE_AUDIT_MAX_BYTES" ]; then
 		_keep=$((USRMANAGE_AUDIT_MAX_BYTES / 2))
-		tail -c "$_keep" "$USRMANAGE_AUDIT" > "${USRMANAGE_AUDIT}.1" 2>/dev/null && \
-			mv "${USRMANAGE_AUDIT}.1" "$USRMANAGE_AUDIT"
+		_rot="${USRMANAGE_AUDIT}.1"
+		# L6: write under umask 077 (ambient umask would leave .1 world-readable
+		# until the post-mv chmod), then chown before rename.
+		(
+			umask 077
+			tail -c "$_keep" "$USRMANAGE_AUDIT" > "$_rot" 2>/dev/null
+		) && {
+			chmod 0640 "$_rot" 2>/dev/null || true
+			chown 0:0 "$_rot" 2>/dev/null || true
+			mv "$_rot" "$USRMANAGE_AUDIT"
+		}
+		rm -f "$_rot" 2>/dev/null || true
 		chmod 0640 "$USRMANAGE_AUDIT" 2>/dev/null || true
+		chown 0:0 "$USRMANAGE_AUDIT" 2>/dev/null || true
 	fi
 }
 
@@ -694,7 +705,9 @@ um_tx_restore_one() {
 	cp "${UM_TX_SNAPDIR}/${_tx_label}" "$_tx_dst" || return 1
 	case "$_tx_label" in
 		shadow) chmod 0600 "$_tx_dst" 2>/dev/null || true ;;
-		passwd|group|rpcd) chmod 0644 "$_tx_dst" 2>/dev/null || true ;;
+		# rpcd is INSTALL_CONF (0600) — do not share the passwd|group 0644 arm (L5).
+		rpcd) chmod 0600 "$_tx_dst" 2>/dev/null || true ;;
+		passwd|group) chmod 0644 "$_tx_dst" 2>/dev/null || true ;;
 		registry) chmod 0640 "$_tx_dst" 2>/dev/null || true ;;
 	esac
 	chown 0:0 "$_tx_dst" 2>/dev/null || true
@@ -791,6 +804,18 @@ um_alloc_ids() {
 	return 1
 }
 
+um_lock_open() {
+	# Create / tighten the op lock so unprivileged local UIDs cannot take
+	# LOCK_EX on a world-readable fd (L7). flock(2) grants exclusive locks on
+	# read-only descriptors; a 0644 lock is therefore a DoS on every mutator.
+	# Explicit chmod also tightens a file left 0644 by an older build (survives
+	# until reboot otherwise).
+	( umask 077; : >> "$USRMANAGE_LOCK" ) 2>/dev/null || return 1
+	chmod 0600 "$USRMANAGE_LOCK" 2>/dev/null || true
+	chown 0:0 "$USRMANAGE_LOCK" 2>/dev/null || true
+	return 0
+}
+
 um_with_lock() {
 	# um_with_lock <shell function name> [args...]
 	# Requires flock (BusyBox or util-linux). No mkdir fallback — that path
@@ -799,6 +824,7 @@ um_with_lock() {
 	# a stuck holder therefore blocks concurrent callers indefinitely.
 	um_ensure_dirs_strict
 	command -v flock >/dev/null 2>&1 || um_die "error: flock_required"
+	um_lock_open || um_die "error: lock_open_failed"
 	_fn=$1
 	shift
 	(

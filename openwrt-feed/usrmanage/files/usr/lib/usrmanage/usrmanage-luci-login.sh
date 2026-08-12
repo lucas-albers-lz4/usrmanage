@@ -351,12 +351,24 @@ um_rpcd_append_owned_login() {
 
 um_rpcd_atomic_replace() {
 	# Stage beside destination to avoid EXDEV (tmpfs /tmp → overlay /etc).
+	# Preserve destination mode (OpenWrt ships /etc/config/rpcd as 0600 via
+	# INSTALL_CONF). Hardcoding 0644 was L5 — first set-luci-login world-readable.
+	# Use _ull_fmode (not _ull_mode): the latter is the enable/disable/reset
+	# argument in um_mut_set_luci_login and must not be clobbered (ash globals).
 	_ull_from=$1
 	_ull_to=$2
 	_ull_todir=$(dirname "$_ull_to")
+	_ull_fmode=600
+	if [ -f "$_ull_to" ]; then
+		_ull_got=$(stat -c '%a' "$_ull_to" 2>/dev/null) || _ull_got=
+		case "$_ull_got" in
+			[0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) _ull_fmode=$_ull_got ;;
+		esac
+	fi
 	_ull_stage=$(mktemp "${_ull_todir}/.usrmanage-rpcd.XXXXXX") || return 1
 	cp "$_ull_from" "$_ull_stage" || { rm -f "$_ull_stage"; return 1; }
-	chmod 0644 "$_ull_stage" 2>/dev/null || true
+	chmod "$_ull_fmode" "$_ull_stage" 2>/dev/null || true
+	chown 0:0 "$_ull_stage" 2>/dev/null || true
 	mv "$_ull_stage" "$_ull_to" || { rm -f "$_ull_stage"; return 1; }
 	return 0
 }

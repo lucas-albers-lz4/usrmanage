@@ -38,6 +38,7 @@ printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_
 
 # shellcheck disable=SC1090
 . "$LIB"
+. "$ROOT/tests/lib.sh"
 
 fail=0
 ok() { echo "ok: $*"; }
@@ -47,16 +48,26 @@ bad() { echo "FAIL: $*" >&2; fail=1; }
 _mark_touch() {
 	printf '1\n' > "$TMP/lock_ran"
 }
-rm -f "$TMP/lock_ran"
+rm -f "$TMP/lock_ran" "$USRMANAGE_LOCK"
+umask 022
 um_with_lock _mark_touch
 [ -f "$TMP/lock_ran" ] && ok "um_with_lock runs body" || bad "um_with_lock body"
 [ -f "$USRMANAGE_LOCK" ] && ok "lock file created" || bad "lock file missing"
+_mode=$(stat_mode "$USRMANAGE_LOCK")
+[ "$_mode" = "600" ] && ok "lock file mode 0600" || bad "lock file mode $_mode (want 600)"
 # BusyBox flock lacks -w; pin the indefinite-block assumption in source.
 grep -q 'blocks concurrent callers indefinitely' "$LIB" \
 	&& ok "um_with_lock documents indefinite flock wait" \
 	|| bad "um_with_lock missing indefinite-wait note"
 grep -q 'flock -w' "$LIB" && bad "um_with_lock must not use flock -w (BusyBox)" \
 	|| ok "um_with_lock avoids flock -w"
+
+# Upgrade path: a lock left 0644 by an older build must be tightened (L7).
+install -m 0644 /dev/null "$USRMANAGE_LOCK"
+um_with_lock _mark_touch
+_mode=$(stat_mode "$USRMANAGE_LOCK")
+[ "$_mode" = "600" ] && ok "pre-existing 0644 lock tightened to 0600" \
+	|| bad "pre-existing lock mode $_mode (want 600)"
 
 # flock required when flock not on PATH
 mkdir -p "$TMP/emptybin"

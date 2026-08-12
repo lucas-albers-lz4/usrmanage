@@ -11,6 +11,7 @@ packages.adb
 # Signing keys (never commit)
 *.key
 *.rsa
+*.tmp
 opkg-secret*
 apk-secret*
 public.key
