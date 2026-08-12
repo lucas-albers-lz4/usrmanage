@@ -92,4 +92,4 @@ Installing from the [signed feed](binary-feed.md) bootstraps trust on first use.
 
 ## Future reviews
 
-Procedure, scope map, and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state.
+Procedure, scope map, proof classes (`host` / `lab` / `manual`), and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state. Do not treat host DRY_RUN stubs as proof of lab-class controls (e.g. live ubus session revoke).
