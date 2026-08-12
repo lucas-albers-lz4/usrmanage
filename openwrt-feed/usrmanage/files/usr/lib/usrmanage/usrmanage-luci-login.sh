@@ -790,10 +790,10 @@ um_mut_set_luci_login() {
 	um_mut_require_exists "$_ull_name" "" not_found
 	case "$_ull_mode" in
 		enable|1|on)
-			um_incomplete_set "luci-login:${_ull_name}:enable"
 			um_tx_begin
+			um_incomplete_set "luci-login:${_ull_name}:enable"
 			um_luci_login_enable_user "$_ull_name" || {
-				um_tx_rollback || true
+				um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 				um_incomplete_clear
 				um_audit luci_login "$_ull_name" denied "mode=enable" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
 				um_die "error: ${UM_LUCI_ERR:-luci_login_failed}"
@@ -802,10 +802,10 @@ um_mut_set_luci_login() {
 			um_incomplete_clear
 			;;
 		disable|0|off)
-			um_incomplete_set "luci-login:${_ull_name}:disable"
 			um_tx_begin
+			um_incomplete_set "luci-login:${_ull_name}:disable"
 			um_luci_login_disable_user "$_ull_name" || {
-				um_tx_rollback || true
+				um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 				um_incomplete_clear
 				um_audit luci_login "$_ull_name" denied "mode=disable" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
 				um_die "error: ${UM_LUCI_ERR:-luci_login_failed}"
@@ -814,10 +814,10 @@ um_mut_set_luci_login() {
 			um_incomplete_clear
 			;;
 		reset)
-			um_incomplete_set "luci-login:${_ull_name}:reset"
 			um_tx_begin
+			um_incomplete_set "luci-login:${_ull_name}:reset"
 			um_luci_login_reset_user "$_ull_name" || {
-				um_tx_rollback || true
+				um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 				um_incomplete_clear
 				um_audit luci_login "$_ull_name" denied "mode=reset" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
 				um_die "error: ${UM_LUCI_ERR:-luci_login_failed}"
