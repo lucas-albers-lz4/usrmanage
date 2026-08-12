@@ -82,16 +82,24 @@ um_session_revoke_required() {
 
 # --- rpcd config parse / write -----------------------------------------------
 
-# Dump login sections as records: INDEX|USERNAME|PASSWORD|MARKER|READS|WRITES
+# Dump login sections as records: INDEX\x1fUSERNAME\x1fPASSWORD\x1fMARKER\x1fREADS\x1fWRITES
 # INDEX is 0-based among login sections only. READS/WRITES are comma-separated.
+# Delimiter is ASCII unit separator (\x1f) — safe in $p$ refs and base64 hashes,
+# unlike | which can appear in foreign plaintext passwords (issue #98 m3).
+um_luci_login_sep() {
+	# ASCII unit separator (0x1f) via POSIX octal escape — dash printf does not
+	# interpret \x hex, so \037 is the portable form. Safe in $p$ refs/base64.
+	printf '\037'
+}
+
 um_rpcd_login_dump() {
 	_ull_cfg=$USRMANAGE_RPCD_CONFIG
 	[ -f "$_ull_cfg" ] || return 0
 	awk '
-	BEGIN { idx = -1; inlogin = 0 }
+	BEGIN { idx = -1; inlogin = 0; OFS = sprintf("%c", 31) }
 	function flush() {
 		if (!inlogin) return
-		printf "%d|%s|%s|%s|%s|%s\n", idx, user, pass, marker, reads, writes
+		printf "%d%s%s%s%s%s%s%s%s%s%s\n", idx, OFS, user, OFS, pass, OFS, marker, OFS, reads, OFS, writes
 		user = ""; pass = ""; marker = ""; reads = ""; writes = ""
 	}
 	/^config[ \t]+login([ \t]|$)/ {
@@ -214,15 +222,18 @@ um_luci_login_classify_row() {
 
 um_luci_login_state() {
 	# um_luci_login_state <user> → none|owned|foreign|tampered
+	# Returns 1 on internal failure (e.g. mktemp) — callers must treat
+	# this as a hard error, never as 'none' (issue #97 M6).
 	_ull_name=$1
 	_owned=0
 	_foreign=0
 	_tampered=0
 	_stf=$(mktemp "${TMPDIR:-/tmp}/um-luci-st.XXXXXX") || {
-		printf 'none'
-		return 0
+		um_audit fail "$_ull_name" fail luci_login_state_tmp
+		return 1
 	}
-	um_rpcd_login_dump | while IFS='|' read -r _i _ru _rp _rm _rr _rw || [ -n "${_i:-}" ]; do
+	_uf=$(um_luci_login_sep)
+	um_rpcd_login_dump | while IFS="$_uf" read -r _i _ru _rp _rm _rr _rw || [ -n "${_i:-}" ]; do
 		[ -n "${_i:-}" ] || continue
 		_cls=$(um_luci_login_classify_row "$_ru" "$_rp" "$_rm" "$_rr" "$_rw" "$_ull_name")
 		case "$_cls" in
@@ -253,10 +264,13 @@ um_luci_login_state() {
 um_luci_login_ours_index() {
 	# Index of login we claim: marker + $p$user (+ managed when still registered).
 	# Pass skip_managed=1 as $2 for del cleanup after unregister.
+	# Returns ALL matching indexes (newline-separated) — callers must handle
+	# multiple owned sections (issue #98 m6).
 	_ull_name=$1
 	_ull_skip_managed=${2:-0}
 	_expect_pass="\$p\$${_ull_name}"
-	um_rpcd_login_dump | while IFS='|' read -r _i _ru _rp _rm _rr _rw || [ -n "$_i" ]; do
+	_uf=$(um_luci_login_sep)
+	um_rpcd_login_dump | while IFS="$_uf" read -r _i _ru _rp _rm _rr _rw || [ -n "$_i" ]; do
 		[ "$_ru" = "$_ull_name" ] || continue
 		[ "$_rm" = "1" ] || continue
 		[ "$_rp" = "$_expect_pass" ] || continue
@@ -264,22 +278,25 @@ um_luci_login_ours_index() {
 			um_is_managed "$_ull_name" || continue
 		fi
 		printf '%s\n' "$_i"
-	done | head -n1
+	done
 }
 
 um_luci_login_owned_index() {
 	# Owned = ours + exact role ACL matrix.
+	# Returns ALL matching indexes (newline-separated) — callers must handle
+	# multiple owned sections (issue #98 m6).
 	_ull_name=$1
 	_expect_pass="\$p\$${_ull_name}"
 	_role=$(um_role_of "$_ull_name")
-	um_rpcd_login_dump | while IFS='|' read -r _i _ru _rp _rm _rr _rw || [ -n "$_i" ]; do
+	_uf=$(um_luci_login_sep)
+	um_rpcd_login_dump | while IFS="$_uf" read -r _i _ru _rp _rm _rr _rw || [ -n "$_i" ]; do
 		[ "$_ru" = "$_ull_name" ] || continue
 		[ "$_rm" = "1" ] || continue
 		[ "$_rp" = "$_expect_pass" ] || continue
 		um_is_managed "$_ull_name" || continue
 		um_luci_login_acls_match_role "$_role" "$_rr" "$_rw" || continue
 		printf '%s\n' "$_i"
-	done | head -n1
+	done
 }
 
 um_rpcd_rewrite_without_login_index() {
@@ -344,11 +361,12 @@ um_luci_login_verify_owned_acls() {
 	# After write, confirm ours section has exact role ACL membership.
 	_ull_name=$1
 	_ull_role=$2
-	_ull_idx=$(um_luci_login_ours_index "$_ull_name")
+	_ull_idx=$(um_luci_login_ours_index "$_ull_name" | head -n1)
 	[ -n "$_ull_idx" ] || return 1
-	_row=$(um_rpcd_login_dump | awk -F'|' -v i="$_ull_idx" '$1==i {print; exit}')
-	_reads=$(printf '%s' "$_row" | cut -d'|' -f5)
-	_writes=$(printf '%s' "$_row" | cut -d'|' -f6)
+	_uf=$(um_luci_login_sep)
+	_row=$(um_rpcd_login_dump | awk -v i="$_ull_idx" -v FS="$_uf" '$1==i {print; exit}')
+	_reads=$(printf '%s' "$_row" | awk -v FS="$_uf" '{print $5}')
+	_writes=$(printf '%s' "$_row" | awk -v FS="$_uf" '{print $6}')
 	um_luci_login_acls_match_role "$_ull_role" "$_reads" "$_writes"
 }
 
@@ -368,7 +386,11 @@ um_luci_login_enable_user() {
 		UM_LUCI_ERR=no_password
 		return 1
 	}
-	_ull_st=$(um_luci_login_state "$_ull_name")
+	_ull_st=$(um_luci_login_state "$_ull_name") || {
+		um_audit fail "$_ull_name" fail luci_login_state "$_ull_role"
+		UM_LUCI_ERR=luci_login_state
+		return 1
+	}
 	case "$_ull_st" in
 		none) ;;
 		owned)
@@ -417,15 +439,18 @@ um_luci_login_enable_user() {
 	}
 	rm -f "$_ull_work"
 	um_luci_login_verify_owned_acls "$_ull_name" "$_ull_role" || {
-		_ull_idx=$(um_luci_login_ours_index "$_ull_name")
-		if [ -n "$_ull_idx" ]; then
+		_ull_rollback_idxs=$(um_luci_login_ours_index "$_ull_name")
+		# Process in reverse to avoid index shifting.
+		_ull_rollback_rev=$(printf '%s' "$_ull_rollback_idxs" | sort -nr)
+		for _ull_rollback_idx in $_ull_rollback_rev; do
+			[ -n "$_ull_rollback_idx" ] || continue
 			_ull_tmp2=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || true
 			if [ -n "$_ull_tmp2" ]; then
-				um_rpcd_rewrite_without_login_index "$_ull_dest" "$_ull_idx" > "$_ull_tmp2" \
+				um_rpcd_rewrite_without_login_index "$_ull_dest" "$_ull_rollback_idx" > "$_ull_tmp2" \
 					&& um_rpcd_atomic_replace "$_ull_tmp2" "$_ull_dest"
 				rm -f "$_ull_tmp2"
 			fi
-		fi
+		done
 		um_audit fail "$_ull_name" fail luci_acl_verify "$_ull_role"
 		UM_LUCI_ERR=luci_acl_verify_failed
 		return 1
@@ -445,10 +470,14 @@ um_luci_login_disable_user() {
 		UM_LUCI_ERR=rpcd_pending_changes
 		return 1
 	}
-	_ull_idx=$(um_luci_login_ours_index "$_ull_name")
-	_ull_st=$(um_luci_login_state "$_ull_name")
+	_ull_idxs=$(um_luci_login_ours_index "$_ull_name")
+	_ull_st=$(um_luci_login_state "$_ull_name") || {
+		um_audit fail "$_ull_name" fail luci_login_state "$_ull_role"
+		UM_LUCI_ERR=luci_login_state
+		return 1
+	}
 	# Prefer removing our section even when a foreign login coexists (state=foreign).
-	if [ -z "$_ull_idx" ]; then
+	if [ -z "$_ull_idxs" ]; then
 		case "$_ull_st" in
 			none)
 				um_session_revoke_user "$_ull_name" || {
@@ -481,16 +510,37 @@ um_luci_login_disable_user() {
 		UM_LUCI_ERR=session_revoke_unavailable
 		return 1
 	}
+	# Remove ALL matching owned indexes (issue #98 m6).
 	_ull_dir=$(dirname "$USRMANAGE_RPCD_CONFIG")
 	_ull_tmp=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || {
 		UM_LUCI_ERR=rpcd_config_failed
 		return 1
 	}
-	um_rpcd_rewrite_without_login_index "$USRMANAGE_RPCD_CONFIG" "$_ull_idx" > "$_ull_tmp" || {
+	cp "$USRMANAGE_RPCD_CONFIG" "$_ull_tmp" || {
 		rm -f "$_ull_tmp"
 		UM_LUCI_ERR=rpcd_config_failed
 		return 1
 	}
+	# Process in reverse to avoid index shifting when removing multiple.
+	_ull_rev_idxs=$(printf '%s' "$_ull_idxs" | sort -nr)
+	for _ull_idx in $_ull_rev_idxs; do
+		[ -n "$_ull_idx" ] || continue
+		_ull_tmp2=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || {
+			rm -f "$_ull_tmp"
+			UM_LUCI_ERR=rpcd_config_failed
+			return 1
+		}
+		um_rpcd_rewrite_without_login_index "$_ull_tmp" "$_ull_idx" > "$_ull_tmp2" || {
+			rm -f "$_ull_tmp" "$_ull_tmp2"
+			UM_LUCI_ERR=rpcd_config_failed
+			return 1
+		}
+		mv "$_ull_tmp2" "$_ull_tmp" || {
+			rm -f "$_ull_tmp" "$_ull_tmp2"
+			UM_LUCI_ERR=rpcd_config_failed
+			return 1
+		}
+	done
 	um_rpcd_atomic_replace "$_ull_tmp" "$USRMANAGE_RPCD_CONFIG" || {
 		rm -f "$_ull_tmp"
 		UM_LUCI_ERR=rpcd_config_failed
@@ -504,17 +554,36 @@ um_luci_login_disable_user() {
 um_luci_login_sync_acls() {
 	# Recreate our login section with role-correct ACLs (delete + append).
 	# Works for owned and ACL-drifted (marker+$p$+managed) sections.
+	# Handles multiple matching indexes (issue #98 m6).
 	_ull_name=$1
 	_ull_role=$2
-	_ull_idx=$(um_luci_login_ours_index "$_ull_name")
-	[ -n "$_ull_idx" ] || return 0
+	_ull_idxs=$(um_luci_login_ours_index "$_ull_name")
+	[ -n "$_ull_idxs" ] || return 0
 	um_rpcd_pending_ok || return 1
 	_ull_dir=$(dirname "$USRMANAGE_RPCD_CONFIG")
 	_ull_tmp=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || return 1
-	um_rpcd_rewrite_without_login_index "$USRMANAGE_RPCD_CONFIG" "$_ull_idx" > "$_ull_tmp" || {
+	cp "$USRMANAGE_RPCD_CONFIG" "$_ull_tmp" || {
 		rm -f "$_ull_tmp"
 		return 1
 	}
+	# Remove all matching indexes, then append one correct section.
+	# Process in reverse to avoid index shifting.
+	_ull_rev_idxs=$(printf '%s' "$_ull_idxs" | sort -nr)
+	for _ull_idx in $_ull_rev_idxs; do
+		[ -n "$_ull_idx" ] || continue
+		_ull_tmp2=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || {
+			rm -f "$_ull_tmp"
+			return 1
+		}
+		um_rpcd_rewrite_without_login_index "$_ull_tmp" "$_ull_idx" > "$_ull_tmp2" || {
+			rm -f "$_ull_tmp" "$_ull_tmp2"
+			return 1
+		}
+		mv "$_ull_tmp2" "$_ull_tmp" || {
+			rm -f "$_ull_tmp" "$_ull_tmp2"
+			return 1
+		}
+	done
 	um_rpcd_append_owned_login "$_ull_tmp" "$_ull_name" "$_ull_role"
 	um_rpcd_atomic_replace "$_ull_tmp" "$USRMANAGE_RPCD_CONFIG" || {
 		rm -f "$_ull_tmp"
@@ -525,17 +594,112 @@ um_luci_login_sync_acls() {
 	return 0
 }
 
+um_luci_login_reset_user() {
+	# Recovery path (issue #93 M2): remove ANY usrmanage-claimed login section
+	# (marker + $p$ or marker-only) for the user, regardless of password match.
+	# Does NOT touch a pure foreign section (no marker).
+	# Clears a tampered state back to none (or foreign if a foreign section remains).
+	# Caller holds flock. Returns 0/1; sets UM_LUCI_ERR on failure.
+	_ull_name=$1
+	_ull_role=$(um_role_of "$_ull_name" 2>/dev/null || printf 'readonly')
+	UM_LUCI_ERR=
+	um_rpcd_pending_ok || {
+		um_audit denied "$_ull_name" denied rpcd_pending_changes "$_ull_role"
+		UM_LUCI_ERR=rpcd_pending_changes
+		return 1
+	}
+	# Find ALL sections with our marker for this user (any password — we reset them).
+	_uf=$(um_luci_login_sep)
+	_ull_marker_idxs=$(um_rpcd_login_dump | while IFS="$_uf" read -r _i _ru _rp _rm _rr _rw || [ -n "$_i" ]; do
+		[ "$_ru" = "$_ull_name" ] || continue
+		[ "$_rm" = "1" ] || continue
+		printf '%s\n' "$_i"
+	done)
+	if [ -z "$_ull_marker_idxs" ]; then
+		# No marked sections — nothing to reset. Audit and succeed.
+		# Do NOT revoke sessions here: with no usrmanage-marked section,
+		# any login is foreign, and username-based session matching cannot
+		# tell which sessions belong to it — revoking would destroy the
+		# foreign application's active sessions (issue #98 m4).
+		um_audit luci_revoke "$_ull_name" ok "acl=none" "$_ull_role"
+		return 0
+	fi
+	# Revoke live sessions before removing login definitions.
+	um_session_revoke_user "$_ull_name" || {
+		um_audit fail "$_ull_name" fail session_revoke_unavailable
+		UM_LUCI_ERR=session_revoke_unavailable
+		return 1
+	}
+	# Remove ALL marked sections.
+	_ull_dir=$(dirname "$USRMANAGE_RPCD_CONFIG")
+	_ull_tmp=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || {
+		UM_LUCI_ERR=rpcd_config_failed
+		return 1
+	}
+	cp "$USRMANAGE_RPCD_CONFIG" "$_ull_tmp" || {
+		rm -f "$_ull_tmp"
+		UM_LUCI_ERR=rpcd_config_failed
+		return 1
+	}
+	# Process in reverse to avoid index shifting.
+	_ull_rev_marker_idxs=$(printf '%s' "$_ull_marker_idxs" | sort -nr)
+	for _ull_idx in $_ull_rev_marker_idxs; do
+		[ -n "$_ull_idx" ] || continue
+		_ull_tmp2=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || {
+			rm -f "$_ull_tmp"
+			UM_LUCI_ERR=rpcd_config_failed
+			return 1
+		}
+		um_rpcd_rewrite_without_login_index "$_ull_tmp" "$_ull_idx" > "$_ull_tmp2" || {
+			rm -f "$_ull_tmp" "$_ull_tmp2"
+			UM_LUCI_ERR=rpcd_config_failed
+			return 1
+		}
+		mv "$_ull_tmp2" "$_ull_tmp" || {
+			rm -f "$_ull_tmp" "$_ull_tmp2"
+			UM_LUCI_ERR=rpcd_config_failed
+			return 1
+		}
+	done
+	um_rpcd_atomic_replace "$_ull_tmp" "$USRMANAGE_RPCD_CONFIG" || {
+		rm -f "$_ull_tmp"
+		UM_LUCI_ERR=rpcd_config_failed
+		return 1
+	}
+	rm -f "$_ull_tmp"
+	um_audit luci_revoke "$_ull_name" ok "acl=none" "$_ull_role"
+	return 0
+}
+
 um_luci_login_remove_owned_best_effort() {
 	# Used on del: remove marker+$p$ section even after unregister.
+	# Handles multiple matching indexes (issue #98 m6).
 	_ull_name=$1
-	_ull_idx=$(um_luci_login_ours_index "$_ull_name" 1)
-	[ -n "$_ull_idx" ] || return 0
+	_ull_idxs=$(um_luci_login_ours_index "$_ull_name" 1)
+	[ -n "$_ull_idxs" ] || return 0
 	_ull_dir=$(dirname "$USRMANAGE_RPCD_CONFIG")
 	_ull_tmp=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || return 1
-	um_rpcd_rewrite_without_login_index "$USRMANAGE_RPCD_CONFIG" "$_ull_idx" > "$_ull_tmp" || {
+	cp "$USRMANAGE_RPCD_CONFIG" "$_ull_tmp" || {
 		rm -f "$_ull_tmp"
 		return 1
 	}
+	# Process in reverse to avoid index shifting.
+	_ull_rev_idxs=$(printf '%s' "$_ull_idxs" | sort -nr)
+	for _ull_idx in $_ull_rev_idxs; do
+		[ -n "$_ull_idx" ] || continue
+		_ull_tmp2=$(mktemp "${_ull_dir}/.usrmanage-rpcd.XXXXXX") || {
+			rm -f "$_ull_tmp"
+			return 1
+		}
+		um_rpcd_rewrite_without_login_index "$_ull_tmp" "$_ull_idx" > "$_ull_tmp2" || {
+			rm -f "$_ull_tmp" "$_ull_tmp2"
+			return 1
+		}
+		mv "$_ull_tmp2" "$_ull_tmp" || {
+			rm -f "$_ull_tmp" "$_ull_tmp2"
+			return 1
+		}
+	done
 	um_rpcd_atomic_replace "$_ull_tmp" "$USRMANAGE_RPCD_CONFIG" || {
 		rm -f "$_ull_tmp"
 		return 1
@@ -545,7 +709,7 @@ um_luci_login_remove_owned_best_effort() {
 }
 
 um_mut_set_luci_login() {
-	# um_mut_set_luci_login <user> <enable|disable>
+	# um_mut_set_luci_login <user> <enable|disable|reset>
 	_ull_name=$1
 	_ull_mode=$2
 	um_mut_require_valid_username "$_ull_name" ""
@@ -556,6 +720,7 @@ um_mut_set_luci_login() {
 			um_incomplete_set "luci-login:${_ull_name}:enable"
 			um_luci_login_enable_user "$_ull_name" || {
 				um_incomplete_clear
+				um_audit luci_login "$_ull_name" denied "mode=enable" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
 				um_die "error: ${UM_LUCI_ERR:-luci_login_failed}"
 			}
 			um_incomplete_clear
@@ -564,15 +729,27 @@ um_mut_set_luci_login() {
 			um_incomplete_set "luci-login:${_ull_name}:disable"
 			um_luci_login_disable_user "$_ull_name" || {
 				um_incomplete_clear
+				um_audit luci_login "$_ull_name" denied "mode=disable" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
+				um_die "error: ${UM_LUCI_ERR:-luci_login_failed}"
+			}
+			um_incomplete_clear
+			;;
+		reset)
+			um_incomplete_set "luci-login:${_ull_name}:reset"
+			um_luci_login_reset_user "$_ull_name" || {
+				um_incomplete_clear
+				um_audit luci_login "$_ull_name" denied "mode=reset" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
 				um_die "error: ${UM_LUCI_ERR:-luci_login_failed}"
 			}
 			um_incomplete_clear
 			;;
 		*)
+			um_audit denied "$_ull_name" denied invalid_luci_login_mode
 			um_die "error: invalid_luci_login_mode"
 			;;
 	esac
-	_ull_st=$(um_luci_login_state "$_ull_name")
+	_ull_st=$(um_luci_login_state "$_ull_name") || _ull_st=error
+	um_audit luci_login "$_ull_name" ok "mode=${_ull_mode}" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
 		printf '{"ok":true,"name":"%s","luci_login":"%s"}\n' \
 			"$(printf '%s' "$_ull_name" | um_json_escape)" "$_ull_st"

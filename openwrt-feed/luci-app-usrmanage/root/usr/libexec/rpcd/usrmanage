@@ -211,7 +211,7 @@ case "$1" in
 		echo '  "add": { "name": "", "role": "", "password": "", "luci_login": false },'
 		echo '  "del": { "name": "", "purge_home": false },'
 		echo '  "set_role": { "name": "", "role": "" },'
-		echo '  "set_luci_login": { "name": "", "enable": false },'
+		echo '  "set_luci_login": { "name": "", "mode": "" },'
 		echo '  "passwd": { "name": "", "password": "" }'
 		echo '}'
 		;;
@@ -274,15 +274,21 @@ case "$1" in
 				_role=$(json_get role)
 				run_cli set-role "$_name" --role "$_role" --json
 				;;
-			set_luci_login)
-				_name=$(json_get name)
+		set_luci_login)
+			_name=$(json_get name)
+			_mode=$(json_get mode)
+			if [ -z "$_mode" ]; then
+				# Back-compat: pre-#87 callers used {"enable": bool}.
 				_en=$(json_get_bool enable)
-				if [ "$_en" = "1" ]; then
-					run_cli set-luci-login "$_name" --enable --json
-				else
-					run_cli set-luci-login "$_name" --disable --json
-				fi
-				;;
+				[ "$_en" = "1" ] && _mode=enable || _mode=disable
+			fi
+			case "$_mode" in
+				enable|1|on)  run_cli set-luci-login "$_name" --enable --json ;;
+				disable|0|off) run_cli set-luci-login "$_name" --disable --json ;;
+				reset)        run_cli set-luci-login "$_name" --reset --json ;;
+				*)            printf '{"ok":false,"error":"invalid_luci_login_mode"}\n' ;;
+			esac
+			;;
 			passwd)
 				_name=$(json_get name)
 				run_passwd "$_name"

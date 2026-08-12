@@ -390,6 +390,132 @@ else
 fi
 grep -q 'reason=luci_login_sync$' "$USRMANAGE_AUDIT" && ok "M5: sync failure audited" || bad "M5: sync failure not audited"
 grep -q 'reason=luci_login_rollback$' "$USRMANAGE_AUDIT" && ok "m7: rollback-sync failure audited" || bad "m7: rollback-sync failure not audited"
+# --- Fix 1 (M2): reset recovery path ---
+
+# Reset clears a tampered (marker + wrong password) login to none
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_luci_login ops enable
+[ "$(um_luci_login_state ops)" = "owned" ] || bad "pre-reset enable failed"
+# Inject tampered state: wrong password with marker
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+config login
+	option username 'ops'
+	option password 'wrong-password'
+	option usrmanage '1'
+	list read 'luci-app-usrmanage-session'
+	list read 'luci-app-usrmanage'
+EOF
+[ "$(um_luci_login_state ops)" = "tampered" ] || bad "tampered state before reset"
+um_with_lock um_mut_set_luci_login ops reset
+[ "$(um_luci_login_state ops)" = "none" ] && ok "reset clears tampered to none" || bad "reset state $(um_luci_login_state ops)"
+grep -q 'luci_revoke' "$USRMANAGE_AUDIT" || bad "reset missing luci_revoke audit"
+
+# Reset skips pure foreign login (no marker) — should succeed (no-op on foreign)
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+config login
+	option username 'ops'
+	option password '$6$foreign$hash'
+	list read '*'
+	list write '*'
+EOF
+[ "$(um_luci_login_state ops)" = "foreign" ] || bad "foreign state before reset"
+um_with_lock um_mut_set_luci_login ops reset
+[ "$(um_luci_login_state ops)" = "foreign" ] && ok "reset skips pure foreign" || bad "reset changed foreign $(um_luci_login_state ops)"
+
+# Reset on none is a no-op success (idempotent)
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+[ "$(um_luci_login_state ops)" = "none" ] || bad "pre-idempotent state"
+um_with_lock um_mut_set_luci_login ops reset && ok "reset on none succeeds" || bad "reset on none failed"
+[ "$(um_luci_login_state ops)" = "none" ] && ok "reset on none stays none" || bad "reset on none state $(um_luci_login_state ops)"
+
+# --- Fix 4 (m3): pipe-in-password delimiter ---
+
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+config login
+	option username 'ops'
+	option password 'pl|ain|pass|word'
+	list read '*'
+	list write '*'
+EOF
+[ "$(um_luci_login_state ops)" = "foreign" ] && ok "pipe in password classified foreign" || bad "pipe password state $(um_luci_login_state ops)"
+
+# --- Fix 6 (m6): multiple owned sections ---
+
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_luci_login ops enable
+# Duplicate the owned section
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+config login
+	option username 'ops'
+	option password '$p$ops'
+	option usrmanage '1'
+	list read 'luci-app-usrmanage-session'
+	list read 'luci-app-usrmanage'
+	list write 'luci-app-usrmanage'
+EOF
+_idx_count=$(um_luci_login_ours_index ops | grep -c '.' || true)
+[ "$_idx_count" -ge 2 ] && ok "ours_index returns multiple" || bad "ours_index count=$_idx_count"
+[ "$(um_luci_login_state ops)" = "tampered" ] || bad "multi-owned should be tampered"
+um_with_lock um_mut_set_luci_login ops reset
+[ "$(um_luci_login_state ops)" = "none" ] && ok "reset removes all owned sections" || bad "reset multi state $(um_luci_login_state ops)"
+_idx_count2=$(um_luci_login_ours_index ops 1 | wc -l | tr -d ' ')
+[ "$_idx_count2" = "0" ] && ok "no owned sections remain after reset" || bad "remaining count=$_idx_count2"
+
+# Disable also removes all owned sections
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_luci_login ops enable
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+config login
+	option username 'ops'
+	option password '$p$ops'
+	option usrmanage '1'
+	list read 'luci-app-usrmanage-session'
+	list read 'luci-app-usrmanage'
+	list write 'luci-app-usrmanage'
+EOF
+[ "$(um_luci_login_state ops)" = "tampered" ] || bad "multi-owned disable pre-check"
+um_with_lock um_mut_set_luci_login ops disable
+[ "$(um_luci_login_state ops)" = "none" ] && ok "disable removes all owned sections" || bad "disable multi state $(um_luci_login_state ops)"
+
+# --- Fix 3 (m2): invalid mode denial audit ---
+
+_np_before=$(grep -c 'denied.*invalid_luci_login_mode' "$USRMANAGE_AUDIT" 2>/dev/null || true)
+_lerr=$(um_with_lock um_mut_set_luci_login ops bogus 2>&1) && bad "bogus mode should fail" || ok "bogus mode refused"
+printf '%s' "$_lerr" | grep -q 'invalid_luci_login_mode' && ok "bogus mode denial token" || bad "bogus mode token: $_lerr"
+_np_after=$(grep -c 'denied.*invalid_luci_login_mode' "$USRMANAGE_AUDIT" 2>/dev/null || true)
+[ "$_np_after" -gt "$_np_before" ] && ok "invalid mode audited" || bad "invalid mode audit count $_np_before -> $_np_after"
+
+# --- Fix 2 (M6): mktemp failure simulation ---
+
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_luci_login ops enable
+[ "$(um_luci_login_state ops)" = "owned" ] || bad "pre-mktemp state"
+# Point TMPDIR to a non-existent path to cause mktemp failure
+_nonexistent="${TMPDIR:-/tmp}/.usrmanage-mktemp-fail-test-$$"
+_old_tmpdir=${TMPDIR:-}
+export TMPDIR="$_nonexistent"
+_mktemp_err=$(um_luci_login_state ops 2>&1) && {
+	bad "mktemp failure should not succeed"
+} || ok "mktemp failure returns non-zero"
+# Enable must be denied while the state check still fails — keep the broken
+# TMPDIR in effect THROUGH the mutator call (restoring it first would let the
+# enable succeed and make this assertion vacuous).
+_mktemp_enterr=$(um_with_lock um_mut_set_luci_login ops enable 2>&1) && bad "enable after mktemp fail should be denied" || ok "enable denied on mktemp failure"
+export TMPDIR="$_old_tmpdir"
+printf '%s' "$_mktemp_enterr" | grep -q 'luci_login_state' && ok "mktemp failure denial token" || bad "mktemp failure token: $_mktemp_enterr"
+# Verify state check still works after TMPDIR is restored
+[ "$(um_luci_login_state ops)" = "owned" ] && ok "state works after TMPDIR restore" || bad "state after restore $(um_luci_login_state ops)"
+
+# --- Fix 5 (m5): top-level luci_login audit event ---
+
+grep -q 'luci_login.*ok.*mode=enable' "$USRMANAGE_AUDIT" && ok "top-level luci_login audit on enable" || bad "luci_login enable audit missing"
 
 [ "$fail" = "0" ] || exit 1
 echo "luci-login tests: ok"

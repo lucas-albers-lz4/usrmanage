@@ -84,7 +84,7 @@ const callSetRole = rpc.declare({
 const callSetLuciLogin = rpc.declare({
 	object: 'usrmanage',
 	method: 'set_luci_login',
-	params: [ 'name', 'enable' ],
+	params: [ 'name', 'mode' ],
 	expect: { '': { ok: true } }
 });
 
@@ -341,6 +341,8 @@ return view.extend({
 				luciLabel = _('Elsewhere');
 			else if (luciState === 'tampered')
 				luciLabel = _('Tampered');
+			else if (luciState === 'error')
+				luciLabel = _('Error');
 
 			if (manage && u.managed) {
 				actions.push(E('button', {
@@ -359,7 +361,7 @@ return view.extend({
 					actions.push(E('button', {
 						'class': 'btn cbi-button',
 						'data-testid': 'usrmanage-luci-enable',
-						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, true)
+						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, 'enable')
 					}, _('Enable LuCI')));
 					actions.push(' ');
 				}
@@ -367,8 +369,23 @@ return view.extend({
 					actions.push(E('button', {
 						'class': 'btn cbi-button',
 						'data-testid': 'usrmanage-luci-disable',
-						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, false)
+						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, 'disable')
 					}, _('Disable LuCI')));
+					actions.push(' ');
+				}
+				else if (luciState === 'tampered') {
+					actions.push(E('button', {
+						'class': 'btn cbi-button',
+						'data-testid': 'usrmanage-luci-reset',
+						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, 'reset')
+					}, _('Reset LuCI')));
+					actions.push(' ');
+				}
+				else if (luciState === 'foreign') {
+					actions.push(E('span', {
+						'class': 'cbi-value-description',
+						'title': _('A login section managed by another application blocks LuCI login management.')
+					}, _('Elsewhere')));
 					actions.push(' ');
 				}
 				actions.push(E('button', {
@@ -736,14 +753,20 @@ return view.extend({
 		]);
 	},
 
-	handleLuciLogin: function(name, enable, ev) {
+	handleLuciLogin: function(name, mode, ev) {
 		const self = this;
-		const title = enable
+		const isEnable = (mode === 'enable');
+		const isReset = (mode === 'reset');
+		const title = isEnable
 			? _('Enable LuCI login: %s').format(name)
-			: _('Disable LuCI login: %s').format(name);
-		const body = enable
+			: isReset
+				? _('Reset LuCI login: %s').format(name)
+				: _('Disable LuCI login: %s').format(name);
+		const body = isEnable
 			? _('This reuses the UNIX password for web login ($p$). Prefer HTTPS and a management network.')
-			: _('Removes the usrmanage-owned web login. SSH still works. If this is your current session, you will be logged out.');
+			: isReset
+				? _('Removes the usrmanage-owned web login (even if tampered). Allows re-enabling with a fresh configuration.')
+				: _('Removes the usrmanage-owned web login. SSH still works. If this is your current session, you will be logged out.');
 
 		ui.showModal(title, [
 			E('p', {}, body),
@@ -751,18 +774,19 @@ return view.extend({
 				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
 				' ',
 				E('button', {
-					'class': enable ? 'btn cbi-button-positive' : 'btn cbi-button-negative',
-					'data-testid': enable ? 'usrmanage-luci-enable-confirm' : 'usrmanage-luci-disable-confirm',
+					'class': isEnable ? 'btn cbi-button-positive' : 'btn cbi-button-negative',
+					'data-testid': isEnable ? 'usrmanage-luci-enable-confirm' : isReset ? 'usrmanage-luci-reset-confirm' : 'usrmanage-luci-disable-confirm',
 					'click': ui.createHandlerFn(self, function() {
-						return callSetLuciLogin(name, enable).then(function(res) {
-							return finishMutator(res, enable ? _('LuCI login enabled') : _('LuCI login disabled'), self);
+						return callSetLuciLogin(name, mode).then(function(res) {
+							const successMsg = isEnable ? _('LuCI login enabled') : isReset ? _('LuCI login reset') : _('LuCI login disabled');
+							return finishMutator(res, successMsg, self);
 						}).catch(function(err) {
 							notifyRequestFailed();
 							if (window && window.console)
 								console.error('usrmanage set_luci_login', err);
 						});
 					})
-				}, enable ? _('Enable') : _('Disable'))
+				}, isEnable ? _('Enable') : isReset ? _('Reset') : _('Disable'))
 			])
 		]);
 	},

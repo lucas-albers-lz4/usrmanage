@@ -235,6 +235,27 @@ msgstr "LuCI-Web-Anmeldung erlauben"
 msgid "Disable"
 msgstr "Deaktivieren"
 
+msgid "Reset LuCI"
+msgstr "LuCI zurücksetzen"
+
+msgid "Reset LuCI login: %s"
+msgstr "LuCI-Anmeldung zurücksetzen: %s"
+
+msgid "Removes the usrmanage-owned web login (even if tampered). Allows re-enabling with a fresh configuration."
+msgstr "Entfernt die von usrmanage verwaltete Web-Auch wenn manipuliert. Ermöglicht das erneute Aktivieren mit frischer Konfiguration."
+
+msgid "Reset"
+msgstr "Zurücksetzen"
+
+msgid "LuCI login reset"
+msgstr "LuCI-Anmeldung zurückgesetzt"
+
+msgid "A login section managed by another application blocks LuCI login management."
+msgstr "Ein von einer anderen Anwendung verwalteter Anmeldungsabschnitt blockiert das LuCI-Anmeldungsmanagement."
+
+msgid "Error"
+msgstr "Fehler"
+
 msgid "Disable LuCI"
 msgstr "LuCI deaktivieren"
 
