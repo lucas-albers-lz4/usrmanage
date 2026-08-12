@@ -19,15 +19,15 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-12 | none |
-| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-12 | none |
-| LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-12 | none |
-| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-09 | none |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-12 (exhaustive) | [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4 · [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) L5/L6 · [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1/L3 · [#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) L2 |
+| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-12 (LuCI-login deep dive) | none new (ACL split re-confirmed) |
+| LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-12 (LuCI-login deep dive) | related: same-role Apply enables L1 ([#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105)) |
+| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-12 (exhaustive) | none in the shipped files; runtime mode handling is [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) |
 | CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-09 | none |
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-09 | none |
 | Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-12 | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, published feed keys | 2026-08-09 | none |
-| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 | none — lab-only fixtures and passwords are by design, never shipped |
+| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login deep dive) | [#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107) proveable_next (lab asserts) — fixtures remain lab-only by design |
 
 ## How to re-verify (current gates)
 
@@ -76,7 +76,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 |------------------|-------|-------|-------|
 | Concurrent mutators on account files | Whole-mutator exclusive `flock` (`um_with_lock`) | host | `tests/test_mutators.sh` |
 | Crash mid-mutation | Snapshot / EXIT rollback (`um_tx_*`) over passwd+shadow+group+registry+rpcd (create/delete/set-role). Del commits BEFORE `um_registry_del` (purge may remove the home) — the post-commit registry window is covered by the `incomplete` marker, not the snapshot | host | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` |
-| Torn file writes | `umask 077` temp → fixed mode/`chown 0:0` → `mv` | host | `tests/test_phase1_foundation.sh` |
+| Torn file writes | `umask 077` temp → fixed mode/`chown 0:0` → `mv` (`um_atomic_edit`). **Not universal:** `um_rpcd_atomic_replace` and `um_audit_rotate_if_needed` bypass it ([#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) L5/L6) | host | `tests/test_phase1_foundation.sh` — no test asserts resulting **modes** |
 | SIGKILL / power loss mid-mutation | **Accepted residual**: EXIT-trap rollback cannot run; `doctor` reports orphaned `usrmanage-tx.*` snapdirs for manual recovery. Snapdirs live in `${TMPDIR:-/tmp}` (tmpfs) — recovery applies only if the snapshot survives until the operator acts (#96, #100) | host | `um_doctor_checks` |
 | Demote/delete last managed admin | `um_count_managed_admins` deny | host | `tests/test_mutators.sh` · QEMU smoke |
 | Incomplete op with no record | `incomplete` marker + `doctor`; failed restore keeps snapdir | host | `um_doctor_checks` · architecture docs |
@@ -88,8 +88,13 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Failure scenario | Guard | Class | Proof |
 |------------------|-------|-------|-------|
 | Empty / locked shadow accepted for web login | Refuse enable when hash empty or `!`/`*` | host | `tests/test_luci_login.sh` |
-| Adopt foreign / tampered `luci-app-acl` login | Ownership conjunction (`usrmanage=1` + `$p$user` + managed registry) | host | `tests/test_luci_login.sh` |
+| Adopt foreign / tampered `luci-app-acl` login | Ownership conjunction (`usrmanage=1` + `$p$user` + managed registry) — **holds only for canonical UCI syntax**; see [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4 | host | `tests/test_luci_login.sh` |
+| Login section written in a libuci-valid form the awk parser cannot see | **Open** — indented / `c`-abbreviated / quoted-type sections invisible; `disable` reports `ok` while the login authenticates ([#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4) | host | pending fail-closed validator or `uci`-based enumeration |
+| `/etc/config/rpcd` mode preserved on rewrite / rollback | **Open** — hardcoded `chmod 0644` downgrades OpenWrt's `0600` ([#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) L5) | host | pending mode-preserving replace + mode assertion test |
 | Live session keeps old ACLs after disable / role / del / passwd | `um_session_revoke_user` destroys matching ubus SIDs (`@.values.username` then `@.data.username`) | lab | `scripts/qemu-smoke-usrmanage.sh` (issue #95) — host DRY_RUN skips ubus and is **not** proof |
+| Same-role / ACL-repair `set-role` leaves elevated live sessions | **Open** — sync via `um_luci_login_ours_index` without revoke ([#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1) | host (+ lab) | pending fix + test |
+| `set-luci-login` multi-index rewrite crash window | **Open** — incomplete marker only; no `um_tx_*` ([#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) L2) | host | pending fix + test |
+| New `session.login` denied after disable; demote drops write on re-login | **Open proveable_next** ([#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107)) | lab | extend qemu-smoke |
 | rpcd pending UCI changes during enable/disable | Refuse when `uci changes rpcd` non-empty | host | `tests/test_luci_login.sh` |
 
 ### Supply chain
@@ -103,7 +108,19 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 ## Open findings
 
-None. All findings from the 2026-08-09 passes are resolved. See [Resolved findings](#resolved-findings) below. The one deferred item, [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) S2 (no `flock -w` wait timeout), is an accepted BusyBox constraint. See [Accepted residuals](#accepted-residuals).
+From the 2026-08-12 exhaustive pass ([security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md)). All reproduced locally. Implement via simpler-model PRs; use `/review-security` on those PRs.
+
+**Implementation order: #109 → #108 → #106 → #105 (L3 then L1) → #107.**
+
+| Issue | IDs | Severity | Area | Notes |
+|-------|-----|----------|------|-------|
+| [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) | L5, L6 | Medium / Low | On-device file modes | `/etc/config/rpcd` force-chmod `0644` over OpenWrt's `0600` (`INSTALL_CONF`); audit rotate ignores umask. Same class as #63 R2, never swept on-device |
+| [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) | L4 | Medium | Ownership / revocation | awk parser narrower than libuci (indented / `c`-abbreviated / quoted-type sections invisible) — `disable` reports `ok` while the login still authenticates |
+| [#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) | L2 | Low-Med | Integrity | `set-luci-login` lacks tx snapshot for multi-index rpcd rewrite |
+| [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) | L1, L3 | Low | Session ACL / DiD | Same-role set-role sync without revoke (severity revised down); `um_shadow_hash_usable` missing `grep -F` |
+| [#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107) | P1, P2 | — | Lab proof | Post-disable login deny + demote write-ACL drop asserts; blocked on #108 |
+
+Prior Aug-9 findings are resolved. [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) S2 (no `flock -w`) remains an accepted BusyBox constraint. See [Accepted residuals](#accepted-residuals).
 
 ## Resolved findings
 
@@ -212,6 +229,19 @@ Scope: how design locks and “security done” claims were allowed to merge wit
 
 **Process changes** (this revision of the ledger): proof-class column (`host` | `lab` | `manual`); false-green rule; feature PR gate and pre-merge review trigger in [Review procedure](#review-procedure); LuCI login lifecycle rows under [Controls in force](#controls-in-force); session revoke marked `lab` with qemu-smoke proof from #95 / PR #103.
 
+### 2026-08-12 — Exhaustive pass: LuCI login ownership + on-device file discipline
+
+Scope: LuCI login lifecycle, session revoke, ACL ownership, set-role interaction with owned logins, CLI arg parser, rpcd plugin, ACL JSON, LuCI view, package Makefile / uci-defaults / sudoers, CI workflows. Brief: [security-opus-luci-login-brief.md](security-opus-luci-login-brief.md). Full write-up with reproductions: [security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md).
+
+**Method:** line-level review cross-checked against upstream OpenWrt sources rather than against our own docs — `rpcd/session.c` (login/ACL resolution, crypt-hash passwords), `libuci/file.c` (real config grammar), `rules.mk` + `package/system/rpcd/Makefile` (installed file mode). Every finding reproduced in a throwaway host harness before filing.
+
+**Result:** no remote unauthenticated exploit; ordering invariants from #92–#101 all hold as written. Two new findings, both **classes rather than one-offs**:
+
+- [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) **L4** — the ownership model rests on an awk parser narrower than libuci (indented, `c`-abbreviated, and quoted-type sections are invisible). `disable` returns `ok` and audits `luci_revoke … result=ok` while the login still authenticates; `del` can leave a crypt-hash web credential behind after the UNIX account is gone; the `login_exists_foreign` guard is bypassed on `enable`.
+- [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) **L5/L6** — `um_rpcd_atomic_replace` hardcodes `chmod 0644`, downgrading `/etc/config/rpcd` from the `0600` OpenWrt ships via `INSTALL_CONF`, on the first `set-luci-login`. Same temp-file/mode class as #63 R2, which was fixed in the release pipeline and never swept on-device. `um_audit_rotate_if_needed` has the same shape.
+
+L1 severity revised Medium → Low (drift requires a prior root write). Non-findings re-confirmed: CLI arg parser cannot be turned into option injection from ubus, rpcd argv/password path, audit token grammar, no XSS sink in the view, ACL split, env-override gate, symlink refusal on home create/remove, sudoers `0440` static `%wheel`, SHA-pinned CI. Prevention plan: [security-prevention-plan.md](security-prevention-plan.md).
+
 ## Review procedure
 
 1. Read this file and [threat-model.md](threat-model.md) first. Do not reopen the #3 won't-fix bucket or the [Accepted residuals](#accepted-residuals) without new evidence.
@@ -232,4 +262,7 @@ Scope: how design locks and “security done” claims were allowed to merge wit
 - [developer/testing.md](developer/testing.md) — host smoke / QEMU / Playwright, incl. host prerequisites
 - [binary-feed.md](binary-feed.md) — signed feed layout and operator install path
 - [release.md](release.md) — tagging and the publish workflow
+- [security-opus-luci-login-brief.md](security-opus-luci-login-brief.md) — Opus/read-only audit brief (LuCI login)
+- [security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md) — 2026-08-12 deep-dive results
+- [security-prevention-plan.md](security-prevention-plan.md) — PR gates / false-green prevention
 - Open security work: the `security` label — <https://github.com/lucas-albers-lz4/usrmanage/labels/security>

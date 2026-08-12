@@ -67,6 +67,12 @@ Managed users default to **SSH-only**. Opt-in LuCI logins created by usrmanage:
 - Never grant `*` or `luci-base` write; use fixed role ACL matrix (see [roles-and-acl.md](user/roles-and-acl.md)).
 - Revoke the target user's ubus sessions on disable, role change, delete, and password change (live sessions keep ACLs until destroyed).
 
+**Open gaps (2026-08-12 audit — read before relying on `--disable` as a revocation control):**
+
+- [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) — usrmanage only recognizes `config login` sections written in canonical UCI syntax at column 0. libuci also accepts indented sections, the abbreviated `c`/`o`/`l` keywords, and quoted section types. A login written in one of those forms is invisible: `set-luci-login --disable` reports success and audits `luci_revoke result=ok` while the login still authenticates, and `del` can leave it behind. Until this is fixed, verify `/etc/config/rpcd` by hand (`uci show rpcd | grep login`) after disabling web access for an account.
+- [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) — the first `set-luci-login` on a device changes `/etc/config/rpcd` from `0600` to `0644`. If any rpcd login on that device stores a crypt hash rather than `$p$user`, that hash becomes readable by every local user. Re-`chmod 0600 /etc/config/rpcd` after use until fixed.
+- [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) — same-role `set-role` that only repairs ACL drift does not revoke live sessions.
+
 Enabling web login makes the SSH/sudo password reachable via unauthenticated `session.login` (often over HTTP). Prefer HTTPS and a management VLAN/VPN. Write ACL on `luci-app-usrmanage` remains root-equivalent.
 
 Manual `luci-app-acl` logins (including separate hash passwords) stay out of scope and are never overwritten.
@@ -92,4 +98,4 @@ Installing from the [signed feed](binary-feed.md) bootstraps trust on first use.
 
 ## Future reviews
 
-Procedure, scope map, proof classes (`host` / `lab` / `manual`), and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state. Do not treat host DRY_RUN stubs as proof of lab-class controls (e.g. live ubus session revoke).
+Procedure, scope map, proof classes (`host` / `lab` / `manual`), and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state. Do not treat host DRY_RUN stubs as proof of lab-class controls (e.g. live ubus session revoke). Prevention gates: [security-prevention-plan.md](security-prevention-plan.md). Latest LuCI-login deep dive: [security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md).
