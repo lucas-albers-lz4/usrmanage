@@ -88,6 +88,50 @@ if ssh_guest 'usrmanage del umadmin' 2>/dev/null; then
 fi
 ok "last-admin guard blocks del umadmin"
 
+# Live ubus session revoke (issue #95) — lab-only; passwords never logged.
+# Requires set-luci-login + ubus session login on the guest.
+ssh_guest 'usrmanage del umrev >/dev/null 2>&1 || true'
+ssh_guest 'printf "LabRevoke1!\n" | usrmanage add umrev --role readonly --password-fd 0' \
+	|| die "add umrev failed"
+ok "add umrev for session revoke"
+ssh_guest 'usrmanage set-luci-login umrev --enable' \
+	|| die "set-luci-login umrev --enable failed"
+ok "umrev luci login enabled"
+
+_login_json="$(ssh_guest 'ubus call session login "{\"username\":\"umrev\",\"password\":\"LabRevoke1!\"}"')" \
+	|| die "session login as umrev failed"
+_sid="$(printf '%s' "$_login_json" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
+[[ -n "$_sid" ]] || die "no session id from login"
+ok "umrev session created (${_sid:0:8}…)"
+
+_field_probe="$(ssh_guest "G=\$(ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_sid}\\\"}\") || exit 1
+V=\$(printf '%s' \"\$G\" | jsonfilter -e '@.values.username' 2>/dev/null || true)
+D=\$(printf '%s' \"\$G\" | jsonfilter -e '@.data.username' 2>/dev/null || true)
+printf 'values=%s data=%s\n' \"\$V\" \"\$D\"")" || die "session get before revoke failed"
+_values_user="$(printf '%s' "$_field_probe" | sed -n 's/^values=\(.*\) data=.*/\1/p')"
+_data_user="$(printf '%s' "$_field_probe" | sed -n 's/^values=.* data=\(.*\)/\1/p')"
+if [[ -n "$_values_user" ]]; then
+	ok "session get username via @.values.username=${_values_user}"
+elif [[ -n "$_data_user" ]]; then
+	ok "session get username via @.data.username=${_data_user}"
+else
+	die "session get has neither @.values.username nor @.data.username (probe: ${_field_probe})"
+fi
+_matched="${_values_user:-$_data_user}"
+[[ "$_matched" == "umrev" ]] || die "session username mismatch (got '${_matched}')"
+
+ssh_guest 'usrmanage set-luci-login umrev --disable' \
+	|| die "set-luci-login umrev --disable failed"
+ok "umrev luci login disabled (revoke path)"
+
+if ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_sid}\\\"}\"" >/dev/null 2>&1; then
+	die "session ${_sid:0:8}… still alive after disable"
+fi
+ok "umrev session destroyed after disable"
+
+ssh_guest 'usrmanage del umrev' || die "del umrev failed"
+ok "del umrev"
+
 # LuCI assets + ubus
 ssh_guest 'test -f /www/luci-static/resources/view/system/usrmanage.js' \
 	|| die "missing LuCI view JS"
