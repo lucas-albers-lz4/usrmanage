@@ -513,6 +513,13 @@ um_luci_login_disable_user() {
 	_ull_role=$(um_role_of "$_ull_name" 2>/dev/null || printf 'readonly')
 	UM_LUCI_ERR=
 	um_rpcd_config_parsable || {
+		# Still destroy live sessions before refusing — elevated ACLs must
+		# not linger until expiry when rpcd is unparsable (Bugbot #113).
+		um_session_revoke_user "$_ull_name" || {
+			um_audit fail "$_ull_name" fail session_revoke_unavailable
+			UM_LUCI_ERR=session_revoke_unavailable
+			return 1
+		}
 		um_audit denied "$_ull_name" denied rpcd_config_unparsable "$_ull_role"
 		UM_LUCI_ERR=rpcd_config_unparsable
 		return 1
@@ -609,6 +616,9 @@ um_luci_login_sync_acls() {
 	# Handles multiple matching indexes (issue #98 m6).
 	_ull_name=$1
 	_ull_role=$2
+	# Refuse rewrite when awk cannot see the whole file (mixed canonical +
+	# hidden unparsable login must not leave elevated web access).
+	um_rpcd_config_parsable || return 1
 	_ull_idxs=$(um_luci_login_ours_index "$_ull_name")
 	[ -n "$_ull_idxs" ] || return 0
 	um_rpcd_pending_ok || return 1

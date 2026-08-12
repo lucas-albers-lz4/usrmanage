@@ -627,6 +627,38 @@ for _form in indented abbreviated quoted; do
 		|| bad "L4 $_form: login section vanished"
 done
 
+# L4 follow-up: unparsable disable must still revoke live sessions.
+_seed_unparsable abbreviated
+rm -f "$TMP/l4_revoked"
+(
+	um_session_revoke_user() { printf '1' > "$TMP/l4_revoked"; return 0; }
+	um_with_lock um_mut_set_luci_login ops disable >/dev/null 2>&1 || true
+)
+[ -f "$TMP/l4_revoked" ] && ok "L4 unparsable disable: session revoke called" \
+	|| bad "L4 unparsable disable: session revoke skipped"
+
+# L4 follow-up: mixed canonical owned + abbreviated hidden → set-role must refuse.
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_luci_login ops enable
+[ "$(um_luci_login_state ops)" = "owned" ] || bad "L4 mixed pre: enable owned"
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+c login
+	o username 'ops'
+	o password '$1$HIDDEN$hiddenhash'
+	l read '*'
+	l write '*'
+EOF
+if um_with_lock um_mut_set_role ops readonly >/dev/null 2>&1; then
+	bad "L4 mixed: set-role must refuse unparsable rpcd"
+else
+	ok "L4 mixed: set-role refused"
+fi
+# Visible owned section must not have been rewritten to readonly-only while hidden remains.
+grep -q "c login" "$USRMANAGE_RPCD_CONFIG" \
+	&& ok "L4 mixed: hidden section still present (refused, not partially synced)" \
+	|| bad "L4 mixed: hidden section vanished"
+
 # Canonical form still works after the fail-closed gate.
 printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
 [ "$(um_luci_login_state ops)" = "none" ] && ok "L4 canonical: state none" \
