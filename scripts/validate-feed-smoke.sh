@@ -30,8 +30,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$VERSION" in
-	24.10) IMG_RELEASE="24.10.5" ;;
-	25.12) IMG_RELEASE="25.12.0" ;;
+	24.10) IMG_RELEASE="24.10.8" ;;
+	25.12) IMG_RELEASE="25.12.5" ;;
 	*) echo "unsupported version: $VERSION" >&2; exit 1 ;;
 esac
 

@@ -2,19 +2,19 @@
 # Use: ./scripts/docker-sdk.sh …
 
 volumes:
-  openwrt_sdk_armsr_armv8_25_12_0:
-  openwrt_sdk_armsr_armv8_24_10_5:
-  openwrt_sdk_x86_64_25_12_0:
-  openwrt_sdk_x86_64_24_10_5:
+  openwrt_sdk_armsr_armv8_25_12_5:
+  openwrt_sdk_armsr_armv8_24_10_8:
+  openwrt_sdk_x86_64_25_12_5:
+  openwrt_sdk_x86_64_24_10_8:
 
 services:
   sdk:
-    image: ${OWRT_SDK_IMAGE:-ghcr.io/openwrt/sdk:x86-64-24.10.5}
+    image: ${OWRT_SDK_IMAGE:-ghcr.io/openwrt/sdk:x86-64-24.10.8}
     volumes:
-      - ${OWRT_SDK_VOLUME:-openwrt_sdk_x86_64_24_10_5}:/builder
+      - ${OWRT_SDK_VOLUME:-openwrt_sdk_x86_64_24_10_8}:/builder
       # Host-side dl/feeds so Actions can cache them across publish runs (and local rebuilds skip re-fetch).
       - ${OWRT_SDK_DL_CACHE:-.ci-sdk-cache/dl}:/builder/dl
-      - ${OWRT_SDK_FEEDS_CACHE:-.ci-sdk-cache/feeds/24.10.5}:/builder/feeds
+      - ${OWRT_SDK_FEEDS_CACHE:-.ci-sdk-cache/feeds/24.10.8}:/builder/feeds
       - .:/work/usrmanage:ro
     working_dir: /builder
     environment:

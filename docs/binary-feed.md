@@ -112,6 +112,24 @@ When a signing key is rotated:
 
 Secrets live on the **usrmanage** repo (not the packages repo). See [github-publish-checklist.md](github-publish-checklist.md).
 
+## Regenerating `scripts/feeds.lock/`
+
+When bumping a point release pin (`sdk_matrix_version_patch` in `scripts/lib/sdk-matrix.sh`):
+
+1. Pull the matching SDK image: `docker pull ghcr.io/openwrt/sdk:x86-64-<patch>` (e.g. `x86-64-24.10.8`).
+2. Copy the SDK default feeds file:
+   `docker run --rm --entrypoint cat ghcr.io/openwrt/sdk:x86-64-<patch> /builder/feeds.conf.default`
+3. Write `scripts/feeds.lock/<patch>/feeds.conf`:
+   - Keep the same feed names / `src-git` style as the SDK default (including `--root=package` / `src-git-full` when present).
+   - Rewrite `git.openwrt.org` URLs to the official GitHub mirrors (`github.com/openwrt/{openwrt,packages,luci,routing,telephony,video}.git`).
+   - Pin `base` by the **peeled** tag commit (`git ls-remote … refs/tags/v<patch>^{}`), not the annotated tag object.
+   - Keep other feed commit pins from the SDK default.
+   - Append `src-link usrmanage /work/usrmanage/openwrt-feed`.
+4. Retire the unused old `scripts/feeds.lock/<old-patch>/` directory in the same PR.
+5. Update `feed_publish_ipkg_index_script` base refs in `scripts/lib/feed-publish.sh` to the same peeled commits; recheck `ipkg-make-index.sh` `sha_expected` (may be unchanged).
+
+See also [developer/build-matrix.md](developer/build-matrix.md).
+
 ## Maintainer publish
 
 Tag `v*` → `.github/workflows/publish-packages.yml` builds the 4-cell matrix, verifies reproducibility, stages the feed, deploys `usrmanage-packages` gh-pages, uploads Release assets.

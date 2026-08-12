@@ -6,7 +6,7 @@
 | 25.12 | `.apk` | x86-64, armsr-armv8 | Supported |
 | 23.05 | `.ipk` (opkg) | x86-64, armsr-armv8 | **Deprecated** — last release **v0.1.2**; no new builds |
 
-Point pins: **24.10.5**, **25.12.0** (see [build-matrix.md](developer/build-matrix.md)).
+Point pins: **24.10.8**, **25.12.5** (see [build-matrix.md](developer/build-matrix.md)).
 
 ## 23.05 deprecation
 

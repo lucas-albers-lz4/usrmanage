@@ -6,8 +6,8 @@ Cross-build **`usrmanage`** and **`luci-app-usrmanage`** with official [`ghcr.io
 
 | OpenWrt | Point pin | Targets | Feed format |
 |---------|-----------|---------|-------------|
-| 24.10 | 24.10.5 | `x86-64`, `armsr-armv8` | opkg (`24.10/`) |
-| 25.12 | 25.12.0 | `x86-64`, `armsr-armv8` | apk (`25.12/all/`) |
+| 24.10 | 24.10.8 | `x86-64`, `armsr-armv8` | opkg (`24.10/`) |
+| 25.12 | 25.12.5 | `x86-64`, `armsr-armv8` | apk (`25.12/all/`) |
 
 | Target | Package arch dir |
 |--------|------------------|
