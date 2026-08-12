@@ -50,7 +50,7 @@ View:
 Manage (root):
   add <user> --role readonly|admin [--luci-login] [--password-fd N] [--json]
   set-role <user> --role readonly|admin [--json]
-  set-luci-login <user> --enable|--disable [--json]
+  set-luci-login <user> --enable|--disable|--reset [--json]
   passwd <user> [--password-fd N] [--json]
   del <user> [--purge-home] [--json]
   set-policy --preset openwrt|standard|strict|custom [options] [--json]
@@ -125,6 +125,10 @@ while [ "$#" -gt 0 ]; do
 			;;
 		--disable)
 			LUCI_LOGIN_MODE=disable
+			shift
+			;;
+		--reset)
+			LUCI_LOGIN_MODE=reset
 			shift
 			;;
 		--password-fd)
@@ -291,8 +295,8 @@ case "$CMD" in
 		;;
 	set-luci-login)
 		um_require_root
-		[ -n "$NAME" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable"
-		[ -n "$LUCI_LOGIN_MODE" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable"
+		[ -n "$NAME" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset"
+		[ -n "$LUCI_LOGIN_MODE" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset"
 		um_with_lock um_mut_set_luci_login "$NAME" "$LUCI_LOGIN_MODE"
 		;;
 	passwd)

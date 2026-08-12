@@ -376,3 +376,31 @@ msgstr ""
 #: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Disable"
 msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Reset LuCI"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Reset LuCI login: %s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Removes the usrmanage-owned web login (even if tampered). Allows re-enabling with a fresh configuration."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Reset"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "LuCI login reset"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "A login section managed by another application blocks LuCI login management."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Error"
+msgstr ""

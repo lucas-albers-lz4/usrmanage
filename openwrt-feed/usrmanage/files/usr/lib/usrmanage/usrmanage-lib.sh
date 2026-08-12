@@ -1446,7 +1446,7 @@ um_emit_user_json() {
 	um_user_locked "$_u" && _locked=true
 	_luci=none
 	if command -v um_luci_login_state >/dev/null 2>&1; then
-		_luci=$(um_luci_login_state "$_u")
+		_luci=$(um_luci_login_state "$_u") || _luci=error
 	fi
 	_nu=$(printf '%s' "$_u" | um_json_escape)
 	_nh=$(printf '%s' "$_home" | um_json_escape)
@@ -1658,7 +1658,10 @@ um_mut_add() {
 			um_audit denied "$_name" denied rpcd_pending_changes "$_role"
 			um_die "error: rpcd_pending_changes"
 		}
-		_pre=$(um_luci_login_state "$_name")
+		_pre=$(um_luci_login_state "$_name") || {
+			um_audit denied "$_name" denied luci_login_state "$_role"
+			um_die "error: luci_login_state"
+		}
 		case "$_pre" in
 			none) ;;
 			foreign)
@@ -1697,7 +1700,9 @@ um_mut_add() {
 	um_incomplete_clear
 	um_audit grant "$_name" ok "" "$_role"
 	_luci_st=none
-	command -v um_luci_login_state >/dev/null 2>&1 && _luci_st=$(um_luci_login_state "$_name")
+	if command -v um_luci_login_state >/dev/null 2>&1; then
+		_luci_st=$(um_luci_login_state "$_name") || _luci_st=none
+	fi
 	if [ "${JSON_OUT:-0}" = "1" ]; then
 		printf '{"ok":true,"name":"%s","role":"%s","luci_login":"%s"}\n' \
 			"$(printf '%s' "$_name" | um_json_escape)" "$_role" "$_luci_st"
