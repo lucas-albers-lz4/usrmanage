@@ -583,6 +583,43 @@ um_count_managed_admins() {
 	printf '%s' "$_n"
 }
 
+# Live managed users only (registry names that still exist in passwd).
+# Stale I5 registry leftovers do not count — used by doctor wheel severity.
+um_count_managed_users() {
+	_cmu_n=0
+	[ -f "$USRMANAGE_REGISTRY" ] || { printf '%s' "0"; return 0; }
+	while IFS= read -r _cmu_u || [ -n "$_cmu_u" ]; do
+		case "$_cmu_u" in
+			''|\#*) continue ;;
+		esac
+		um_user_exists "$_cmu_u" || continue
+		_cmu_n=$((_cmu_n + 1))
+	done < "$USRMANAGE_REGISTRY"
+	printf '%s' "$_cmu_n"
+}
+
+# Print 3–4 digit octal mode, or return 1 if unmeasurable / garbage.
+# BusyBox may expose a non-functional `stat` stub — validate output.
+um_file_mode_octal() {
+	_fmo_p=$1
+	_fmo_m=
+	_fmo_m=$(stat -c '%a' "$_fmo_p" 2>/dev/null) || _fmo_m=
+	case "$_fmo_m" in
+		[0-7][0-7][0-7]|[0-7][0-7][0-7][0-7])
+			printf '%s' "$_fmo_m"
+			return 0
+			;;
+	esac
+	_fmo_m=$(stat -f '%OLp' "$_fmo_p" 2>/dev/null) || _fmo_m=
+	case "$_fmo_m" in
+		[0-7][0-7][0-7]|[0-7][0-7][0-7][0-7])
+			printf '%s' "$_fmo_m"
+			return 0
+			;;
+	esac
+	return 1
+}
+
 um_audit_rotate_if_needed() {
 	[ -f "$USRMANAGE_AUDIT" ] || return 0
 	_sz=$(wc -c < "$USRMANAGE_AUDIT" 2>/dev/null | tr -d ' ')
@@ -1311,16 +1348,34 @@ um_create_user() {
 um_doctor_checks() {
 	_ok=1
 	_json_checks=
+	_fail_lines=
+	# _add_check ID OK MSG [severity]
+	# Failed checks keep ok:false; severity defaults to error (flips top-level ok).
+	# warn does not flip top-level ok. Passed checks get severity "ok".
 	_add_check() {
 		_id=$1
 		_cok=$2
 		_msg=$3
+		_sev=${4:-}
+		if [ "$_cok" = "true" ]; then
+			_sev=ok
+		else
+			[ -n "$_sev" ] || _sev=error
+			if [ "$_sev" = "error" ]; then
+				_ok=0
+			fi
+			if [ -n "$_fail_lines" ]; then
+				_fail_lines="${_fail_lines}
+${_sev} ${_id}: ${_msg}"
+			else
+				_fail_lines="${_sev} ${_id}: ${_msg}"
+			fi
+		fi
 		if [ -n "$_json_checks" ]; then
 			_json_checks="${_json_checks},"
 		fi
 		_em=$(printf '%s' "$_msg" | um_json_escape)
-		_json_checks="${_json_checks}{\"id\":\"${_id}\",\"ok\":${_cok},\"msg\":\"${_em}\"}"
-		[ "$_cok" = "true" ] || _ok=0
+		_json_checks="${_json_checks}{\"id\":\"${_id}\",\"ok\":${_cok},\"severity\":\"${_sev}\",\"msg\":\"${_em}\"}"
 	}
 
 	if command -v sudo >/dev/null 2>&1; then
@@ -1383,23 +1438,56 @@ um_doctor_checks() {
 		_add_check fallback_paths false "fallback paths: ${_paths_msg}"
 	fi
 
+	# Wheel is created on first add (um_ensure_wheel_group). Missing with no
+	# live managed users is expected (warn). Missing after users exist is error.
+	# Residual: foreign wheel members outside the registry are invisible once
+	# the wheel: line is gone from group.
 	if grep -q '^wheel:' "$USRMANAGE_GROUP" 2>/dev/null; then
 		_add_check wheel true "wheel group present"
 	else
-		_add_check wheel false "wheel group missing"
+		_live_mu=$(um_count_managed_users)
+		if [ "$_live_mu" = "0" ]; then
+			_add_check wheel false "wheel group missing (created when you add the first user)" warn
+		else
+			_add_check wheel false "wheel group missing with live managed users"
+		fi
 	fi
 
-	if [ -f "$USRMANAGE_SUDOERS" ]; then
+	# Symlink check before [ -f ] (which follows links). Mode: validated stat,
+	# else BusyBox-safe find -perm 440 (trust nonempty print). Ownership check
+	# only when running as root (host tests are non-root).
+	if [ -L "$USRMANAGE_SUDOERS" ]; then
+		_add_check sudoers false "sudoers path is a symlink"
+	elif [ -f "$USRMANAGE_SUDOERS" ]; then
 		_su_mode=
-		_su_mode=$(stat -c '%a' "$USRMANAGE_SUDOERS" 2>/dev/null || stat -f '%OLp' "$USRMANAGE_SUDOERS" 2>/dev/null || echo '')
-		case "$_su_mode" in
-			440|0440) ;;
-			*)
-				_add_check sudoers false "sudoers mode ${_su_mode:-unknown} (want 0440)"
-				_su_mode=
-				;;
-		esac
+		_su_mode=$(um_file_mode_octal "$USRMANAGE_SUDOERS") || _su_mode=
+		_su_mode_ok=0
 		if [ -n "$_su_mode" ]; then
+			case "$_su_mode" in
+				440|0440) _su_mode_ok=1 ;;
+				*)
+					_add_check sudoers false "sudoers mode ${_su_mode} (want 0440)"
+					;;
+			esac
+		else
+			_su_find=$(find "$USRMANAGE_SUDOERS" -maxdepth 0 -perm 440 -print 2>/dev/null || true)
+			if [ -n "$_su_find" ]; then
+				_su_mode_ok=1
+				_su_mode=440
+			else
+				_add_check sudoers false "sudoers mode unknown (want 0440)"
+			fi
+		fi
+		if [ "$_su_mode_ok" = "1" ]; then
+			if [ "$(id -u 2>/dev/null)" = "0" ]; then
+				_su_own=$(find "$USRMANAGE_SUDOERS" -maxdepth 0 -user root -group root -perm 440 -print 2>/dev/null || true)
+				if [ -z "$_su_own" ]; then
+					_add_check sudoers false "sudoers not root:root mode 0440"
+					_su_mode_ok=0
+				fi
+			fi
+		fi
+		if [ "$_su_mode_ok" = "1" ]; then
 			if command -v visudo >/dev/null 2>&1; then
 				if visudo -cf "$USRMANAGE_SUDOERS" >/dev/null 2>&1; then
 					_add_check sudoers true "sudoers fragment ok (mode 0440)"
@@ -1486,6 +1574,7 @@ um_doctor_checks() {
 		printf 'doctor ok=%s\n' "$_ok"
 		um_policy_load
 		printf 'policy=%s min_length=%s\n' "$UM_POL_PRESET" "$UM_POL_MIN_LENGTH"
+		[ -z "$_fail_lines" ] || printf '%s\n' "$_fail_lines"
 		[ ! -f "$USRMANAGE_INCOMPLETE" ] || um_err "incomplete: $(cat "$USRMANAGE_INCOMPLETE")"
 	fi
 	[ "$_ok" = "1" ]

@@ -257,7 +257,16 @@ msgid "User added"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
-msgid "User management self-check reported problems. Mutators may be fail-closed until sudo/wheel/registry are healthy."
+msgid "Incomplete operation: %s"
+msgstr ""
+
+msgid "Technical details"
+msgstr ""
+
+msgid "User management self-check found problems that may block account changes."
+msgstr ""
+
+msgid "User management self-check notes (safe to continue; wheel is created when you add the first user)."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
