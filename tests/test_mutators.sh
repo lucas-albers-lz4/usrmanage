@@ -154,6 +154,41 @@ um_in_wheel audit && bad "audit still in wheel after del" || ok "del cleared whe
 printf 'ops\n' > "$USRMANAGE_REGISTRY"
 printf 'root:x:0:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
 
+# I5: post-commit registry_del failure must keep incomplete for doctor.
+printf 'ops\naudit\n' > "$USRMANAGE_REGISTRY"
+printf 'root:x:0:0:root:/root:/bin/ash\nops:x:1002:1002:ops:/home/ops:/bin/ash\naudit:x:1001:1001:audit:/home/audit:/bin/ash\n' > "$USRMANAGE_PASSWD"
+printf 'root:::0:99999:7:::\nops:::0:99999:7:::\naudit:::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
+printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
+rm -f "$USRMANAGE_INCOMPLETE"
+: > "$USRMANAGE_AUDIT"
+if (
+	um_registry_del() { return 1; }
+	um_with_lock um_mut_del audit 0
+) >/dev/null 2>&1; then
+	bad "I5 del should fail when registry_del fails"
+else
+	ok "I5 del fails closed on registry_del"
+fi
+[ -f "$USRMANAGE_INCOMPLETE" ] && grep -qx 'del:audit' "$USRMANAGE_INCOMPLETE" \
+	&& ok "I5 keeps incomplete del:audit" \
+	|| bad "I5 incomplete missing: $(cat "$USRMANAGE_INCOMPLETE" 2>/dev/null || echo none)"
+grep -q 'result=fail' "$USRMANAGE_AUDIT" && grep -q 'reason=registry' "$USRMANAGE_AUDIT" \
+	&& ok "I5 registry failure audited" \
+	|| bad "I5 registry audit: $(tail -3 "$USRMANAGE_AUDIT")"
+rm -f "$USRMANAGE_INCOMPLETE"
+printf 'ops\n' > "$USRMANAGE_REGISTRY"
+printf 'root:x:0:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
+
+# V3: doctor fails closed when sudoers mode is not 0440.
+printf '%%wheel ALL=(ALL:ALL) ALL\n' > "$USRMANAGE_SUDOERS"
+chmod 0644 "$USRMANAGE_SUDOERS"
+_doc_json=$(um_doctor_checks --json 2>/dev/null) || true
+echo "$_doc_json" | grep -q '"id":"sudoers","ok":false' \
+	&& echo "$_doc_json" | grep -q 'want 0440' \
+	&& ok "V3 doctor rejects sudoers mode 0644" \
+	|| bad "V3 doctor sudoers mode: $_doc_json"
+chmod 0440 "$USRMANAGE_SUDOERS"
+
 # --- set-policy under lock (CLI dispatch) ---
 CLI="$ROOT/openwrt-feed/usrmanage/files/usr/sbin/usrmanage"
 grep -q 'um_with_lock um_policy_save' "$CLI" \
