@@ -28,6 +28,16 @@ grep -q 'LUCI_PKGARCH:=all' "$FEED/luci-app-usrmanage/Makefile"
 grep -q 'Apache-2.0' "$FEED/usrmanage/Makefile"
 grep -q '+usrmanage' "$FEED/luci-app-usrmanage/Makefile"
 grep -q '%wheel' "$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
+# V3: packaged sudoers fragment must be mode 0440 in the feed tree.
+_su="$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
+_su_mode=$(stat -c '%a' "$_su" 2>/dev/null || stat -f '%OLp' "$_su" 2>/dev/null || echo '')
+case "$_su_mode" in
+	440|0440) ;;
+	*)
+		echo "sudoers feed mode ${_su_mode:-unknown} (want 0440)" >&2
+		exit 1
+		;;
+esac
 
 # JSON ACLs parse
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json'))"

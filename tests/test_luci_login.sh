@@ -180,15 +180,20 @@ printf 'root:$6$salt$hash:0:99999:7:::\nops:$6$salt$ophash:0:99999:7:::\naudit:$
 um_with_lock um_mut_set_role ops admin
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "set-role sync repairs ACL drift" || bad "repair state $(um_luci_login_state ops)"
 grep -q "luci-app-firewall" "$USRMANAGE_RPCD_CONFIG" && bad "extra ACL still present" || ok "extra ACL removed"
-# L1: same-role branch must revoke after sync (source + repaired ACLs)
-awk '
-	/Same-role transition/ { inblock=1 }
-	inblock && /_um_set_role_sync_acls/ { saw_sync=1 }
-	inblock && saw_sync && /_um_set_role_revoke/ { found=1 }
-	inblock && /^	fi$/ { inblock=0 }
-	END { exit found ? 0 : 1 }
-' "$LIB" && ok "L1 same-role path revokes after sync" \
-	|| bad "L1 same-role missing revoke after sync"
+# L1: same-role branch must revoke after sync (behavioral mock, V2 / #118)
+_ord="$TMP/same_role_order"
+rm -f "$_ord"
+(
+	um_session_revoke_user() { printf 'revoke\n' >> "$_ord"; return 0; }
+	um_luci_login_sync_acls() { printf 'sync-acls\n' >> "$_ord"; return 0; }
+	um_with_lock um_mut_set_role ops admin
+)
+_ord_seq=$(tr -d '\n' < "$_ord" 2>/dev/null)
+if [ "$_ord_seq" = "sync-aclsrevoke" ]; then
+	ok "L1 same-role: sync then revoke (behavioral)"
+else
+	bad "L1 same-role order got '$_ord_seq' (want sync-aclsrevoke)"
+fi
 
 # disable owned
 um_with_lock um_mut_set_luci_login ops disable

@@ -699,21 +699,37 @@ um_tx_begin() {
 um_tx_restore_one() {
 	_tx_dst=$1
 	_tx_label=$2
+	_tx_mode=
 	[ -n "$UM_TX_SNAPDIR" ] || return 1
 	if [ -f "${UM_TX_SNAPDIR}/${_tx_label}.missing" ]; then
 		rm -f "$_tx_dst"
 		return 0
 	fi
 	[ -f "${UM_TX_SNAPDIR}/${_tx_label}" ] || return 1
-	cp "${UM_TX_SNAPDIR}/${_tx_label}" "$_tx_dst" || return 1
 	case "$_tx_label" in
-		shadow) chmod 0600 "$_tx_dst" 2>/dev/null || true ;;
-		# rpcd is INSTALL_CONF (0600) — do not share the passwd|group 0644 arm (L5).
-		rpcd) chmod 0600 "$_tx_dst" 2>/dev/null || true ;;
-		passwd|group) chmod 0644 "$_tx_dst" 2>/dev/null || true ;;
-		registry) chmod 0640 "$_tx_dst" 2>/dev/null || true ;;
+		shadow|rpcd) _tx_mode=0600 ;;
+		passwd|group) _tx_mode=0644 ;;
+		registry) _tx_mode=0640 ;;
+		*) _tx_mode=0600 ;;
 	esac
-	chown 0:0 "$_tx_dst" 2>/dev/null || true
+	# I4: restore via temp+rename (same torn-write discipline as um_atomic_edit).
+	_tx_tmp="${_tx_dst}.txrest.$$"
+	(
+		umask 077
+		cp "${UM_TX_SNAPDIR}/${_tx_label}" "$_tx_tmp"
+	) || {
+		rm -f "$_tx_tmp"
+		return 1
+	}
+	chmod "$_tx_mode" "$_tx_tmp" 2>/dev/null || {
+		rm -f "$_tx_tmp"
+		return 1
+	}
+	chown 0:0 "$_tx_tmp" 2>/dev/null || true
+	mv "$_tx_tmp" "$_tx_dst" || {
+		rm -f "$_tx_tmp"
+		return 1
+	}
 	return 0
 }
 
@@ -1374,14 +1390,25 @@ um_doctor_checks() {
 	fi
 
 	if [ -f "$USRMANAGE_SUDOERS" ]; then
-		if command -v visudo >/dev/null 2>&1; then
-			if visudo -cf "$USRMANAGE_SUDOERS" >/dev/null 2>&1; then
-				_add_check sudoers true "sudoers fragment ok"
+		_su_mode=
+		_su_mode=$(stat -c '%a' "$USRMANAGE_SUDOERS" 2>/dev/null || stat -f '%OLp' "$USRMANAGE_SUDOERS" 2>/dev/null || echo '')
+		case "$_su_mode" in
+			440|0440) ;;
+			*)
+				_add_check sudoers false "sudoers mode ${_su_mode:-unknown} (want 0440)"
+				_su_mode=
+				;;
+		esac
+		if [ -n "$_su_mode" ]; then
+			if command -v visudo >/dev/null 2>&1; then
+				if visudo -cf "$USRMANAGE_SUDOERS" >/dev/null 2>&1; then
+					_add_check sudoers true "sudoers fragment ok (mode 0440)"
+				else
+					_add_check sudoers false "sudoers fragment invalid"
+				fi
 			else
-				_add_check sudoers false "sudoers fragment invalid"
+				_add_check sudoers true "sudoers fragment present mode 0440 (visudo unavailable)"
 			fi
-		else
-			_add_check sudoers true "sudoers fragment present (visudo unavailable)"
 		fi
 	else
 		_add_check sudoers false "sudoers fragment missing"
@@ -1937,7 +1964,7 @@ um_mut_del() {
 	# EXIT rollback must not recreate passwd/shadow/group without a home.
 	um_tx_commit
 	um_registry_del "$_name" || {
-		um_incomplete_clear
+		# I5: keep incomplete so doctor can see the post-commit registry gap.
 		um_audit fail "$_name" fail registry "$_role"
 		um_die "error: registry_failed"
 	}
