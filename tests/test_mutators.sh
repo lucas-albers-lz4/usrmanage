@@ -69,6 +69,34 @@ _mode=$(stat_mode "$USRMANAGE_LOCK")
 [ "$_mode" = "600" ] && ok "pre-existing 0644 lock tightened to 0600" \
 	|| bad "pre-existing lock mode $_mode (want 600)"
 
+# L11: doctor-first lock create must also be 0600 (not bare 9> under umask 022).
+rm -f "$USRMANAGE_LOCK"
+umask 022
+um_doctor_checks >/dev/null 2>&1 || true
+[ -f "$USRMANAGE_LOCK" ] && ok "doctor creates lock file" || bad "doctor did not create lock"
+_mode=$(stat_mode "$USRMANAGE_LOCK")
+[ "$_mode" = "600" ] && ok "doctor-first lock mode 0600 (L11)" \
+	|| bad "doctor-first lock mode $_mode (want 600)"
+
+# L10: passwd/shadow lookups are field-anchored (tp must not resolve to ntp).
+cat > "$USRMANAGE_PASSWD" <<EOF
+root:x:0:0:root:/root:/bin/ash
+daemon:x:1:1:daemon:/var:/bin/false
+ntp:x:123:123:NTP:$TMP/ntp_home:/bin/false
+tp:x:1000:1000:tp:$TMP/tp_home:/bin/ash
+EOF
+mkdir -p "$TMP/ntp_home" "$TMP/tp_home"
+[ "$(um_user_uid n 2>/dev/null || true)" = "" ] && ok "L10: show n does not match daemon" \
+	|| bad "L10: n matched uid=$(um_user_uid n)"
+[ "$(um_user_uid tp)" = "1000" ] && ok "L10: tp uid is 1000 not ntp" \
+	|| bad "L10: tp uid=$(um_user_uid tp)"
+[ "$(um_user_home tp)" = "$TMP/tp_home" ] && ok "L10: tp home not ntp home" \
+	|| bad "L10: tp home=$(um_user_home tp)"
+# restore account files used by later mutator tests
+printf 'root:x:0:0:root:/root:/bin/ash\nops:x:1002:1002:ops:/home/ops:/bin/ash\naudit:x:1001:1001:audit:/home/audit:/bin/ash\n' > "$USRMANAGE_PASSWD"
+printf 'root:::0:99999:7:::\nops:::0:99999:7:::\naudit:::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
+printf 'root:x:0:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
+
 # flock required when flock not on PATH
 mkdir -p "$TMP/emptybin"
 if ( PATH="$TMP/emptybin" um_with_lock _mark_touch ) 2>/dev/null; then

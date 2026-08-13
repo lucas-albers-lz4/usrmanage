@@ -227,9 +227,10 @@ um_luci_login_classify_row() {
 
 um_rpcd_config_parsable() {
 	# Fail closed when /etc/config/rpcd contains a libuci-valid form that
-	# um_rpcd_login_dump's awk grammar cannot see (L4 / issue #108):
-	# indented section headers, single-letter keyword abbreviations, or a
-	# quoted section type. Never report state=none / disable=ok for such a file.
+	# um_rpcd_login_dump's awk grammar cannot see (L4 / issue #108 / #118 L8/L9):
+	# indented section headers, single-letter keyword abbreviations, quoted
+	# section type, quoted option/list keys, or trailing # comments on
+	# option/list lines. Never report state=none / disable=ok for such a file.
 	_ull_cfg=$USRMANAGE_RPCD_CONFIG
 	[ -f "$_ull_cfg" ] || return 0
 	# Indented config/option/list section header (libuci skip_whitespace first).
@@ -242,6 +243,15 @@ um_rpcd_config_parsable() {
 	fi
 	# Quoted section type: config 'login' / config "login"
 	if grep -qE '^config[[:space:]]+["'\'']' "$_ull_cfg" 2>/dev/null; then
+		return 1
+	fi
+	# Quoted option/list keys: option 'username' / list "write" (L8).
+	if grep -qE '^[[:space:]]*(option|list)[[:space:]]+["'\'']' "$_ull_cfg" 2>/dev/null; then
+		return 1
+	fi
+	# Trailing # comments on option/list lines — dump would absorb them into
+	# the value (L9). Bare "#" inside a quoted value is also refused (fail closed).
+	if grep -qE '^[[:space:]]*(option|list)[[:space:]].*#' "$_ull_cfg" 2>/dev/null; then
 		return 1
 	fi
 	return 0

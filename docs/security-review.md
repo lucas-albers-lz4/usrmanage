@@ -19,7 +19,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-12 (multi-model) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L8–L11, I3–I5, V2/V3 |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-12 (#118 L8–L11) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) I3–I5, V2/V3 (L8–L11 closed this PR) |
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-12 (multi-model) | none new (ACL split re-confirmed) |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-12 (multi-model) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-12 (multi-model) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) V3 (sudoers mode assert) |
@@ -27,7 +27,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-12 (#117) | none |
 | Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-12 (#117) | none (SDK digest pinned at first pull) |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
-| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login + #107 asserts; multi-model did not re-run guest) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) I3 (revoke TOCTOU); L8/L9 still weaken lab disable proof on non-canonical UCI — fixtures remain lab-only by design |
+| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login + #107 asserts; multi-model did not re-run guest) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) I3 (revoke TOCTOU) — fixtures remain lab-only by design |
 
 ## How to re-verify (current gates)
 
@@ -63,7 +63,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Attack surface | Guard | Class | Proof |
 |----------------|-------|-------|-------|
 | Shell / command injection via username | Strict charset (`a-z0-9_-`, 1–32, deny-list) gates mutators and `show` | host | `tests/test_validators.sh` · Z3 P1 |
-| Passwd/shadow line confusion via suffix username | **Open** — most lookups still use unanchored `grep -F "${user}:"` ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L10); only `um_shadow_hash_usable` is field-anchored | host | pending fix + test |
+| Passwd/shadow line confusion via suffix username | Field-anchored awk `$1 == user` in `um_passwd_line` / `um_user_locked` ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L10) | host | `tests/test_mutators.sh` (ntp/tp, daemon/n) |
 | Password in argv / `ps` / logs | `--password-fd` or stdin; rpcd pipes fd 0; never audit/syslog | host | `tests/test_mutators.sh` stub argv |
 | Audit field injection (actor/src) | Whitelist + 64-char cap (`um_actor_resolve`, `sanitize_actor`); audit tokens may contain `=` but never a space, so no new field can be introduced | host | #3 C1 · Z3 P2 |
 | Unquoted argv rpcd → CLI | Explicit argv per ubus method | host | #3 C2 · `tests/test_mutators.sh` |
@@ -75,7 +75,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 | Failure scenario | Guard | Class | Proof |
 |------------------|-------|-------|-------|
-| Concurrent mutators on account files | Whole-mutator exclusive `flock` (`um_with_lock`); lock file created/tightened to `0600` via `um_lock_open` so unprivileged UIDs cannot take `LOCK_EX` on the **mutator** path. **Open gap:** `um_doctor_checks` still creates the lock via bare `9>` without `um_lock_open` ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L11) | host | `tests/test_mutators.sh` (mode 0600 + upgrade-path tighten) — doctor-first path **not** covered |
+| Concurrent mutators on account files | Whole-mutator exclusive `flock` (`um_with_lock`); lock file created/tightened to `0600` via `um_lock_open` so unprivileged UIDs cannot take `LOCK_EX` (mutator path + doctor path, [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L11) | host | `tests/test_mutators.sh` (mode 0600 + upgrade-path tighten + doctor-first) |
 | Crash mid-mutation | Snapshot / EXIT rollback (`um_tx_*`) over passwd+shadow+group+registry+rpcd (create/delete/set-role / set-luci-login). Del commits BEFORE `um_registry_del` (purge may remove the home). **Open:** post-commit `um_registry_del` failure clears `incomplete` ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) I5); rollback uses direct `cp` not temp+rename ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) I4) | host | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` |
 | Torn file writes | `umask 077` temp → fixed mode/`chown 0:0` → `mv` (`um_atomic_edit`, registry del, audit rotate); `um_rpcd_atomic_replace` preserves destination mode (default `0600`) | host | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` (rpcd/audit mode asserts) |
 | SIGKILL / power loss mid-mutation | **Accepted residual**: EXIT-trap rollback cannot run; `doctor` reports orphaned `usrmanage-tx.*` snapdirs for manual recovery. Snapdirs live in `${TMPDIR:-/tmp}` (tmpfs) — recovery applies only if the snapshot survives until the operator acts (#96, #100) | host | `um_doctor_checks` |
@@ -89,8 +89,8 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Failure scenario | Guard | Class | Proof |
 |------------------|-------|-------|-------|
 | Empty / locked shadow accepted for web login | Refuse enable when hash empty or `!`/`*` | host | `tests/test_luci_login.sh` |
-| Adopt foreign / tampered `luci-app-acl` login | Ownership conjunction (`usrmanage=1` + `$p$user` + managed registry) — **holds only for forms the awk dump can see**; remaining L4 gaps in [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L8/L9 | host | `tests/test_luci_login.sh` |
-| Login section written in a libuci-valid form the awk parser cannot see | Fail-closed `um_rpcd_config_parsable` refuses indented, abbreviated, or quoted-type **sections**. **Open:** quoted option/list keys and trailing `#` comments still yield `state=none` ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L8/L9) | host | `tests/test_luci_login.sh` (indented / abbreviated / quoted-type) |
+| Adopt foreign / tampered `luci-app-acl` login | Ownership conjunction (`usrmanage=1` + `$p$user` + managed registry) with fail-closed parser for non-canonical UCI | host | `tests/test_luci_login.sh` |
+| Login section written in a libuci-valid form the awk parser cannot see | Fail-closed `um_rpcd_config_parsable` refuses indented, abbreviated, quoted-type sections, quoted option/list keys, and trailing `#` on option/list lines ([#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) / [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L8/L9) | host | `tests/test_luci_login.sh` (indented / abbreviated / quoted / quoted_keys / trailing_comment) |
 | `/etc/config/rpcd` mode preserved on rewrite / rollback | Capture dest mode in `um_rpcd_atomic_replace` (default `0600`); `um_tx_restore_one` has a dedicated `rpcd` arm at `0600` | host | `tests/test_luci_login.sh` (enable/disable/reset + forced rollback) |
 | Live session keeps old ACLs after disable / role / del / passwd | `um_session_revoke_user` destroys matching ubus SIDs (`@.values.username` then `@.data.username`). **Open:** enumerate-then-mutate TOCTOU vs concurrent `session.login` ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) I3) | lab | `scripts/qemu-smoke-usrmanage.sh` (issue #95) — host DRY_RUN skips ubus and is **not** proof |
 | Same-role / ACL-repair `set-role` leaves elevated live sessions | After `um_luci_login_sync_acls` in set-role (including same-role), `_um_set_role_revoke` runs fail-closed. **Proof gap:** named host test is currently a source grep, not a behavioral mock ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) V2) | host | `tests/test_luci_login.sh` |
@@ -115,7 +115,7 @@ From the 2026-08-12 **multi-model** pass (Opus / Grok / Sol / GLM). Parent-repro
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
-| [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) | L8–L11, I3–I5, V2/V3 | Medium–Low | On-device | L4 grammar leftovers; unanchored passwd grep; doctor lock DoS; tx/incomplete gaps |
+| [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) | I3–I5, V2/V3 | Medium–Low | On-device | L8–L11 closed in this wave; remaining: revoke TOCTOU, tx restore, incomplete clear, proof gaps |
 
 Prior Aug-9 findings and the first 2026-08-12 wave IDs (L1–L7 + #107 lab asserts) are closed in [#112](https://github.com/lucas-albers-lz4/usrmanage/pull/112)–[#116](https://github.com/lucas-albers-lz4/usrmanage/pull/116). Follow-on gaps from the same classes remain open in [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) (L8/L9 L4 grammar leftovers; L11 doctor lock path).
 
@@ -268,6 +268,12 @@ Ledger hygiene in this revision: coverage-map dates bumped; L1–L7 moved to Res
 Scope: `.github/workflows/publish-packages.yml`, `packages-repo/README.md`, `scripts/lib/{sdk-matrix,feed-publish}.sh`, `scripts/{docker-sdk,shellcheck,publish-packages,verify-reproducible-build}.sh`, `docs/{release,security-review}.md`, `tests/test_sdk_matrix_digests.sh`.
 
 **Result:** R1–R6 and P1 closed. Checkout no longer persists credentials into the SDK bind mount; feed README fingerprint gates restored in-tree; signing tools exported off `/builder` before secret mounts; SDK digests pinned at first pull with cache for manifest; tag shape validated without `${{ }}` in `run:`; `environment: feed-publish` added (operator must configure reviewers); bash shellcheck is blocking. Host smoke + digest tests green. Residual operational notes: configure Environment in GitHub settings; optional checkout-before-validate ordering.
+
+### 2026-08-12 — On-device L8–L11 remediation (#118 partial)
+
+Scope: `usrmanage-lib.sh` (passwd/shadow field match, doctor `um_lock_open`), `usrmanage-luci-login.sh` (`um_rpcd_config_parsable` quoted keys + trailing comments), host tests.
+
+**Result:** L8/L9 fail-closed; L10 field-anchored lookups; L11 doctor-first lock 0600. Remaining #118 items (I3–I5, V2/V3) tracked for the follow-up PR.
 
 ## Review procedure
 

@@ -518,8 +518,11 @@ um_registry_del() {
 }
 
 um_passwd_line() {
+	# Field-anchored: first colon-field must equal the username exactly (L10 / #118).
+	# Unanchored grep -F "${user}:" matched suffixes (tp → ntp, n → daemon).
+	# Match awk END exit status to grep: no row → non-zero (callers use || return 1).
 	_u=$1
-	grep -m1 -F "${_u}:" "$USRMANAGE_PASSWD" 2>/dev/null
+	awk -F: -v u="$_u" '$1 == u { print; found=1; exit } END { exit !found }' "$USRMANAGE_PASSWD" 2>/dev/null
 }
 
 um_user_exists() {
@@ -539,7 +542,7 @@ um_user_shell() { um_passwd_field "$1" 7; }
 
 um_user_locked() {
 	_u=$1
-	_sh=$(grep -m1 -F "${_u}:" "$USRMANAGE_SHADOW" 2>/dev/null | cut -d: -f2)
+	_sh=$(awk -F: -v u="$_u" '$1 == u { print $2; found=1; exit } END { exit !found }' "$USRMANAGE_SHADOW" 2>/dev/null) || return 1
 	case "$_sh" in
 		'!'*|'*'*) return 0 ;;
 		*) return 1 ;;
@@ -1410,6 +1413,8 @@ um_doctor_checks() {
 	_tx_orphan_count=0
 	_tx_lock_busy=0
 	if command -v flock >/dev/null 2>&1; then
+		# L11: tighten lock mode before any 9> create (same as um_with_lock / L7).
+		um_lock_open || true
 		if ! ( flock -n 9 || exit 1 ) 9>"$USRMANAGE_LOCK"; then
 			_tx_lock_busy=1
 		fi
