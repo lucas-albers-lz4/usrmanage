@@ -28,16 +28,13 @@ grep -q 'LUCI_PKGARCH:=all' "$FEED/luci-app-usrmanage/Makefile"
 grep -q 'Apache-2.0' "$FEED/usrmanage/Makefile"
 grep -q '+usrmanage' "$FEED/luci-app-usrmanage/Makefile"
 grep -q '%wheel' "$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
-# V3: packaged sudoers fragment must be mode 0440 in the feed tree.
-_su="$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
-_su_mode=$(stat -c '%a' "$_su" 2>/dev/null || stat -f '%OLp' "$_su" 2>/dev/null || echo '')
-case "$_su_mode" in
-	440|0440) ;;
-	*)
-		echo "sudoers feed mode ${_su_mode:-unknown} (want 0440)" >&2
-		exit 1
-		;;
-esac
+# V3: install path must chmod 0440 (git does not preserve mode bits on the
+# feed-tree source file; doctor asserts the live fragment on-device).
+grep -qE 'chmod 0440.*sudoers\.d/usrmanage' "$FEED/usrmanage/Makefile" \
+	|| { echo "Makefile missing chmod 0440 for sudoers install" >&2; exit 1; }
+grep -q 'chmod 0440 /etc/sudoers.d/usrmanage' \
+	"$FEED/usrmanage/files/etc/uci-defaults/90-usrmanage" \
+	|| { echo "uci-defaults missing chmod 0440 for sudoers" >&2; exit 1; }
 
 # JSON ACLs parse
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json'))"

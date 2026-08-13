@@ -143,6 +143,51 @@ grep -q "tx_restore_failed path=$_snap_keep" "$_rb_err" \
 # Cleanup leftover recovery snapdir from this test
 rm -rf "$_snap_keep"
 
+# I4: restore applies fixed modes via temp+rename (not bare cp onto live files).
+chmod 0644 "$USRMANAGE_PASSWD"
+chmod 0600 "$USRMANAGE_SHADOW"
+chmod 0644 "$USRMANAGE_GROUP"
+chmod 0640 "$USRMANAGE_REGISTRY"
+chmod 0600 "$USRMANAGE_RPCD_CONFIG"
+um_tx_begin
+printf 'root:x:0:0:root:/root:/bin/ash\nbad:x:1000:1000::/:/bin/ash\n' > "$USRMANAGE_PASSWD"
+printf 'root:::0:99999:7:::\nbad:!::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
+printf 'torn-rpcd\n' > "$USRMANAGE_RPCD_CONFIG"
+# Deliberately wrong modes mid-tx — restore must re-apply policy modes.
+chmod 0666 "$USRMANAGE_PASSWD" "$USRMANAGE_SHADOW" "$USRMANAGE_RPCD_CONFIG"
+um_tx_rollback
+grep -q 'bad:' "$USRMANAGE_PASSWD" && bad "I4 rollback left bad passwd" || ok "I4 rollback restores passwd content"
+_mode=$(stat_mode "$USRMANAGE_PASSWD")
+[ "$_mode" = "644" ] && ok "I4 passwd mode 0644 after restore" || bad "I4 passwd mode $_mode"
+_mode=$(stat_mode "$USRMANAGE_SHADOW")
+[ "$_mode" = "600" ] && ok "I4 shadow mode 0600 after restore" || bad "I4 shadow mode $_mode"
+_mode=$(stat_mode "$USRMANAGE_RPCD_CONFIG")
+[ "$_mode" = "600" ] && ok "I4 rpcd mode 0600 after restore" || bad "I4 rpcd mode $_mode"
+
+# I4: failed mv leaves live destination unchanged (no in-place truncate).
+um_tx_begin
+_snap_keep=$UM_TX_SNAPDIR
+printf 'live-torn\n' > "$USRMANAGE_PASSWD"
+mkdir -p "$TMP/failbin"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/failbin/mv"
+chmod +x "$TMP/failbin/mv"
+if ( PATH="$TMP/failbin:$PATH" um_tx_rollback ) >/dev/null 2>&1; then
+	bad "I4 rollback should fail when mv fails"
+else
+	ok "I4 rollback fails when mv fails"
+fi
+grep -qx 'live-torn' "$USRMANAGE_PASSWD" \
+	&& ok "I4 failed restore preserves live destination" \
+	|| bad "I4 failed restore mutated destination"
+[ -d "$_snap_keep" ] && ok "I4 snapdir kept after mv failure" || bad "I4 snapdir lost after mv failure"
+rm -rf "$_snap_keep" "$TMP/failbin"
+UM_TX_ACTIVE=0
+UM_TX_SNAPDIR=
+UM_TX_COMMITTED=0
+# Reset passwd after failed restore left torn content.
+printf 'root:x:0:0:root:/root:/bin/ash\nops:x:1000:1000:ops:/home/ops:/bin/ash\n' > "$USRMANAGE_PASSWD"
+chmod 0644 "$USRMANAGE_PASSWD"
+
 # mid-begin snap failure must not leave orphaned snapdirs (EXIT hook + aborted-begin cleanup)
 _tx_tmp=$TMP/tx_begin_fail
 mkdir -p "$_tx_tmp"

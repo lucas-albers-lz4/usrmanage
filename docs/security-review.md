@@ -81,7 +81,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | SIGKILL / power loss mid-mutation | **Accepted residual**: EXIT-trap rollback cannot run; `doctor` reports orphaned `usrmanage-tx.*` snapdirs for manual recovery. Snapdirs live in `${TMPDIR:-/tmp}` (tmpfs) — recovery applies only if the snapshot survives until the operator acts (#96, #100) | host | `um_doctor_checks` |
 | Demote/delete last managed admin | `um_count_managed_admins` deny | host | `tests/test_mutators.sh` · QEMU smoke |
 | Incomplete op with no record | `incomplete` marker + `doctor`; failed restore keeps snapdir | host | `um_doctor_checks` · architecture docs |
-| Broken sudoers fragment | Minimal static `%wheel` rule installed `0440` (Makefile); `doctor` asserts mode 0440 and runs `visudo -cf` | host | `um_doctor_checks` · `scripts/smoke-package-layout.sh` |
+| Broken sudoers fragment | Minimal static `%wheel` rule; Makefile + uci-defaults `chmod 0440`; `doctor` asserts mode 0440 and runs `visudo -cf` | host | `um_doctor_checks` · `scripts/smoke-package-layout.sh` (Makefile/uci-defaults chmod) · `tests/test_mutators.sh` (doctor rejects 0644) |
 | Upgrade/remove wiping managed state | `users`, sudoers, UCI config are conffiles | host | package Makefile |
 
 ### LuCI login lifecycle
@@ -124,7 +124,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
-| [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L8–L11, I4/I5, V2/V3 | On-device | [PR #121](https://github.com/lucas-albers-lz4/usrmanage/pull/121) (L8–L11) + this PR (I4/I5/V2/V3); I3 → accepted residual |
+| [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L8–L11, I4/I5, V2/V3 | On-device | [PR #121](https://github.com/lucas-albers-lz4/usrmanage/pull/121) (L8–L11) + [PR #122](https://github.com/lucas-albers-lz4/usrmanage/pull/122) (I4/I5/V2/V3); I3 → accepted residual |
 | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R1–R6, P1 | Publish / supply-chain | [PR #120](https://github.com/lucas-albers-lz4/usrmanage/pull/120) — persist-credentials false; packages-repo README fingerprints; signing tools exported; SDK digest pin; tag validation; feed-publish environment; blocking shellcheck |
 | [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1/L3 | LuCI login / shadow | [PR #115](https://github.com/lucas-albers-lz4/usrmanage/pull/115) — same-role set-role revoke + `um_shadow_hash_usable` awk `$1 == u` field match |
 | [#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) L2 | LuCI login tx | [PR #114](https://github.com/lucas-albers-lz4/usrmanage/pull/114) — `set-luci-login` transaction snapshot |
