@@ -5,7 +5,7 @@ Menu: **System → User Management** (`admin/system/usrmanage`).
 ## Layout
 
 1. Banner: UNIX/SSH accounts; optional LuCI web login per user (`$p$`); admin = wheel + sudo
-2. Doctor warning banner when self-check fails
+2. Doctor banner when self-check has **errors** (expanded `alert-message error`) or **warns** only (collapsed `alert-message warning`). No green “OK” strip. Raw JSON stays under Technical details for bug reports. Wheel missing with no live managed users is a warn (created on first add); BusyBox without `stat` uses `find -perm 440` for sudoers mode.
 3. Password policy strip (`Password policy: OpenWrt`) — Configure expands preset/toggles (write ACL); **Save** required; read ACL sees name only
 4. User table: Username | UID | Role | Shell | Managed | LuCI | Actions
 5. Manage actions (write ACL only): Add (optional LuCI checkbox), Set role, Password, Enable/Disable LuCI, Remove

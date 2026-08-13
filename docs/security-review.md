@@ -19,9 +19,9 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-12 (#118 complete) | none |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-13 (doctor severity / BusyBox mode) | none |
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-12 (multi-model) | none new (ACL split re-confirmed) |
-| LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-12 (multi-model) | none (XSS / expect convention re-confirmed) |
+| LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-13 (doctor banner severity) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-12 (#118 V3) | none |
 | CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-12 (#117) | none |
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-12 (#117) | none |
@@ -81,7 +81,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | SIGKILL / power loss mid-mutation | **Accepted residual**: EXIT-trap rollback cannot run; `doctor` reports orphaned `usrmanage-tx.*` snapdirs for manual recovery. Snapdirs live in `${TMPDIR:-/tmp}` (tmpfs) — recovery applies only if the snapshot survives until the operator acts (#96, #100) | host | `um_doctor_checks` |
 | Demote/delete last managed admin | `um_count_managed_admins` deny | host | `tests/test_mutators.sh` · QEMU smoke |
 | Incomplete op with no record | `incomplete` marker + `doctor`; failed restore keeps snapdir | host | `um_doctor_checks` · architecture docs |
-| Broken sudoers fragment | Minimal static `%wheel` rule; Makefile + uci-defaults `chmod 0440`; `doctor` asserts mode 0440 and runs `visudo -cf` | host | `um_doctor_checks` · `scripts/smoke-package-layout.sh` (Makefile/uci-defaults chmod) · `tests/test_mutators.sh` (doctor rejects 0644) |
+| Broken sudoers fragment | Minimal static `%wheel` rule; Makefile + uci-defaults `chmod 0440`; `doctor` asserts mode 0440 via validated `stat` output or BusyBox-safe `find -maxdepth 0 -perm 440` (symlink rejected before `[ -f ]`), then `visudo -cf`. Wheel missing with no live managed users is **warn** only (created on first add). Doctor does not chmod or create wheel (read ACL). | host | `um_doctor_checks` · `scripts/smoke-package-layout.sh` · `tests/test_mutators.sh` (V3 0644) · `tests/test_doctor.sh` (stat stub / garbage / symlink / wheel severity) |
 | Upgrade/remove wiping managed state | `users`, sudoers, UCI config are conffiles | host | package Makefile |
 
 ### LuCI login lifecycle
@@ -281,6 +281,12 @@ Scope: `usrmanage-lib.sh` (passwd/shadow field match, doctor `um_lock_open`), `u
 Scope: `um_tx_restore_one` atomic restore, del incomplete retention, same-role revoke behavioral test, sudoers mode asserts, accepted residual for session-login TOCTOU.
 
 **Result:** #118 closed. I3 documented under Accepted residuals.
+
+### 2026-08-13 — Doctor severity + BusyBox sudoers mode probe
+
+Scope: `um_doctor_checks` / `um_file_mode_octal` / `um_count_managed_users`, LuCI doctor banner, `tests/test_doctor.sh`.
+
+**Result:** Top-level `ok` ignores warn-severity checks (empty-registry missing wheel). Sudoers mode via validated `stat` or `find -perm 440`; symlinks fail closed. LuCI: no green banner; warn collapsed / error expanded; raw JSON under details. Doctor remains read-only (no chmod / no create wheel).
 
 ## Review procedure
 

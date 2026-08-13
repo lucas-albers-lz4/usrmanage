@@ -184,6 +184,7 @@ printf '%%wheel ALL=(ALL:ALL) ALL\n' > "$USRMANAGE_SUDOERS"
 chmod 0644 "$USRMANAGE_SUDOERS"
 _doc_json=$(um_doctor_checks --json 2>/dev/null) || true
 echo "$_doc_json" | grep -q '"id":"sudoers","ok":false' \
+	&& echo "$_doc_json" | grep -q '"severity":"error"' \
 	&& echo "$_doc_json" | grep -q 'want 0440' \
 	&& ok "V3 doctor rejects sudoers mode 0644" \
 	|| bad "V3 doctor sudoers mode: $_doc_json"

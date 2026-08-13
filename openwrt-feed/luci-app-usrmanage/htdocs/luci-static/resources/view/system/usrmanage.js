@@ -176,6 +176,56 @@ function detectPreset(p) {
 	return 'custom';
 }
 
+/* Severity-aware doctor banner: no green OK strip; warn collapsed; error expanded. */
+function buildDoctorBanner(doctor) {
+	const checks = (doctor && Array.isArray(doctor.checks)) ? doctor.checks : [];
+	const incomplete = (doctor && Array.isArray(doctor.incomplete)) ? doctor.incomplete : [];
+	const errors = [];
+	const warns = [];
+	checks.forEach(function(c) {
+		if (!c || c.ok !== false)
+			return;
+		if (c.severity === 'warn')
+			warns.push(c);
+		else
+			errors.push(c);
+	});
+	if (!errors.length && !warns.length && !incomplete.length)
+		return null;
+
+	const issueRows = [];
+	errors.forEach(function(c) {
+		issueRows.push(E('li', {}, '%s: %s'.format(c.id || 'check', c.msg || '')));
+	});
+	incomplete.forEach(function(inc) {
+		issueRows.push(E('li', {}, _('Incomplete operation: %s').format(String(inc))));
+	});
+	warns.forEach(function(c) {
+		issueRows.push(E('li', {}, '%s: %s'.format(c.id || 'check', c.msg || '')));
+	});
+
+	const hasError = errors.length > 0 || incomplete.length > 0;
+	const summary = hasError
+		? _('User management self-check found problems that may block account changes.')
+		: _('User management self-check notes (safe to continue; wheel is created when you add the first user).');
+	const detailsAttrs = hasError
+		? { 'open': 'open' }
+		: {};
+	const detailsKids = [
+		E('summary', {}, _('Technical details')),
+		E('pre', {}, JSON.stringify(doctor, null, 2))
+	];
+
+	return E('div', {
+		'class': hasError ? 'alert-message error' : 'alert-message warning',
+		'data-testid': 'usrmanage-doctor-banner'
+	}, [
+		E('p', {}, summary),
+		E('ul', {}, issueRows),
+		E('details', detailsAttrs, detailsKids)
+	]);
+}
+
 function passwordChecks(policy, name, pass, pass2) {
 	const minLen = Number(policy.min_length) || 8;
 	const items = [];
@@ -308,10 +358,7 @@ return view.extend({
 			: null);
 		const policyIn = policyFull || policyName;
 
-		const doctorBanner = (doctor.ok !== false) ? null : E('div', { 'class': 'alert-message warning' }, [
-			_('User management self-check reported problems. Mutators may be fail-closed until sudo/wheel/registry are healthy.'),
-			E('pre', {}, JSON.stringify(doctor, null, 2))
-		]);
+		const doctorBanner = buildDoctorBanner(doctor);
 
 		const policyLabel = policyIn.label || 'OpenWrt';
 		const editorWrap = E('div', { 'class': 'cbi-section', 'hidden': 'hidden' });
