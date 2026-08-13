@@ -236,13 +236,37 @@ feed_publish_stage_opkg_host() {
 
 feed_publish_stage_opkg_sdk() {
 	local version_key="$1" pkg_dir="$2"
-	local root pkg_abs key_abs
+	local root key_abs tools_dir
 	root="$(feed_publish_root)"
 	pkg_dir="$(feed_publish_abspath "$pkg_dir")"
 	key_abs="$(feed_publish_abspath "$OPKG_FEED_SECRET_KEY")"
 	sdk_matrix_resolve x86-64 "$version_key"
+	# Prefer digest-pinned image from build-time cache when present (R4).
+	if [[ -f "$(sdk_matrix_digest_cache_path x86-64 "$version_key")" ]]; then
+		SDK_MATRIX_IMAGE="$(tr -d ' \n\r\t' < "$(sdk_matrix_digest_cache_path x86-64 "$version_key")")"
+	fi
 	sdk_matrix_feeds_ready \
 		|| { echo "run docker-sdk.sh build --version ${version_key} before staging opkg feed" >&2; return 1; }
+	# R2: copy signing tools out of the shared /builder volume before mounting secrets.
+	tools_dir="$(mktemp -d "${TMPDIR:-/tmp}/um-sign-tools.XXXXXX")"
+	(
+		cd "$root"
+		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
+		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
+		docker compose run --rm --user "$(id -u):$(id -g)" \
+			-v "${tools_dir}:/feed/tools" \
+			sdk sh -ec '
+				set -e
+				cp -a /builder/staging_dir/host/bin/usign /feed/tools/usign
+				cp -a /builder/staging_dir/host/bin/mkhash /feed/tools/mkhash
+				cp -a /builder/scripts/ipkg-make-index.sh /feed/tools/ipkg-make-index.sh
+				chmod a+x /feed/tools/usign /feed/tools/mkhash /feed/tools/ipkg-make-index.sh
+			'
+	) || {
+		rm -rf "$tools_dir"
+		echo "failed to export opkg signing tools from SDK volume" >&2
+		return 1
+	}
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
@@ -250,12 +274,13 @@ feed_publish_stage_opkg_sdk() {
 		docker compose run --rm --user root \
 			-v "${pkg_dir}:/feed/pkgdir" \
 			-v "${key_abs}:/feed/opkg-secret.key:ro" \
+			-v "${tools_dir}:/feed/tools:ro" \
 			sdk sh -ec '
 				set -e
-				USIGN=/builder/staging_dir/host/bin/usign
-				INDEX=/builder/scripts/ipkg-make-index.sh
-				MKHASH=/builder/staging_dir/host/bin/mkhash
-				export PATH="/builder/staging_dir/host/bin:$PATH"
+				USIGN=/feed/tools/usign
+				INDEX=/feed/tools/ipkg-make-index.sh
+				MKHASH=/feed/tools/mkhash
+				export PATH="/feed/tools:$PATH"
 				export MKHASH
 				test -x "$USIGN"
 				test -x "$INDEX"
@@ -275,6 +300,9 @@ feed_publish_stage_opkg_sdk() {
 				fi
 			'
 	)
+	local rc=$?
+	rm -rf "$tools_dir"
+	return "$rc"
 }
 
 feed_publish_stage_opkg() {
@@ -328,12 +356,33 @@ feed_publish_stage_apk() {
 	}
 	pkg_dir="$feed_dir"
 	sdk_matrix_resolve x86-64 "$version_key"
+	if [[ -f "$(sdk_matrix_digest_cache_path x86-64 "$version_key")" ]]; then
+		SDK_MATRIX_IMAGE="$(tr -d ' \n\r\t' < "$(sdk_matrix_digest_cache_path x86-64 "$version_key")")"
+	fi
 	sdk_matrix_feeds_ready \
 		|| { echo "run docker-sdk.sh build --version ${version_key} before staging apk feed" >&2; return 1; }
-	local root key_abs
+	local root key_abs tools_dir
 	root="$(feed_publish_root)"
 	pkg_dir="$(feed_publish_abspath "$pkg_dir")"
 	key_abs="$(feed_publish_abspath "$APK_FEED_SECRET_KEY")"
+	# R2: export apk from /builder before mounting the signing secret.
+	tools_dir="$(mktemp -d "${TMPDIR:-/tmp}/um-sign-tools.XXXXXX")"
+	(
+		cd "$root"
+		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
+		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
+		docker compose run --rm --user "$(id -u):$(id -g)" \
+			-v "${tools_dir}:/feed/tools" \
+			sdk sh -ec '
+				set -e
+				cp -a /builder/staging_dir/host/bin/apk /feed/tools/apk
+				chmod a+x /feed/tools/apk
+			'
+	) || {
+		rm -rf "$tools_dir"
+		echo "failed to export apk signing tool from SDK volume" >&2
+		return 1
+	}
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
@@ -341,14 +390,18 @@ feed_publish_stage_apk() {
 		docker compose run --rm --user root \
 			-v "${pkg_dir}:/feed/pkgdir" \
 			-v "${key_abs}:/feed/apk-secret.rsa:ro" \
+			-v "${tools_dir}:/feed/tools:ro" \
 			sdk sh -ec '
 				set -e
-				APK=/builder/staging_dir/host/bin/apk
+				APK=/feed/tools/apk
 				test -x "$APK"
 				cd /feed/pkgdir
 				"$APK" mkndx --allow-untrusted --sign /feed/apk-secret.rsa --output packages.adb *.apk
 			'
 	)
+	local rc=$?
+	rm -rf "$tools_dir"
+	return "$rc"
 }
 
 feed_publish_copy_keys() {

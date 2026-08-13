@@ -69,7 +69,9 @@ verify_one() {
 		return 1
 	}
 	echo "  pass 1:" >&2
-	echo "$map1" | sed 's/^/    /' >&2
+	while IFS= read -r _line || [[ -n "${_line:-}" ]]; do
+		printf '    %s\n' "$_line"
+	done <<< "$map1" >&2
 
 	echo "→ clean + build pass 2..." >&2
 	sdk_matrix_clean_package
@@ -81,7 +83,9 @@ verify_one() {
 		return 1
 	}
 	echo "  pass 2:" >&2
-	echo "$map2" | sed 's/^/    /' >&2
+	while IFS= read -r _line || [[ -n "${_line:-}" ]]; do
+		printf '    %s\n' "$_line"
+	done <<< "$map2" >&2
 
 	if [[ "$map1" != "$map2" ]]; then
 		echo "REPRODUCIBILITY FAIL: ${version_key} sha256 mismatch" >&2

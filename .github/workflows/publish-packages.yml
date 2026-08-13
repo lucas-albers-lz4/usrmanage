@@ -21,6 +21,8 @@ permissions:
 jobs:
   build-publish:
     runs-on: ubuntu-latest
+    # Required reviewers / secret gate — configure Environment "feed-publish" in repo settings.
+    environment: feed-publish
     permissions:
       contents: write
     steps:
@@ -28,17 +30,29 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+          # R1: do not write GITHUB_TOKEN into .git/config (workspace is bind-mounted into SDK).
+          persist-credentials: false
 
       - name: Resolve release tag
         env:
           TAG: ${{ github.event.inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             tag="$TAG"
           else
             tag="${GITHUB_REF#refs/tags/}"
           fi
-          echo "USRMANAGE_RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          # Reject newlines / control chars before GITHUB_ENV write (R5).
+          if [[ "$tag" != "${tag//[$'\n\r']/}" ]]; then
+            echo "invalid tag: contains newline" >&2
+            exit 1
+          fi
+          if [[ ! "$tag" =~ ^v[0-9] ]]; then
+            echo "invalid tag '$tag' (expected vN…, e.g. v0.1.5)" >&2
+            exit 1
+          fi
+          printf 'USRMANAGE_RELEASE_TAG=%s\n' "$tag" >> "$GITHUB_ENV"
           echo "Release tag: $tag"
 
       - name: Set SOURCE_DATE_EPOCH from release tag

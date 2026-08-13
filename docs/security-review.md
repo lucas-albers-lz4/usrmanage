@@ -23,10 +23,10 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-12 (multi-model) | none new (ACL split re-confirmed) |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-12 (multi-model) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-12 (multi-model) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) V3 (sudoers mode assert) |
-| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-12 (multi-model) | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R1, R5, R6, P1 |
-| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-12 (multi-model) | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R2, P1 |
-| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-12 (multi-model) | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R1, R2, R4 |
-| Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (multi-model) | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R3 — **blocks next `v*` tag** |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-13 (#117) | none |
+| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-13 (#117) | none |
+| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-13 (#117) | none (SDK digest pinned at first pull) |
+| Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-13 (#117) | none |
 | QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login + #107 asserts; multi-model did not re-run guest) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) I3 (revoke TOCTOU); L8/L9 still weaken lab disable proof on non-canonical UCI — fixtures remain lab-only by design |
 
 ## How to re-verify (current gates)
@@ -104,18 +104,17 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 |------------------|-------|-------|-------|
 | Unsigned or third-party-signed feed | opkg `usign` + apk RSA signing in the publish job; keys validated before use | host | `scripts/validate-feed-keys.sh` (not invoked by `smoke-host.sh` — needs docker + secrets) |
 | Signing secret leaking into the published feed | Staging copies public key material only | host | `feed_publish_copy_keys` |
-| Silently altered build inputs | Feed commits pinned in `scripts/feeds.lock/`; **SDK image still tag-mutable** and manifest digest is a post-build re-pull ([#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R4) | host | `sdk_matrix_feeds_ready` lock stamp |
+| Silently altered build inputs | Feed commits pinned in `scripts/feeds.lock/`; SDK image pinned to registry digest at first pull (`sdk_matrix_pull_and_pin`); manifest reads pin cache (no post-build retag pull) | host | `tests/test_sdk_matrix_digests.sh` (R4 pin cache) · `sdk_matrix_feeds_ready` |
 | Non-reproducible release artifacts | `SOURCE_DATE_EPOCH` from the tag commit + repro gate | host | `scripts/verify-reproducible-build.sh` |
-| Publish job token / build container isolation | **Open** — default checkout credentials persist into the SDK bind mount ([#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R1) | manual | pending fix |
-| Feed origin trust-bootstrap README | Fingerprints live on Pages today; in-tree `packages-repo/README.md` lacks the gate and **will overwrite** on next publish ([#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R3) | manual | live feed README vs `packages-repo/README.md` |
+| Publish job token / build container isolation | Checkout `persist-credentials: false`; signing tools copied out of `/builder` before secret mounts | manual | `publish-packages.yml` · `feed_publish_stage_opkg_sdk` / `feed_publish_stage_apk` |
+| Feed origin trust-bootstrap README | Fingerprints + `sha256sum -c` gate in in-tree `packages-repo/README.md` (copied to Pages on every publish) | manual | `packages-repo/README.md` · [binary-feed.md](binary-feed.md) |
 
 ## Open findings
 
-From the 2026-08-12 **multi-model** pass (Opus / Grok / Sol / GLM). Parent-reproduced where noted. Implement via focused PRs; use `/review-security` on those PRs. **Do not cut the next `v*` tag until [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R1+R3 are addressed.**
+From the 2026-08-12 **multi-model** pass (Opus / Grok / Sol / GLM). Parent-reproduced where noted. Implement via focused PRs; use `/review-security` on those PRs.
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
-| [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) | R1–R6, P1 | High–Low | Publish / supply-chain | R1 High (token in SDK mount); R3 Medium **blocks next tag**; P1 shellcheck `\|\| true` |
 | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) | L8–L11, I3–I5, V2/V3 | Medium–Low | On-device | L4 grammar leftovers; unanchored passwd grep; doctor lock DoS; tx/incomplete gaps |
 
 Prior Aug-9 findings and the first 2026-08-12 wave IDs (L1–L7 + #107 lab asserts) are closed in [#112](https://github.com/lucas-albers-lz4/usrmanage/pull/112)–[#116](https://github.com/lucas-albers-lz4/usrmanage/pull/116). Follow-on gaps from the same classes remain open in [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) (L8/L9 L4 grammar leftovers; L11 doctor lock path).
@@ -126,6 +125,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
+| [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R1–R6, P1 | Publish / supply-chain | This PR — `persist-credentials: false`; packages-repo README fingerprints; signing tools exported off `/builder`; SDK digest pin-at-first-pull; tag `^v[0-9]` + `environment: feed-publish`; shellcheck bash block blocking |
 | [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1/L3 | LuCI login / shadow | [PR #115](https://github.com/lucas-albers-lz4/usrmanage/pull/115) — same-role set-role revoke + `um_shadow_hash_usable` awk `$1 == u` field match |
 | [#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) L2 | LuCI login tx | [PR #114](https://github.com/lucas-albers-lz4/usrmanage/pull/114) — `set-luci-login` transaction snapshot |
 | [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4 | LuCI login parser | [PR #113](https://github.com/lucas-albers-lz4/usrmanage/pull/113) — fail-closed for indented / abbreviated / quoted-type sections (further grammar: #118 L8/L9) |
@@ -133,8 +133,8 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 | [#111](https://github.com/lucas-albers-lz4/usrmanage/issues/111) L7 | Op lock mode | [PR #112](https://github.com/lucas-albers-lz4/usrmanage/pull/112) — `um_lock_open` 0600 on mutator path (doctor path: #118 L11) |
 | [#107](https://github.com/lucas-albers-lz4/usrmanage/issues/107) P1/P2 | Lab / LuCI login | [PR #116](https://github.com/lucas-albers-lz4/usrmanage/pull/116) — qemu-smoke post-disable deny + demote write ACL |
 | [#61](https://github.com/lucas-albers-lz4/usrmanage/issues/61) S1/S3/S4 | CLI / rpcd | [PR #80](https://github.com/lucas-albers-lz4/usrmanage/pull/80) — `grep -F` username lookups, rpcd session hex whitelist, role resolution before audit (passwd/shadow still unanchored: #118 L10) |
-| [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R1–R5 | CI / release | [PR #78](https://github.com/lucas-albers-lz4/usrmanage/pull/78) + [PR #79](https://github.com/lucas-albers-lz4/usrmanage/pull/79) + [PR #82](https://github.com/lucas-albers-lz4/usrmanage/pull/82) — env-routing, usign key 0600, SHA-pins + actionlint gate, tooling pins (remaining mutable SDK tag: #117 R4) |
-| [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64) | Operator trust | [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81) — key fingerprints published in the README, [binary-feed.md](binary-feed.md), and the feed README. Install snippets verify the SHA-256. (in-tree packages-repo README drift: #117 R3) |
+| [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R1–R5 | CI / release | [PR #78](https://github.com/lucas-albers-lz4/usrmanage/pull/78) + [PR #79](https://github.com/lucas-albers-lz4/usrmanage/pull/79) + [PR #82](https://github.com/lucas-albers-lz4/usrmanage/pull/82) — env-routing, usign key 0600, SHA-pins + actionlint gate, tooling pins (SDK digest pin completed in #117) |
+| [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64) | Operator trust | [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81) — key fingerprints published; in-tree `packages-repo/README.md` gate restored in #117 |
 | [#65](https://github.com/lucas-albers-lz4/usrmanage/issues/65) P1/P2 | Product | [PR #83](https://github.com/lucas-albers-lz4/usrmanage/pull/83) — test-only env-override gate and multi-line / control-char password rejection |
 | [#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66) | Tooling | [PR #84](https://github.com/lucas-albers-lz4/usrmanage/pull/84) — portable stat helper, flock shim, and skip reasons. The full gate runs on macOS. |
 | [#95](https://github.com/lucas-albers-lz4/usrmanage/issues/95) | Lab / LuCI login | [PR #103](https://github.com/lucas-albers-lz4/usrmanage/pull/103) — qemu-smoke asserts live session revoke; `@.values.username` verified on 24.10.8 |
