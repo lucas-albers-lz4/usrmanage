@@ -57,6 +57,37 @@ sdk_matrix_resolve() {
 	SDK_MATRIX_OUT_DIR="$(sdk_matrix_root)/out/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}"
 }
 
+sdk_matrix_digest_cache_path() {
+	local target="$1" version="$2" patch base
+	patch="$(sdk_matrix_version_patch "$version")"
+	base="${SDK_MATRIX_DIGEST_CACHE_DIR:-$(sdk_matrix_root)/out/.sdk-digests}"
+	printf '%s' "${base}/${target}_${patch}"
+}
+
+sdk_matrix_inspect_repo_digest() {
+	# Inspect already-local image ref; print matching RepoDigest or fail.
+	local image="$1" repo digests digest id
+	if [[ "$image" == *@sha256:* ]]; then
+		repo="${image%%@*}"
+	else
+		repo="${image%%:*}"
+	fi
+	digests="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$image" 2>/dev/null || true)"
+	digest="$(printf '%s\n' "$digests" | awk -v repo="$repo" 'index($0, repo "@sha256:")==1 {print; exit}')"
+	if [[ -n "$digest" ]]; then
+		printf '%s' "$digest"
+		return 0
+	fi
+	id="$(docker image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)"
+	if [[ -n "$id" ]]; then
+		echo "sdk-matrix: WARNING ${image} has no RepoDigest; falling back to image id sha256:${id#sha256:}" >&2
+		printf '%s' "@sha256:${id#sha256:}"
+		return 0
+	fi
+	echo "sdk-matrix: no resolvable source for ${image} (not pulled / no digest)" >&2
+	return 1
+}
+
 sdk_matrix_pull() {
 	# Ensure the SDK image for a matrix cell is present locally so its digest can be
 	# recorded (tags are mutable; always re-resolve against the registry).
@@ -70,33 +101,43 @@ sdk_matrix_pull() {
 	docker pull "$SDK_MATRIX_IMAGE"
 }
 
-sdk_matrix_image_digest() {
-	# Print the resolved digest of the SDK image for a matrix cell (target, version).
-	# Prefers the RepoDigest entry whose repo prefix matches the requested image LITERALLY
-	# (awk index($0, repo "@sha256:") == 1; multi-registry ordering is unspecified, so
-	# RepoDigests[0] is not trusted). Falls back to "@sha256:<image id>" with a WARNING.
-	# Aborts (non-zero) if no source resolves at all — never silent.
-	local target="${1:-x86-64}" version="${2:-24.10}" repo digests digest id
-	sdk_matrix_resolve "$target" "$version"
+sdk_matrix_pull_and_pin() {
+	# R4: pull the mutable tag once, pin SDK_MATRIX_IMAGE to repo@sha256, cache digest.
+	local target="${1:-x86-64}" version="${2:-24.10}" digest cache
 	sdk_matrix_pull "$target" "$version" || {
 		echo "sdk-matrix: failed to pull ${SDK_MATRIX_IMAGE}" >&2
 		return 1
 	}
-	repo="${SDK_MATRIX_IMAGE%%:*}"
-	digests="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$SDK_MATRIX_IMAGE" 2>/dev/null || true)"
-	digest="$(printf '%s\n' "$digests" | awk -v repo="$repo" 'index($0, repo "@sha256:")==1 {print; exit}')"
-	if [[ -n "$digest" ]]; then
+	digest="$(sdk_matrix_inspect_repo_digest "$SDK_MATRIX_IMAGE")" || return 1
+	cache="$(sdk_matrix_digest_cache_path "$target" "$version")"
+	mkdir -p "$(dirname "$cache")"
+	printf '%s\n' "$digest" > "$cache"
+	chmod 0644 "$cache" 2>/dev/null || true
+	SDK_MATRIX_IMAGE="$digest"
+	printf '%s' "$digest"
+}
+
+sdk_matrix_read_digest_cache() {
+	# Print non-empty cached digest or return 1 (never print empty).
+	local target="$1" version="$2" cache digest
+	cache="$(sdk_matrix_digest_cache_path "$target" "$version")"
+	[[ -f "$cache" ]] || return 1
+	digest="$(tr -d ' \n\r\t' < "$cache")"
+	[[ -n "$digest" ]] || return 1
+	printf '%s' "$digest"
+}
+
+sdk_matrix_image_digest() {
+	# Print the resolved digest of the SDK image for a matrix cell (target, version).
+	# Prefers a pin file written by sdk_matrix_pull_and_pin at build time (R4) so
+	# feed_publish_write_manifest does not re-pull a possibly moved tag.
+	# Otherwise pulls once and pins. RepoDigest matching is literal repo-prefix.
+	local target="${1:-x86-64}" version="${2:-24.10}" digest
+	if digest="$(sdk_matrix_read_digest_cache "$target" "$version")"; then
 		printf '%s' "$digest"
 		return 0
 	fi
-	id="$(docker image inspect --format '{{.Id}}' "$SDK_MATRIX_IMAGE" 2>/dev/null || true)"
-	if [[ -n "$id" ]]; then
-		echo "sdk-matrix: WARNING ${SDK_MATRIX_IMAGE} has no RepoDigest; falling back to image id sha256:${id#sha256:}" >&2
-		printf '%s' "@sha256:${id#sha256:}"
-		return 0
-	fi
-	echo "sdk-matrix: no resolvable source for ${SDK_MATRIX_IMAGE} (not pulled / no digest)" >&2
-	return 1
+	sdk_matrix_pull_and_pin "$target" "$version"
 }
 
 sdk_matrix_validate_target() {

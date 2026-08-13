@@ -66,7 +66,8 @@ run_one() {
 	local t="$1" v="$2"
 	sdk_matrix_validate_target "$t"
 	sdk_matrix_validate_version "$v"
-	sdk_matrix_resolve "$t" "$v"
+	# R4: pin image to registry digest before any build/sign work.
+	sdk_matrix_pull_and_pin "$t" "$v" >/dev/null
 	echo "→ ${SDK_MATRIX_IMAGE} (volume: ${SDK_MATRIX_VOLUME})" >&2
 }
 

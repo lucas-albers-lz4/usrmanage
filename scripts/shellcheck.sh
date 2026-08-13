@@ -13,8 +13,9 @@ shellcheck -s sh \
 	"$ROOT/scripts/smoke-package-layout.sh" \
 	"$ROOT/scripts/smoke-host.sh"
 
-# Bash SDK/publish helpers
-shellcheck -s bash \
+# Bash SDK/publish helpers (blocking — no || true; P1 / #117)
+# SC1091: sourced helpers use runtime paths shellcheck cannot follow without -x graph.
+shellcheck -s bash -e SC1091 \
 	"$ROOT/scripts/docker-sdk.sh" \
 	"$ROOT/scripts/lib/sdk-matrix.sh" \
 	"$ROOT/scripts/publish-packages.sh" \
@@ -22,6 +23,6 @@ shellcheck -s bash \
 	"$ROOT/scripts/lib/feed-publish.sh" \
 	"$ROOT/scripts/lib/feed-keys.sh" \
 	"$ROOT/scripts/validate-feed-keys.sh" \
-	"$ROOT/tests/test_sdk_matrix_digests.sh" || true
+	"$ROOT/tests/test_sdk_matrix_digests.sh"
 
 echo "shellcheck: ok"

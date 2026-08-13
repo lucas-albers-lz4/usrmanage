@@ -21,13 +21,16 @@ git tag -a v0.1.1 -m "usrmanage 0.1.1"
 git push origin v0.1.1
 ```
 
-5. GitHub Actions `publish-packages`:
+5. GitHub Actions `publish-packages` (Environment **`feed-publish`** — configure required
+   reviewers in repo Settings → Environments before the first publish after this change):
    - Builds 24.10 / 25.12 × x86-64 + armsr-armv8
    - Reproducible double-build on x86-64
    - Signs and deploys feed to `usrmanage-packages`
    - Attaches `.ipk` / `.apk` to the GitHub Release
 6. Verify Pages indexes and install on a lab device (`usrmanage doctor`).
 
-Manual re-run: Actions → publish-packages → workflow_dispatch with tag name.
+Manual re-run: Actions → publish-packages → workflow_dispatch with a **tag name** matching
+`^v[0-9]` (e.g. `v0.1.5`). Checkout uses `persist-credentials: false` so the job token is
+not present in the SDK bind mount.
 
 See [github-publish-checklist.md](github-publish-checklist.md) and [binary-feed.md](binary-feed.md).

@@ -18,6 +18,8 @@ bad() { echo "FAIL: $*" >&2; fail=1; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export SDK_MATRIX_DIGEST_CACHE_DIR="$TMP/sdk-digests"
+mkdir -p "$SDK_MATRIX_DIGEST_CACHE_DIR"
 
 declare -A MOCK_ABSENT=()
 declare -A MOCK_REPO=()
@@ -80,6 +82,27 @@ for t in "${SDK_MATRIX_TARGETS[@]}"; do
 done
 [[ "$cells" -eq 4 ]] && ok "resolved 4 matrix cells" || bad "resolved $cells cells (want 4)"
 
+# Clear pins so later cases exercise pull / fallback paths (R4 cache).
+rm -rf "${SDK_MATRIX_DIGEST_CACHE_DIR:?}"/*
+mkdir -p "$SDK_MATRIX_DIGEST_CACHE_DIR"
+
+# --- pin file: digest returned without a second pull ---
+pin_img="$(img_ref x86-64 24.10)"
+MOCK_REPO["$pin_img"]="${EXPECT[x86-64/24.10]}"
+MOCK_ABSENT["$pin_img"]=0
+MOCK_PULL_LOG="$TMP/pull-pin.log"
+: > "$MOCK_PULL_LOG"
+sdk_matrix_pull_and_pin x86-64 24.10 >/dev/null
+pulls1="$(wc -l < "$MOCK_PULL_LOG" | tr -d ' ')"
+got="$(sdk_matrix_image_digest x86-64 24.10)"
+pulls2="$(wc -l < "$MOCK_PULL_LOG" | tr -d ' ')"
+[[ "$got" == "${EXPECT[x86-64/24.10]}" && "$pulls1" == "1" && "$pulls2" == "1" ]] \
+	&& ok "R4 pin cache avoids re-pull" \
+	|| bad "R4 pin cache: got=$got pulls=$pulls1/$pulls2"
+rm -rf "${SDK_MATRIX_DIGEST_CACHE_DIR:?}"/*
+mkdir -p "$SDK_MATRIX_DIGEST_CACHE_DIR"
+unset MOCK_PULL_LOG
+
 # --- fallback: empty RepoDigests → @sha256:<image id> + WARNING ---
 fallback_img="$(img_ref x86-64 24.10)"
 MOCK_REPO["$fallback_img"]=""
@@ -95,6 +118,8 @@ fi
 grep -q 'WARNING' "$warn" && ok "fallback emitted WARNING" || bad "no WARNING for fallback"
 
 # --- abort: pull fails (no source) → non-zero, never silent ---
+rm -rf "${SDK_MATRIX_DIGEST_CACHE_DIR:?}"/*
+mkdir -p "$SDK_MATRIX_DIGEST_CACHE_DIR"
 MOCK_ABSENT["$(img_ref armsr-armv8 25.12)"]=1
 MOCK_PULL_FAIL=1
 if sdk_matrix_image_digest armsr-armv8 25.12 >/dev/null 2>&1; then
@@ -105,6 +130,8 @@ fi
 MOCK_PULL_FAIL=0
 
 # --- abort: image present but no RepoDigests / id resolvable → non-zero ---
+rm -rf "${SDK_MATRIX_DIGEST_CACHE_DIR:?}"/*
+mkdir -p "$SDK_MATRIX_DIGEST_CACHE_DIR"
 MOCK_ABSENT["$(img_ref armsr-armv8 25.12)"]=0
 MOCK_REPO["$(img_ref armsr-armv8 25.12)"]=""
 MOCK_ID["$(img_ref armsr-armv8 25.12)"]=""
@@ -115,6 +142,8 @@ else
 fi
 
 # --- manifest records all 4 cell digests (+ packages array intact) ---
+rm -rf "${SDK_MATRIX_DIGEST_CACHE_DIR:?}"/*
+mkdir -p "$SDK_MATRIX_DIGEST_CACHE_DIR"
 MOCK_ID=()
 for key in "${!EXPECT[@]}"; do
 	target="${key%%/*}"
@@ -142,6 +171,8 @@ jq -e '.packages | type == "array"' "$stage/manifest.json" >/dev/null \
 	&& ok "manifest packages array present" || bad "manifest packages array missing"
 
 # --- manifest aborts (non-zero) when a cell digest cannot be resolved ---
+rm -rf "${SDK_MATRIX_DIGEST_CACHE_DIR:?}"/*
+mkdir -p "$SDK_MATRIX_DIGEST_CACHE_DIR"
 mkdir -p "$TMP/badstage"
 MOCK_ABSENT["$(img_ref x86-64 25.12)"]=1
 MOCK_PULL_FAIL=1

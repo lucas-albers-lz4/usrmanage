@@ -33,10 +33,8 @@ mkdir -p "$STAGING"
 
 echo "== publish-packages → ${STAGING} (tag: ${GIT_TAG}) ==" >&2
 
-for ver in 24.10; do
-	echo "→ staging opkg feed ${ver}..." >&2
-	feed_publish_stage_opkg "$ver" "$STAGING"
-done
+echo "→ staging opkg feed 24.10..." >&2
+feed_publish_stage_opkg 24.10 "$STAGING"
 
 echo "→ staging apk feed 25.12..." >&2
 feed_publish_stage_apk 25.12 "$STAGING"
