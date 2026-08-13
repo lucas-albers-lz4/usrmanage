@@ -242,8 +242,8 @@ feed_publish_stage_opkg_sdk() {
 	key_abs="$(feed_publish_abspath "$OPKG_FEED_SECRET_KEY")"
 	sdk_matrix_resolve x86-64 "$version_key"
 	# Prefer digest-pinned image from build-time cache when present (R4).
-	if [[ -f "$(sdk_matrix_digest_cache_path x86-64 "$version_key")" ]]; then
-		SDK_MATRIX_IMAGE="$(tr -d ' \n\r\t' < "$(sdk_matrix_digest_cache_path x86-64 "$version_key")")"
+	if _pin="$(sdk_matrix_read_digest_cache x86-64 "$version_key")"; then
+		SDK_MATRIX_IMAGE="$_pin"
 	fi
 	sdk_matrix_feeds_ready \
 		|| { echo "run docker-sdk.sh build --version ${version_key} before staging opkg feed" >&2; return 1; }
@@ -356,8 +356,8 @@ feed_publish_stage_apk() {
 	}
 	pkg_dir="$feed_dir"
 	sdk_matrix_resolve x86-64 "$version_key"
-	if [[ -f "$(sdk_matrix_digest_cache_path x86-64 "$version_key")" ]]; then
-		SDK_MATRIX_IMAGE="$(tr -d ' \n\r\t' < "$(sdk_matrix_digest_cache_path x86-64 "$version_key")")"
+	if _pin="$(sdk_matrix_read_digest_cache x86-64 "$version_key")"; then
+		SDK_MATRIX_IMAGE="$_pin"
 	fi
 	sdk_matrix_feeds_ready \
 		|| { echo "run docker-sdk.sh build --version ${version_key} before staging apk feed" >&2; return 1; }

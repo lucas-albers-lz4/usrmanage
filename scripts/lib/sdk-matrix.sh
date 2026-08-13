@@ -117,19 +117,23 @@ sdk_matrix_pull_and_pin() {
 	printf '%s' "$digest"
 }
 
+sdk_matrix_read_digest_cache() {
+	# Print non-empty cached digest or return 1 (never print empty).
+	local target="$1" version="$2" cache digest
+	cache="$(sdk_matrix_digest_cache_path "$target" "$version")"
+	[[ -f "$cache" ]] || return 1
+	digest="$(tr -d ' \n\r\t' < "$cache")"
+	[[ -n "$digest" ]] || return 1
+	printf '%s' "$digest"
+}
+
 sdk_matrix_image_digest() {
 	# Print the resolved digest of the SDK image for a matrix cell (target, version).
 	# Prefers a pin file written by sdk_matrix_pull_and_pin at build time (R4) so
 	# feed_publish_write_manifest does not re-pull a possibly moved tag.
 	# Otherwise pulls once and pins. RepoDigest matching is literal repo-prefix.
-	local target="${1:-x86-64}" version="${2:-24.10}" cache digest
-	cache="$(sdk_matrix_digest_cache_path "$target" "$version")"
-	if [[ -f "$cache" ]]; then
-		digest="$(tr -d ' \n\r\t' < "$cache")"
-		[[ -n "$digest" ]] || {
-			echo "sdk-matrix: empty digest cache ${cache}" >&2
-			return 1
-		}
+	local target="${1:-x86-64}" version="${2:-24.10}" digest
+	if digest="$(sdk_matrix_read_digest_cache "$target" "$version")"; then
 		printf '%s' "$digest"
 		return 0
 	fi

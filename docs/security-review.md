@@ -23,10 +23,10 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-12 (multi-model) | none new (ACL split re-confirmed) |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-12 (multi-model) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-12 (multi-model) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) V3 (sudoers mode assert) |
-| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-13 (#117) | none |
-| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-13 (#117) | none |
-| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-13 (#117) | none (SDK digest pinned at first pull) |
-| Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-13 (#117) | none |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-12 (#117) | none |
+| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-12 (#117) | none |
+| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-12 (#117) | none (SDK digest pinned at first pull) |
+| Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
 | QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login + #107 asserts; multi-model did not re-run guest) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) I3 (revoke TOCTOU); L8/L9 still weaken lab disable proof on non-canonical UCI — fixtures remain lab-only by design |
 
 ## How to re-verify (current gates)
@@ -262,6 +262,12 @@ Scope: cooperative + adversarial audit after L1–L7 remediations on `main` @ `5
 - [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) — on-device leftovers (L8/L9 incomplete L4 grammar; L10 unanchored passwd/shadow grep; L11 doctor lock DoS; I3–I5; V2/V3 proof gaps).
 
 Ledger hygiene in this revision: coverage-map dates bumped; L1–L7 moved to Resolved; L2 control row marked fixed; open findings table wired to #117/#118; duplicate closing notes removed.
+
+### 2026-08-12 — Publish TCB remediation (#117)
+
+Scope: `.github/workflows/publish-packages.yml`, `packages-repo/README.md`, `scripts/lib/{sdk-matrix,feed-publish}.sh`, `scripts/{docker-sdk,shellcheck,publish-packages,verify-reproducible-build}.sh`, `docs/{release,security-review}.md`, `tests/test_sdk_matrix_digests.sh`.
+
+**Result:** R1–R6 and P1 closed. Checkout no longer persists credentials into the SDK bind mount; feed README fingerprint gates restored in-tree; signing tools exported off `/builder` before secret mounts; SDK digests pinned at first pull with cache for manifest; tag shape validated without `${{ }}` in `run:`; `environment: feed-publish` added (operator must configure reviewers); bash shellcheck is blocking. Host smoke + digest tests green. Residual operational notes: configure Environment in GitHub settings; optional checkout-before-validate ordering.
 
 ## Review procedure
 
