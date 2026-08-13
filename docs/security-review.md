@@ -27,7 +27,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-12 (multi-model) | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R2, P1 |
 | Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-12 (multi-model) | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R1, R2, R4 |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (multi-model) | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R3 — **blocks next `v*` tag** |
-| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login + #107 asserts) | none open; fixtures remain lab-only by design |
+| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login + #107 asserts; multi-model did not re-run guest) | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) I3 (revoke TOCTOU); L8/L9 still weaken lab disable proof on non-canonical UCI — fixtures remain lab-only by design |
 
 ## How to re-verify (current gates)
 
@@ -118,7 +118,7 @@ From the 2026-08-12 **multi-model** pass (Opus / Grok / Sol / GLM). Parent-repro
 | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) | R1–R6, P1 | High–Low | Publish / supply-chain | R1 High (token in SDK mount); R3 Medium **blocks next tag**; P1 shellcheck `\|\| true` |
 | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) | L8–L11, I3–I5, V2/V3 | Medium–Low | On-device | L4 grammar leftovers; unanchored passwd grep; doctor lock DoS; tx/incomplete gaps |
 
-Prior Aug-9 findings and the first 2026-08-12 wave (L1–L7 + #107 lab asserts) are resolved in [#112](https://github.com/lucas-albers-lz4/usrmanage/pull/112)–[#116](https://github.com/lucas-albers-lz4/usrmanage/pull/116).
+Prior Aug-9 findings and the first 2026-08-12 wave IDs (L1–L7 + #107 lab asserts) are closed in [#112](https://github.com/lucas-albers-lz4/usrmanage/pull/112)–[#116](https://github.com/lucas-albers-lz4/usrmanage/pull/116). Follow-on gaps from the same classes remain open in [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) (L8/L9 L4 grammar leftovers; L11 doctor lock path).
 
 ## Resolved findings
 
@@ -126,7 +126,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
-| [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1/L3 | LuCI login / shadow | [PR #115](https://github.com/lucas-albers-lz4/usrmanage/pull/115) — same-role set-role revoke + shadow `grep -F` for hash usable |
+| [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1/L3 | LuCI login / shadow | [PR #115](https://github.com/lucas-albers-lz4/usrmanage/pull/115) — same-role set-role revoke + `um_shadow_hash_usable` awk `$1 == u` field match |
 | [#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) L2 | LuCI login tx | [PR #114](https://github.com/lucas-albers-lz4/usrmanage/pull/114) — `set-luci-login` transaction snapshot |
 | [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) L4 | LuCI login parser | [PR #113](https://github.com/lucas-albers-lz4/usrmanage/pull/113) — fail-closed for indented / abbreviated / quoted-type sections (further grammar: #118 L8/L9) |
 | [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) L5/L6 | On-device file modes | [PR #112](https://github.com/lucas-albers-lz4/usrmanage/pull/112) — preserve rpcd mode; audit rotate umask |
