@@ -595,7 +595,7 @@ USRMANAGE_AUDIT_MAX_BYTES=$_old_max
 # --- L4: fail closed on libuci-valid forms the awk dump cannot see (#108) ---
 
 _seed_unparsable() {
-	# $1 = form: indented | abbreviated | quoted
+	# $1 = form: indented | abbreviated | quoted | quoted_keys | trailing_comment
 	case "$1" in
 		indented)
 			cat > "$USRMANAGE_RPCD_CONFIG" <<'EOF'
@@ -633,10 +633,34 @@ config 'login'
 	list write 'luci-base'
 EOF
 			;;
+		quoted_keys)
+			cat > "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+config rpcd
+	option socket /var/run/ubus/ubus.sock
+
+config login
+	option 'username' 'ops'
+	option 'password' '$1$FOREIGNSALT$foreignhashvalue'
+	list 'read' 'luci-base'
+	list 'write' 'luci-base'
+EOF
+			;;
+		trailing_comment)
+			cat > "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+config rpcd
+	option socket /var/run/ubus/ubus.sock
+
+config login
+	option username ops # comment
+	option password '$1$FOREIGNSALT$foreignhashvalue'
+	list read 'luci-base'
+	list write 'luci-base'
+EOF
+			;;
 	esac
 }
 
-for _form in indented abbreviated quoted; do
+for _form in indented abbreviated quoted quoted_keys trailing_comment; do
 	_seed_unparsable "$_form"
 	if um_luci_login_state ops >/dev/null 2>&1; then
 		bad "L4 $_form: state must fail closed"
@@ -652,7 +676,7 @@ for _form in indented abbreviated quoted; do
 		&& ok "L4 $_form: denied audited" \
 		|| bad "L4 $_form: denied not audited"
 	# Section must still be present (we refused, did not silently "succeed").
-	grep -q "username" "$USRMANAGE_RPCD_CONFIG" \
+	grep -q "username\|'username'" "$USRMANAGE_RPCD_CONFIG" \
 		&& ok "L4 $_form: login section still present after refused disable" \
 		|| bad "L4 $_form: login section vanished"
 done
