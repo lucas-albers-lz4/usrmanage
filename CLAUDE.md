@@ -9,7 +9,5 @@ Quick reminders:
 - Password policy defaults to **OpenWrt**; harden only after explicit Save.
 - Never put passwords on argv, audit logs, or Playwright/MCP traces.
 - LuCI `expect: { '': { ... } }` for whole-object RPC replies.
-- Done gate: `./scripts/smoke-host.sh`. Lab e2e: `./scripts/playwright-luci.sh`. MCP: `.cursor/mcp.json`.
-- Lab: `:2222` SSH / `:8080` LuCI; fixture users are not product defaults. Docs screenshots (#15): clean table, WebP.
-- Release: third-octet `PKG_VERSION`, tag `v*`, Pages feed — see [docs/release.md](docs/release.md).
-- Security review state (scope map, controls with proof class, open findings, procedure): [docs/security-review.md](docs/security-review.md).
+- Done gate: `./scripts/smoke-host.sh`.
+- Security review state (proof class, open findings): [docs/security-review.md](docs/security-review.md).
