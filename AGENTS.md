@@ -6,7 +6,7 @@ below; testing/release details stay in the linked docs.
 ## Product locks (do not casually change)
 
 - Supported releases: **24.10 / 25.12** only (`PKGARCH:=all`). OpenWrt 23.05 users stay on v0.1.2.
-- Password policy factory default: **OpenWrt** (min 8, reject username). Stricter presets only after explicit LuCI **Save** (or CLI `set-policy`).
+- Password policy factory default: **OpenWrt** (min 8, reject username). Stricter presets/toggles only after explicit LuCI **Save** (or CLI `set-policy`).
 - Read ACL: policy **name/label only**. Write ACL: `get_policy` / `set_policy` + mutators.
 - Passwords: never on argv or in audit/logs; LuCI → rpcd → `--password-fd` / stdin only.
 - LuCI web logins for managed users are **opt-in** (`set-luci-login` / Add checkbox); owned logins use `$p$user` only. Manual `luci-app-acl` still supported for foreign principals.
@@ -33,7 +33,7 @@ below; testing/release details stay in the linked docs.
 
 PR / done gate: `./scripts/smoke-host.sh` (needs `flock` locally). Host-only — no QEMU/Playwright in PR CI.
 
-Lab, Playwright, screenshots: [docs/developer/testing.md](docs/developer/testing.md). Never put passwords in MCP traces.
+Lab and Playwright: [docs/developer/testing.md](docs/developer/testing.md). Never put passwords in MCP traces.
 
 ## Release / feed
 
