@@ -126,8 +126,8 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
-| [#125](https://github.com/lucas-albers-lz4/usrmanage/issues/125) L12/R7 | On-device / publish | This closeout — incomplete marker `0640`; `sdk_matrix_pull_and_pin` before usign secret mount; `--network none` on secret containers |
-| [#126](https://github.com/lucas-albers-lz4/usrmanage/issues/126) | CI record / pin hygiene | Alert 2 reopened then **fixed** (2026-08-13); pre-release SHA re-check in [github-publish-checklist.md](github-publish-checklist.md) |
+| [#125](https://github.com/lucas-albers-lz4/usrmanage/issues/125) L12/R7 | On-device / publish | [PR #128](https://github.com/lucas-albers-lz4/usrmanage/pull/128) — incomplete marker `0640`; `sdk_matrix_pull_and_pin` before usign secret mount; `--network none` on secret containers |
+| [#126](https://github.com/lucas-albers-lz4/usrmanage/issues/126) | CI record / pin hygiene | Alert 2 reopened then **fixed** (2026-08-13); pre-release SHA re-check in [github-publish-checklist.md](github-publish-checklist.md) ([PR #128](https://github.com/lucas-albers-lz4/usrmanage/pull/128)) |
 | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L8–L11, I4/I5, V2/V3 | On-device | [PR #121](https://github.com/lucas-albers-lz4/usrmanage/pull/121) (L8–L11) + [PR #122](https://github.com/lucas-albers-lz4/usrmanage/pull/122) (I4/I5/V2/V3); I3 → accepted residual |
 | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R1–R6, P1 | Publish / supply-chain | [PR #120](https://github.com/lucas-albers-lz4/usrmanage/pull/120) — persist-credentials false; packages-repo README fingerprints; signing tools exported; SDK digest pin; tag validation; feed-publish environment; blocking shellcheck |
 | [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1/L3 | LuCI login / shadow | [PR #115](https://github.com/lucas-albers-lz4/usrmanage/pull/115) — same-role set-role revoke + `um_shadow_hash_usable` awk `$1 == u` field match |
