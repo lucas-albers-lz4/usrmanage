@@ -16,6 +16,28 @@ fail=0
 ok() { echo "ok: $*"; }
 bad() { echo "FAIL: $*" >&2; fail=1; }
 
+# R7 host proof (no docker daemon): first secret-touching SDK use pins, and
+# every container that bind-mounts a signing secret is --network none.
+if grep -qE '^[[:space:]]*sdk_matrix_pull_and_pin ' "$ROOT/scripts/validate-feed-keys.sh" \
+	&& ! grep -qE '^[[:space:]]*sdk_matrix_resolve ' "$ROOT/scripts/validate-feed-keys.sh"; then
+	ok "R7: validate-feed-keys pins SDK (no resolve-only pull)"
+else
+	bad "R7: validate-feed-keys.sh must call pull_and_pin, not resolve"
+fi
+if grep -q -- '--network none' "$ROOT/scripts/validate-feed-keys.sh"; then
+	ok "R7: validate-feed-keys docker run is --network none"
+else
+	bad "R7: validate-feed-keys.sh docker run missing --network none"
+fi
+_secret_runs="$(grep -c -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" || true)"
+if [[ "$_secret_runs" -eq 2 ]] \
+	&& grep -A5 -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" | grep -q 'opkg-secret.key' \
+	&& grep -A5 -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" | grep -q 'apk-secret.rsa'; then
+	ok "R7: opkg/apk secret compose runs are --network none"
+else
+	bad "R7: feed-publish secret mounts must use --network none (got $_secret_runs)"
+fi
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export SDK_MATRIX_DIGEST_CACHE_DIR="$TMP/sdk-digests"
@@ -203,11 +225,10 @@ if curl -fsSL 'https://raw.githubusercontent.com/openwrt/openwrt/0b795ce79e23b55
 	ln -sf "$real_file" "$cache_dir/ipkg-make-index-24.10.8.sh"
 	got_file="$(feed_publish_ipkg_index_script 24.10.8)"
 	got_sum="$(sha256sum "$got_file" | awk '{print $1}')"
-	got_type="$(stat -c '%F' "$got_file")"
-	if [[ "$got_sum" == "$exp" ]] && [[ "$got_type" == "regular file" ]]; then
+	if [[ "$got_sum" == "$exp" ]] && [[ -f "$got_file" && ! -L "$got_file" ]]; then
 		ok "ipkg cache TOCTOU: symlinked seed returned as REGULAR file (cp -aL)"
 	else
-		bad "ipkg cache TOCTOU: returned $got_type (want regular file) hash=$got_sum"
+		bad "ipkg cache TOCTOU: not a regular file or hash=$got_sum"
 	fi
 	rm -f "$got_file"
 else
@@ -237,7 +258,7 @@ rm -f "$cache_dir/ipkg-make-index-24.10.8.sh"   # drop the TOCTOU symlink
 cp "$real_file" "$cache_dir/ipkg-make-index-24.10.8.sh"
 got_file="$(PATH="$TMP/bin:$PATH" MOCK_CURL_LOG="$MOCK_CURL_LOG" feed_publish_ipkg_index_script 24.10.8)"
 got_sum="$(sha256sum "$got_file" | awk '{print $1}')"
-refetch_count="$(wc -l < "$MOCK_CURL_LOG" 2>/dev/null || echo 0)"
+refetch_count="$(wc -l < "$MOCK_CURL_LOG" 2>/dev/null | tr -d ' ')"
 if [[ "$got_sum" == "$exp" ]] && [[ "$refetch_count" == "0" ]]; then
 	ok "ipkg cache valid seed: verified copy, no refetch"
 else

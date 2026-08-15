@@ -271,7 +271,7 @@ feed_publish_stage_opkg_sdk() {
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
 		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
-		docker compose run --rm --user root \
+		docker compose run --rm --network none --user root \
 			-v "${pkg_dir}:/feed/pkgdir" \
 			-v "${key_abs}:/feed/opkg-secret.key:ro" \
 			-v "${tools_dir}:/feed/tools:ro" \
@@ -387,7 +387,7 @@ feed_publish_stage_apk() {
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
 		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
-		docker compose run --rm --user root \
+		docker compose run --rm --network none --user root \
 			-v "${pkg_dir}:/feed/pkgdir" \
 			-v "${key_abs}:/feed/apk-secret.rsa:ro" \
 			-v "${tools_dir}:/feed/tools:ro" \

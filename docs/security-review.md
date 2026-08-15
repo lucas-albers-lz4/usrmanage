@@ -19,13 +19,13 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-13 (doctor severity / BusyBox mode) | none |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-15 (#125 L12 incomplete marker) | none |
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-12 (multi-model) | none new (ACL split re-confirmed) |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-13 (doctor banner severity) | none (XSS / expect convention re-confirmed) |
-| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-12 (#118 V3) | none |
-| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-12 (#117) | none |
-| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-12 (#117) | none |
-| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-12 (#117) | none (SDK digest pinned at first pull) |
+| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-15 (#125 L12) | none |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-15 (#126 peaceiris pin checklist) | none |
+| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-15 (#125 R7) | none |
+| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-15 (#125 R7 pin at first secret-touching pull) | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
 | QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login + #107 asserts; multi-model did not re-run guest) | none open (I3 accepted residual) — fixtures remain lab-only by design |
 
@@ -77,10 +77,10 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 |------------------|-------|-------|-------|
 | Concurrent mutators on account files | Whole-mutator exclusive `flock` (`um_with_lock`); lock file created/tightened to `0600` via `um_lock_open` so unprivileged UIDs cannot take `LOCK_EX` (mutator path + doctor path, [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L11) | host | `tests/test_mutators.sh` (mode 0600 + upgrade-path tighten + doctor-first) |
 | Crash mid-mutation | Snapshot / EXIT rollback (`um_tx_*`) over passwd+shadow+group+registry+rpcd (create/delete/set-role / set-luci-login). Del commits BEFORE `um_registry_del` (purge may remove the home). Rollback restores via temp+rename (I4). Post-commit registry failure keeps `incomplete` (I5). | host | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` |
-| Torn file writes | `umask 077` temp → fixed mode/`chown 0:0` → `mv` (`um_atomic_edit`, registry del, audit rotate, `um_tx_restore_one`); `um_rpcd_atomic_replace` preserves destination mode (default `0600`) | host | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` (rpcd/audit mode asserts) |
+| Torn file writes | `umask 077` temp → fixed mode/`chown 0:0` → `mv` (`um_atomic_edit`, registry del, audit rotate, `um_tx_restore_one`); `um_rpcd_atomic_replace` preserves destination mode (default `0600`); `incomplete` marker `0640` ([#125](https://github.com/lucas-albers-lz4/usrmanage/issues/125) L12) | host | `tests/test_phase1_foundation.sh` · `tests/test_luci_login.sh` (rpcd/audit mode asserts) · `tests/test_mutators.sh` (L12) |
 | SIGKILL / power loss mid-mutation | **Accepted residual**: EXIT-trap rollback cannot run; `doctor` reports orphaned `usrmanage-tx.*` snapdirs for manual recovery. Snapdirs live in `${TMPDIR:-/tmp}` (tmpfs) — recovery applies only if the snapshot survives until the operator acts (#96, #100) | host | `um_doctor_checks` |
 | Demote/delete last managed admin | `um_count_managed_admins` deny | host | `tests/test_mutators.sh` · QEMU smoke |
-| Incomplete op with no record | `incomplete` marker + `doctor`; failed restore keeps snapdir | host | `um_doctor_checks` · architecture docs |
+| Incomplete op with no record | `incomplete` marker (`0640`/`0:0`, not ambient umask) + `doctor`; failed restore keeps snapdir | host | `um_doctor_checks` · `tests/test_mutators.sh` (L12) |
 | Broken sudoers fragment | Minimal static `%wheel` rule; Makefile + uci-defaults `chmod 0440`; `doctor` asserts mode 0440 via validated `stat` output or BusyBox-safe `find -maxdepth 0 -perm 440` (symlink rejected before `[ -f ]`), then `visudo -cf`. Wheel missing with no live managed users is **warn** only (created on first add). Doctor does not chmod or create wheel (read ACL). | host | `um_doctor_checks` · `scripts/smoke-package-layout.sh` · `tests/test_mutators.sh` (V3 0644) · `tests/test_doctor.sh` (stat stub / garbage / symlink / wheel severity) |
 | Upgrade/remove wiping managed state | `users`, sudoers, UCI config are conffiles | host | package Makefile |
 
@@ -104,14 +104,16 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 |------------------|-------|-------|-------|
 | Unsigned or third-party-signed feed | opkg `usign` + apk RSA signing in the publish job; keys validated before use | host | `scripts/validate-feed-keys.sh` (not invoked by `smoke-host.sh` — needs docker + secrets) |
 | Signing secret leaking into the published feed | Staging copies public key material only | host | `feed_publish_copy_keys` |
-| Silently altered build inputs | Feed commits pinned in `scripts/feeds.lock/`; SDK image pinned to registry digest at first pull (`sdk_matrix_pull_and_pin`); manifest reads pin cache (no post-build retag pull) | host | `tests/test_sdk_matrix_digests.sh` (R4 pin cache) · `sdk_matrix_feeds_ready` |
+| Silently altered build inputs | Feed commits pinned in `scripts/feeds.lock/`; SDK image pinned to registry digest at first **secret-touching** pull (`sdk_matrix_pull_and_pin` in `validate-feed-keys.sh` before the usign container; later staging prefers the pin cache) | host | `tests/test_sdk_matrix_digests.sh` (R4 pin cache + R7 grep) · `sdk_matrix_feeds_ready` |
+| Signing secret exfil via SDK container network | `--network none` on every container that bind-mounts a signing secret (`validate-feed-keys.sh` usign check; `feed_publish_stage_opkg_sdk` / `feed_publish_stage_apk` sign steps) ([#125](https://github.com/lucas-albers-lz4/usrmanage/issues/125) R7) | host | `tests/test_sdk_matrix_digests.sh` (R7 grep) |
 | Non-reproducible release artifacts | `SOURCE_DATE_EPOCH` from the tag commit + repro gate | host | `scripts/verify-reproducible-build.sh` |
 | Publish job token / build container isolation | Checkout `persist-credentials: false`; signing tools copied out of `/builder` before secret mounts | manual | `publish-packages.yml` · `feed_publish_stage_opkg_sdk` / `feed_publish_stage_apk` |
+| Pages deploy-key action pin | `peaceiris/actions-gh-pages` SHA-pinned (`84c30a85c…` = `v4.1.0` as of 2026-08-13); CodeQL alert 2 closed as **fixed**; pin re-checked before each `v*` tag ([#126](https://github.com/lucas-albers-lz4/usrmanage/issues/126)) | manual | `publish-packages.yml` · [github-publish-checklist.md](github-publish-checklist.md) |
 | Feed origin trust-bootstrap README | Fingerprints + `sha256sum -c` gate in in-tree `packages-repo/README.md` (copied to Pages on every publish) | manual | `packages-repo/README.md` · [binary-feed.md](binary-feed.md) |
 
 ## Open findings
 
-No open security findings from the 2026-08-12 multi-model wave. #117 and #118 are resolved (I3 documented as an accepted residual).
+No open security findings. #125 (L12/R7) and #126 (CodeQL alert-2 record + pin checklist) closed in the 2026-08-15 closeout. I3 remains an accepted residual.
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
@@ -124,6 +126,8 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
+| [#125](https://github.com/lucas-albers-lz4/usrmanage/issues/125) L12/R7 | On-device / publish | [PR #128](https://github.com/lucas-albers-lz4/usrmanage/pull/128) — incomplete marker `0640`; `sdk_matrix_pull_and_pin` before usign secret mount; `--network none` on secret containers |
+| [#126](https://github.com/lucas-albers-lz4/usrmanage/issues/126) | CI record / pin hygiene | Alert 2 reopened then **fixed** (2026-08-13); pre-release SHA re-check in [github-publish-checklist.md](github-publish-checklist.md) ([PR #128](https://github.com/lucas-albers-lz4/usrmanage/pull/128)) |
 | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L8–L11, I4/I5, V2/V3 | On-device | [PR #121](https://github.com/lucas-albers-lz4/usrmanage/pull/121) (L8–L11) + [PR #122](https://github.com/lucas-albers-lz4/usrmanage/pull/122) (I4/I5/V2/V3); I3 → accepted residual |
 | [#117](https://github.com/lucas-albers-lz4/usrmanage/issues/117) R1–R6, P1 | Publish / supply-chain | [PR #120](https://github.com/lucas-albers-lz4/usrmanage/pull/120) — persist-credentials false; packages-repo README fingerprints; signing tools exported; SDK digest pin; tag validation; feed-publish environment; blocking shellcheck |
 | [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) L1/L3 | LuCI login / shadow | [PR #115](https://github.com/lucas-albers-lz4/usrmanage/pull/115) — same-role set-role revoke + `um_shadow_hash_usable` awk `$1 == u` field match |
@@ -287,6 +291,18 @@ Scope: `um_tx_restore_one` atomic restore, del incomplete retention, same-role r
 Scope: `um_doctor_checks` / `um_file_mode_octal` / `um_count_managed_users`, LuCI doctor banner, `tests/test_doctor.sh`.
 
 **Result:** Top-level `ok` ignores warn-severity checks (empty-registry missing wheel). Sudoers mode via validated `stat` or `find -perm 440`; symlinks fail closed. LuCI: no green banner; warn collapsed / error expanded; raw JSON under details. Doctor remains read-only (no chmod / no create wheel).
+
+### 2026-08-13 — Re-verification pass (filed #125 / #126)
+
+Scope: oldest coverage-map surfaces from 2026-08-12. Class sweep (temp-file mode, hand-parsed formats, fetch pinning). Gates: `smoke-host.sh` PASS, `z3-verify.py --full` PASS. QEMU not re-run.
+
+**Result:** two Low findings filed as [#125](https://github.com/lucas-albers-lz4/usrmanage/issues/125) (L12 incomplete marker 0644; R7 unpinned SDK at first secret mount). [#126](https://github.com/lucas-albers-lz4/usrmanage/issues/126) recorded a stale CodeQL alert-2 won't-fix; the alert was reopened and resolved as **fixed** the same day (`peaceiris/actions-gh-pages@84c30a85c…`).
+
+### 2026-08-15 — #125 / #126 closeout
+
+Scope: `um_incomplete_set`, `scripts/validate-feed-keys.sh`, `scripts/lib/feed-publish.sh` secret compose runs, publish checklist, this ledger.
+
+**Result:** L12 marker write uses umask 077 + `chmod 0640` / `chown 0:0` with a host `stat` assert. R7 validate path calls `sdk_matrix_pull_and_pin` before mounting the usign secret; secret-touching containers use `--network none`. #126 remaining work is the pre-release pin re-check (Dependabot version PRs stay off; no Pages-deploy TCB shrink). Open findings table empty.
 
 ## Review procedure
 

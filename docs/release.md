@@ -34,3 +34,5 @@ Manual re-run: Actions → publish-packages → workflow_dispatch with a **tag n
 not present in the SDK bind mount.
 
 See [github-publish-checklist.md](github-publish-checklist.md) and [binary-feed.md](binary-feed.md).
+Before cutting a `v*` tag, re-verify the `peaceiris/actions-gh-pages` SHA in
+`publish-packages.yml` against the upstream tag (checklist pre-release item).

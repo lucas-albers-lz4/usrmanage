@@ -23,6 +23,9 @@ openssl rsa -in apk-secret.rsa -pubout -out usrmanage-feed.rsa.pub
 - [ ] Theme + i18n tests green
 - [ ] `PKG_MAINTAINER` / Apache-2.0 SPDX present
 - [ ] Docs link binary feed URL
+- [ ] Re-check `peaceiris/actions-gh-pages` latest release and that
+      `.github/workflows/publish-packages.yml` still SHA-pins that tag
+      (the step holds `FEED_DEPLOY_KEY`; Dependabot version updates are off)
 
 ## After tag
 

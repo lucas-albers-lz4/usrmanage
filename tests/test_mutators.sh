@@ -78,6 +78,17 @@ _mode=$(stat_mode "$USRMANAGE_LOCK")
 [ "$_mode" = "600" ] && ok "doctor-first lock mode 0600 (L11)" \
 	|| bad "doctor-first lock mode $_mode (want 600)"
 
+# L12: incomplete marker must not inherit ambient umask 022 (0644).
+rm -f "$USRMANAGE_INCOMPLETE"
+umask 022
+um_incomplete_set "passwd:alice"
+[ -f "$USRMANAGE_INCOMPLETE" ] && ok "incomplete marker created" \
+	|| bad "incomplete marker missing"
+_mode=$(stat_mode "$USRMANAGE_INCOMPLETE")
+[ "$_mode" = "640" ] && ok "incomplete marker mode 0640 (L12)" \
+	|| bad "incomplete marker mode $_mode (want 640)"
+um_incomplete_clear
+
 # L10: passwd/shadow lookups are field-anchored (tp must not resolve to ntp).
 cat > "$USRMANAGE_PASSWD" <<EOF
 root:x:0:0:root:/root:/bin/ash

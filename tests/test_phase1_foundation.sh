@@ -60,7 +60,7 @@ if um_atomic_edit "$TMP/atomic2.txt" 0644 'BEGIN{exit 1}'; then
 else
 	ok "um_atomic_edit fails on awk error"
 fi
-_leftover=$(find "$TMP" -name 'atomic2.txt.tmp.*' 2>/dev/null | wc -l)
+_leftover=$(find "$TMP" -name 'atomic2.txt.tmp.*' 2>/dev/null | wc -l | tr -d ' ')
 [ "$_leftover" = "0" ] && ok "um_atomic_edit cleans temp on failure" || bad "leftover tmp files"
 
 # original preserved on failure
