@@ -50,6 +50,13 @@ chmod 0600 "$USRMANAGE_SHADOW"
 exit 0
 FAKE
 chmod +x "$TMP/bin/passwd"
+# flock lives in Homebrew prefix on macOS, not /usr/bin. Keep it on PATH so
+# um_with_lock is the path under test (same pattern as busybox-fallback).
+_flock_abs=$(command -v flock) || {
+	echo "FAIL: flock missing (Linux: util-linux, macOS: brew install flock)" >&2
+	exit 1
+}
+ln -s "$_flock_abs" "$TMP/bin/flock"
 # Exclude /usr/sbin so chpasswd/useradd never see a real system tool on PATH.
 export PATH="$TMP/bin:/usr/bin:/bin"
 

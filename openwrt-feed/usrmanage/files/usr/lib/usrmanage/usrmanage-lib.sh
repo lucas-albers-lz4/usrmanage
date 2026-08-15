@@ -666,7 +666,11 @@ um_audit() {
 }
 
 um_incomplete_set() {
-	printf '%s\n' "$1" > "$USRMANAGE_INCOMPLETE"
+	# L12: ambient umask 022 would leave the marker 0644 (world-readable
+	# in-flight mutator). Match registry: umask 077 write, then 0640 / 0:0.
+	( umask 077; printf '%s\n' "$1" > "$USRMANAGE_INCOMPLETE" ) || return 1
+	chmod 0640 "$USRMANAGE_INCOMPLETE" 2>/dev/null || true
+	chown 0:0 "$USRMANAGE_INCOMPLETE" 2>/dev/null || true
 }
 
 um_incomplete_clear() {
