@@ -11,7 +11,7 @@ LUCI_DESCRIPTION:=Manage local UNIX users (readonly vs admin/wheel) with operati
 LUCI_DEPENDS:=+luci-base +usrmanage +sudo
 LUCI_PKGARCH:=all
 
-PKG_VERSION:=0.1.4
+PKG_VERSION:=0.1.5
 PKG_RELEASE:=1
 
 ifdef SOURCE_DATE_EPOCH
