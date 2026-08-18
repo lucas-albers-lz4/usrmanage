@@ -98,23 +98,30 @@ curl -fsSL -o "${OUT}/${IMG_GZ}" "${BASE}/${IMG_GZ}"
 verify_downloaded_sha256 "${OUT}/${IMG_GZ}" "${IMG_GZ}" "${SUM_MANIFEST}" 1
 echo "Decompressing ..."
 set +e
-gzip -dc "${OUT}/${IMG_GZ}" > "${OUT}/${IMG_OUT}"
+gzip -dc "${OUT}/${IMG_GZ}" > "${OUT}/${IMG_OUT}" 2> "${OUT}/decompress.err"
 gz_rc=$?
 set -e
 rm -f "${OUT}/${IMG_GZ}"
 # Integrity chain: the .gz was sha256-verified against the official OpenWrt
 # release manifest ABOVE (verify_downloaded_sha256), so the decompressed
-# stream is the authentic image. gzip exit 2 here is the benign
-# "decompression OK, trailing garbage ignored" warning on OpenWrt .img.gz
-# files (verified on openwrt-24.10.8-x86-64-generic-ext4-combined-efi.img.gz:
-# exit 2, complete 126MB output). A truncated/corrupt archive cannot reach
-# this point (checksum fails first), and the [[ -s ]] size guard catches a
-# decompression failure of the authentic stream.
+# stream is the authentic image. gzip exit 2 on OpenWrt .img.gz files is the
+# benign "decompression OK, trailing garbage ignored" warning — verified on
+# openwrt-24.10.8-x86-64-generic-ext4-combined-efi.img.gz (exit 2, complete
+# 126MB output). Accept exit 2 ONLY when stderr carries that exact warning;
+# a fatal gzip error (truncated stream, bad CRC) prints a different message
+# and is rejected. [[ -s ]] additionally proves the stream produced output.
 [[ -s "${OUT}/${IMG_OUT}" ]] || { echo "decompress failed (gzip exit ${gz_rc})" >&2; exit 1; }
-if [[ $gz_rc -ne 0 && $gz_rc -ne 1 && $gz_rc -ne 2 ]]; then
-	echo "decompress failed (gzip exit ${gz_rc})" >&2
+if [[ $gz_rc -eq 2 ]] && ! grep -q "trailing garbage ignored" "${OUT}/decompress.err" 2>/dev/null; then
+	echo "decompress failed: gzip exit 2 without trailing-garbage warning" >&2
+	rm -f "${OUT}/decompress.err"
 	exit 1
 fi
+if [[ $gz_rc -ne 0 && $gz_rc -ne 1 && $gz_rc -ne 2 ]]; then
+	echo "decompress failed (gzip exit ${gz_rc})" >&2
+	rm -f "${OUT}/decompress.err"
+	exit 1
+fi
+rm -f "${OUT}/decompress.err"
 
 if [[ "${RELEASE}" == "24.10.8" ]]; then
 	ln -sf "${IMG_OUT}" "${OUT}/openwrt-x86-64.img"
