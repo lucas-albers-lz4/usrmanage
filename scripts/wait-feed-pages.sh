@@ -20,6 +20,8 @@ INTERVAL="${FEED_PAGES_WAIT_INTERVAL:-10}"
 urls=(
 	"${BASE}/24.10/Packages.gz"
 	"${BASE}/25.12/all/packages.adb"
+	# apk trust key: qemu-install-from-feed.sh fetches it for the 25.12 path
+	"${BASE}/usrmanage-feed.rsa.pub"
 	"${BASE}/public.key"
 )
 
