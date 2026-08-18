@@ -304,6 +304,16 @@ Scope: `um_incomplete_set`, `scripts/validate-feed-keys.sh`, `scripts/lib/feed-p
 
 **Result:** L12 marker write uses umask 077 + `chmod 0640` / `chown 0:0` with a host `stat` assert. R7 validate path calls `sdk_matrix_pull_and_pin` before mounting the usign secret; secret-touching containers use `--network none`. #126 remaining work is the pre-release pin re-check (Dependabot version PRs stay off; no Pages-deploy TCB shrink). Open findings table empty.
 
+### 2026-08-18 — R7 publish regression fix (v0.1.5 first publish)
+
+Scope: `scripts/lib/feed-publish.sh` opkg/apk sign steps; first publish after the 2026-08-15 R7 closeout failed.
+
+**Root cause (two bugs).** (1) The R7 change added `--network none` to `docker compose run`, but **Compose v2's `run` subcommand has no `--network` flag** — the sign step died with `unknown flag: --network` before doing anything. (2) Independent of that, OpenWrt SDK `staging_dir/host/bin/{usign,mkhash,apk}` are **runas wrapper scripts**, not plain binaries: `bin/<tool>` execs `../lib/ld-linux-x86-64.so.2` with `LD_PRELOAD=../lib/runas.so` against the hidden real binary `bin/.<tool>.bin`. Exporting only the bare wrapper (R2/R7 design) leaves `../lib` and `.bin` siblings unresolvable — verified across 21.02.7 / 24.10.8 / 25.12.5 SDK tarballs.
+
+**Fix.** (1) Sign step switched from `docker compose run --network none` to `docker run --rm --network none --platform linux/amd64` with the digest-pinned `$SDK_MATRIX_IMAGE` (fwlive's R7 pattern; no `/builder` mount, keys `:ro`). (2) Export step now copies the wrapper **and** the hidden `.bin` **and** the whole `staging_dir/host/lib` tree into `tools_dir/bin` + `tools_dir/lib`, mounted at `/feed` so the wrapper's `../lib` resolution works. `validate-feed-keys.sh` was already correct (runs usign in-image with `--network none`).
+
+**Result.** `bash -n` clean; fix verified by re-running the publish workflow (v0.1.5). Controls in force unchanged — the R7 security properties (digest pin before secret mount, `--network none`, no `/builder` in secret containers) are preserved.
+
 ## Review procedure
 
 1. Read this file and [threat-model.md](threat-model.md) first. Do not reopen the #3 won't-fix bucket or the [Accepted residuals](#accepted-residuals) without new evidence.
