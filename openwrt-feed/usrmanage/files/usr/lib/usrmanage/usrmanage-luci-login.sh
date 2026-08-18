@@ -157,13 +157,16 @@ um_rpcd_login_dump() {
 
 um_luci_login_acl_sorted() {
 	# Normalize comma-separated ACL list to sorted unique CSV on stdout.
+	# Busybox-safe: avoid `paste -sd,` which is not present in the minimal
+	# OpenWrt feed-smoke image (and not a declared DEPENDS). tr+sed does the
+	# same newline→comma join without the external paste binary.
 	_raw=$1
 	[ -n "$_raw" ] || { printf ''; return 0; }
-	printf '%s' "$_raw" | tr ',' '\n' | sed '/^$/d' | sort -u | paste -sd, -
+	printf '%s' "$_raw" | tr ',' '\n' | sed '/^$/d' | sort -u | tr '\n' ',' | sed 's/,$//'
 }
 
 um_luci_login_expected_reads() {
-	printf '%s,%s' "$USRMANAGE_SESSION_ACL" "$USRMANAGE_APP_ACL" | tr ',' '\n' | sort -u | paste -sd, -
+	printf '%s,%s' "$USRMANAGE_SESSION_ACL" "$USRMANAGE_APP_ACL" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//'
 }
 
 um_luci_login_expected_writes() {
