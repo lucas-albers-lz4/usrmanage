@@ -19,3 +19,15 @@ services:
     working_dir: /builder
     environment:
       - TERM=dumb
+
+  # Feed-signing tool export: SDK volume only, NO workspace mount.
+  # The workspace holds the signing keys; the export container must never
+  # see them (it runs as the invoking uid, not root — only world-readable
+  # *.so* libs are copied, so root is not needed).
+  sdk-export:
+    image: ${OWRT_SDK_IMAGE:-ghcr.io/openwrt/sdk:x86-64-24.10.8}
+    volumes:
+      - ${OWRT_SDK_VOLUME:-openwrt_sdk_x86_64_24_10_8}:/builder
+    working_dir: /builder
+    environment:
+      - TERM=dumb

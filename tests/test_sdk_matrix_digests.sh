@@ -31,11 +31,15 @@ else
 fi
 _secret_runs="$(grep -c -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" || true)"
 if [[ "$_secret_runs" -eq 2 ]] \
-	&& grep -A5 -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" | grep -q 'opkg-secret.key' \
-	&& grep -A5 -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" | grep -q 'apk-secret.rsa'; then
-	ok "R7: opkg/apk secret compose runs are --network none"
+	&& grep -A8 -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" | grep -q 'opkg-secret.key' \
+	&& grep -A8 -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" | grep -q 'apk-secret.rsa' \
+	&& grep -A8 -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" | grep -q '/feed/tools' \
+	&& grep -A8 -- '--network none --user root' "$ROOT/scripts/lib/feed-publish.sh" | grep -q '/feed/lib' \
+	&& grep -q 'sdk-export' "$ROOT/docker-compose.yml" \
+	&& grep -q 'sdk-export' "$ROOT/scripts/lib/feed-publish.sh"; then
+	ok "R7: opkg/apk secret runs are --network none with /feed/tools + /feed/lib (sdk-export)"
 else
-	bad "R7: feed-publish secret mounts must use --network none (got $_secret_runs)"
+	bad "R7: feed-publish secret mounts must use --network none with sdk-export tools/lib (got $_secret_runs)"
 fi
 
 TMP="$(mktemp -d)"
