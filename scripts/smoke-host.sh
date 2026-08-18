@@ -43,6 +43,7 @@ if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	"$ROOT/tests/test_password_control.sh"
 	"$ROOT/tests/test_sdk_matrix_digests.sh"
 	"$ROOT/tests/test_download_gzip_gate.sh"
+	"$ROOT/tests/test_qemu_net_seed.sh"
 fi
 
 if need node theme-i18n-parity "install node"; then
