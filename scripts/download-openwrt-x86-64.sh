@@ -103,7 +103,8 @@ gz_rc=$?
 set -e
 rm -f "${OUT}/${IMG_GZ}"
 [[ -s "${OUT}/${IMG_OUT}" ]] || { echo "decompress failed (gzip exit ${gz_rc})" >&2; exit 1; }
-if [[ $gz_rc -ne 0 && $gz_rc -ne 2 ]]; then
+# gzip exit codes: 0 = ok, 1 = warning (accepted), 2 = fatal error (reject).
+if [[ $gz_rc -ne 0 && $gz_rc -ne 1 ]]; then
 	echo "decompress failed (gzip exit ${gz_rc})" >&2
 	exit 1
 fi
