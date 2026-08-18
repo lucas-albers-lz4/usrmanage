@@ -233,8 +233,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 ovmf openssh-client curl
 
+      - name: Resolve release tag
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$TAG"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "USRMANAGE_RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "Release tag: $tag"
+
       - name: Wait for GitHub Pages propagation
-        run: ./scripts/wait-feed-pages.sh "$USRMANAGE_FEED_BASE_URL"
+        run: ./scripts/wait-feed-pages.sh "$USRMANAGE_FEED_BASE_URL" "$USRMANAGE_RELEASE_TAG"
 
       - name: Download lab image
         env:
