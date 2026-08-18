@@ -37,4 +37,4 @@ Lab and Playwright: [docs/developer/testing.md](docs/developer/testing.md). Neve
 
 ## Release / feed
 
-Bump **third octet** of `PKG_VERSION` in both Makefiles; `PKG_RELEASE:=1`; tag `v0.1.N`. Never commit secrets. Details: [docs/release.md](docs/release.md), [docs/binary-feed.md](docs/binary-feed.md).
+Bump **third octet** of `PKG_VERSION` in both Makefiles (+ `APP_VERSION` mirror in the view); `PKG_RELEASE:=1`; tag `v0.1.N`. Never commit secrets. Details: [docs/release.md](docs/release.md), [docs/binary-feed.md](docs/binary-feed.md).
