@@ -110,6 +110,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Publish job token / build container isolation | Checkout `persist-credentials: false`; signing tools copied out of `/builder` before secret mounts | manual | `publish-packages.yml` · `feed_publish_stage_opkg_sdk` / `feed_publish_stage_apk` |
 | Pages deploy-key action pin | `peaceiris/actions-gh-pages` SHA-pinned (`84c30a85c…` = `v4.1.0` as of 2026-08-13); CodeQL alert 2 closed as **fixed**; pin re-checked before each `v*` tag ([#126](https://github.com/lucas-albers-lz4/usrmanage/issues/126)) | manual | `publish-packages.yml` · [github-publish-checklist.md](github-publish-checklist.md) |
 | Feed origin trust-bootstrap README | Fingerprints + `sha256sum -c` gate in in-tree `packages-repo/README.md` (copied to Pages on every publish) | manual | `packages-repo/README.md` · [binary-feed.md](binary-feed.md) |
+| Published feed unusable / install breaks silently | Post-publish QEMU feed smoke (`smoke-from-feed` job): boots a fresh OpenWrt guest, installs from the live Pages URL, runs `usrmanage doctor` + core flows — always on tag pushes (dispatch can set `feed_smoke=false`) | lab | `publish-packages.yml` · `scripts/validate-feed-smoke.sh` · `scripts/wait-feed-pages.sh` · `scripts/download-openwrt-x86-64.sh` |
 
 ## Open findings
 

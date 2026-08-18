@@ -7,9 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to build and publish (e.g. v0.1.0)'
+        description: 'Release tag to build and publish (e.g. v0.1.5)'
         required: true
         type: string
+      feed_smoke:
+        description: 'Run QEMU feed smoke after publish (single OpenWrt cell)'
+        type: boolean
+        default: true
+      smoke_version:
+        description: 'OpenWrt version for feed smoke (one cell; default 24.10)'
+        type: string
+        default: '24.10'
 
 env:
   USRMANAGE_FEED_BASE_URL: https://lucas-albers-lz4.github.io/usrmanage-packages
@@ -43,13 +51,26 @@ jobs:
           else
             tag="${GITHUB_REF#refs/tags/}"
           fi
-          # Reject newlines / control chars before GITHUB_ENV write (R5).
-          if [[ "$tag" != "${tag//[$'\n\r']/}" ]]; then
-            echo "invalid tag: contains newline" >&2
+          # Reject control chars before GITHUB_ENV write (R5): CR/LF would break
+          # the env file, other control chars (tab, ESC, …) would corrupt logs.
+          if [[ "$tag" == *[[:cntrl:]]* ]]; then
+            echo "invalid tag: contains control characters" >&2
             exit 1
           fi
           if [[ ! "$tag" =~ ^v[0-9] ]]; then
             echo "invalid tag '$tag' (expected vN…, e.g. v0.1.5)" >&2
+            exit 1
+          fi
+          # The checkout above used the raw dispatch input as ref: a v…-shaped
+          # BRANCH name would have been checked out. Verify the input is a real
+          # tag and that HEAD is that tag before any repository script runs.
+          if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "not a tag in this repository: '${tag}'" >&2
+            exit 1
+          fi
+          tag_commit="$(git rev-parse "refs/tags/${tag}^{commit}" 2>/dev/null || true)"
+          if [[ -n "$tag_commit" && "$(git rev-parse HEAD)" != "$tag_commit" ]]; then
+            echo "checked out ref is not the tag '${tag}' (HEAD $(git rev-parse --short HEAD))" >&2
             exit 1
           fi
           printf 'USRMANAGE_RELEASE_TAG=%s\n' "$tag" >> "$GITHUB_ENV"
@@ -195,3 +216,88 @@ jobs:
           else
             publish_new
           fi
+
+  # Single-cell QEMU feed smoke: TCG on hosted runners; default OpenWrt 24.10.
+  # Tag pushes always smoke; workflow_dispatch can skip via feed_smoke=false.
+  smoke-from-feed:
+    if: >-
+      github.event_name == 'push' ||
+      github.event.inputs.feed_smoke == 'true'
+    needs: build-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      # GitHub-hosted runners expose /dev/kvm but deny KVM init; use TCG for feed smoke.
+      OWRT_QEMU_ACCEL: tcg
+      # qemu-wait-guest.sh reads MAX_WAIT (default 600); give TCG boots more headroom.
+      MAX_WAIT: "900"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+          # R1: do not write GITHUB_TOKEN into .git/config (workspace is bind-mounted into SDK).
+          persist-credentials: false
+
+      - name: Install lab dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf openssh-client curl
+
+      - name: Resolve release tag
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$TAG"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+          # R5 parity with build-publish: the checkout used the raw input as
+          # ref, so verify it is a real tag (not a v…-shaped branch) before any
+          # repository script runs.
+          if [[ "$tag" == *[[:cntrl:]]* ]]; then
+            echo "invalid tag: contains control characters" >&2
+            exit 1
+          fi
+          if [[ ! "$tag" =~ ^v[0-9] ]]; then
+            echo "invalid tag '$tag' (expected vN…, e.g. v0.1.5)" >&2
+            exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "not a tag in this repository: '${tag}'" >&2
+            exit 1
+          fi
+          tag_commit="$(git rev-parse "refs/tags/${tag}^{commit}" 2>/dev/null || true)"
+          if [[ -n "$tag_commit" && "$(git rev-parse HEAD)" != "$tag_commit" ]]; then
+            echo "checked out ref is not the tag '${tag}' (HEAD $(git rev-parse --short HEAD))" >&2
+            exit 1
+          fi
+          echo "USRMANAGE_RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "Release tag: $tag"
+
+      - name: Wait for GitHub Pages propagation
+        run: ./scripts/wait-feed-pages.sh "$USRMANAGE_FEED_BASE_URL" "$USRMANAGE_RELEASE_TAG"
+
+      - name: Download lab image
+        env:
+          SMOKE_VERSION: ${{ github.event.inputs.smoke_version || '24.10' }}
+        run: |
+          case "$SMOKE_VERSION" in
+            24.10) img_release="24.10.8" ;;
+            25.12) img_release="25.12.5" ;;
+            *) echo "unsupported smoke_version: $SMOKE_VERSION" >&2; exit 1 ;;
+          esac
+          RELEASE="$img_release" ./scripts/download-openwrt-x86-64.sh
+
+      - name: Feed smoke (single reference cell)
+        env:
+          USRMANAGE_FEED_BASE_URL: ${{ env.USRMANAGE_FEED_BASE_URL }}
+          SMOKE_VERSION: ${{ github.event.inputs.smoke_version || '24.10' }}
+        run: |
+          ver="$SMOKE_VERSION"
+          echo "Feed smoke OpenWrt version: $ver"
+          ./scripts/validate-feed-smoke.sh --version "$ver"

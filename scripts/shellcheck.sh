@@ -23,6 +23,8 @@ shellcheck -s bash -e SC1091 \
 	"$ROOT/scripts/lib/feed-publish.sh" \
 	"$ROOT/scripts/lib/feed-keys.sh" \
 	"$ROOT/scripts/validate-feed-keys.sh" \
+	"$ROOT/scripts/wait-feed-pages.sh" \
+	"$ROOT/scripts/download-openwrt-x86-64.sh" \
 	"$ROOT/tests/test_sdk_matrix_digests.sh"
 
 echo "shellcheck: ok"
