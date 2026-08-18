@@ -4,6 +4,11 @@
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
+# Discover any NEW shipped ash script under the feed so it cannot silently
+# escape this gate (the explicit list below still covers every extensionless
+# entrypoint, e.g. usr/sbin/usrmanage, uci-defaults/90-usrmanage, rpcd).
+find "$ROOT/openwrt-feed" -type f -name '*.sh' -print0 | xargs -0 -r shellcheck -s sh
+
 shellcheck -s sh \
 	"$ROOT/openwrt-feed/usrmanage/files/usr/sbin/usrmanage" \
 	"$ROOT/openwrt-feed/usrmanage/files/usr/lib/usrmanage/usrmanage-lib.sh" \
