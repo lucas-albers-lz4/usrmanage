@@ -37,7 +37,7 @@ while (( SECONDS < deadline )); do
 			break
 		fi
 	done
-	if [[ $ok -eq 1 ]] && ! curl -fsSL "${BASE}/manifest.json" 2>/dev/null | grep -q "\"git_tag\": \"${EXPECTED_TAG}\""; then
+	if [[ $ok -eq 1 ]] && ! curl -fsSL "${BASE}/manifest.json" 2>/dev/null | grep -Fq "\"git_tag\": \"${EXPECTED_TAG}\""; then
 		ok=0
 		echo "  pending: manifest.json git_tag=${EXPECTED_TAG}" >&2
 	fi
