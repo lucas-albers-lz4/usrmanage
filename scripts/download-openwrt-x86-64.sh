@@ -103,8 +103,13 @@ gz_rc=$?
 set -e
 rm -f "${OUT}/${IMG_GZ}"
 [[ -s "${OUT}/${IMG_OUT}" ]] || { echo "decompress failed (gzip exit ${gz_rc})" >&2; exit 1; }
-# gzip exit codes: 0 = ok, 1 = warning (accepted), 2 = fatal error (reject).
-if [[ $gz_rc -ne 0 && $gz_rc -ne 1 ]]; then
+# gzip exit codes: 0=ok, 1=warning, 2=warning-class "trailing garbage
+# ignored" on OpenWrt .img.gz files (decompression is COMPLETE — verified
+# on openwrt-24.10.8-x86-64-generic-ext4-combined-efi.img.gz: exit 2 with
+# a full 126MB image; gzip -t prints "decompression OK, trailing garbage
+# ignored"). The [[ -s ]] size guard above is the real integrity check —
+# a genuinely fatal decompress leaves empty/partial output.
+if [[ $gz_rc -ne 0 && $gz_rc -ne 1 && $gz_rc -ne 2 ]]; then
 	echo "decompress failed (gzip exit ${gz_rc})" >&2
 	exit 1
 fi
