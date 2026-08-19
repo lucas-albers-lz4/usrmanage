@@ -1,0 +1,50 @@
+# usrmanage — .coderabbit.yaml
+# Grounded in the actual repo invariants:
+#   - OpenWrt shell package that ships busybox-ash code to target devices
+#   - UCI-defaults logic that must stay idempotent across device reboots
+# Profile "chill": second-opinion comments; CI s unchanged gate.
+language: "en"
+early_access: false
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: true
+    base: auto
+  tools:
+    ast_grep: true
+    bullseye: true
+  path_instructions:
+    - path: "**/*.sh"
+      instructions: |
+        Target device scripts run under busybox ash. Flag bashisms
+        (`[[ ]]`, case-modifiers, arrays, `declare`, `source`,
+        process substitution). Every variable expansion must be quoted
+        (CI enforces SC2086 on the shipped tree). Flag absolute paths that
+        should be resolved at runtime.
+    - path: "openwrt-feed/usrmanage/files/etc/uci-defaults/**"
+      instructions: |
+        uci-defaults run once per device on first boot and are expected to
+        be idempotent. Flag a default that would clobber or duplicate an
+        existing uci config on re-run, or that relies on state surviving
+        between runs.
+    - path: "openwrt-feed/luci-app-usrmanage/root/usr/libexec/**"
+      instructions: |
+        Shipped rpcd endpoint. Flag unescaped interpolation of frontend /
+        uci-derived values into shell commands (injection), plus POSIX-sh
+        and quoting violations.
+    - path: "**/Makefile"
+      instructions: |
+        OpenWrt feed package. On release, PKG_VERSION must track the release
+        tag; flag PKG_VERSION/PKG_RELEASE bumps that don't match, and stale
+        source pins/hashes relative to the declared version.
+  system_instructions: |
+    This is usrmanage, an OpenWrt shell package. The shipped code runs in a
+    minimal busybox ash environment on target devices, so POSIX-only shell
+    with quoted variables are hard invariants. UCI-defaults must stay
+    idempotent. Prefer a precise, grounded comment; if a concern does not
+    map to a path invariant above, skip it rather than filing a generic nit.
