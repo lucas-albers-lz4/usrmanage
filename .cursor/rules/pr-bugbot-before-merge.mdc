@@ -39,9 +39,9 @@ If unsure, treat as non-trivial.
 2. Ensure the PR head branch is checked out locally.
 3. Run a **review** with **luna** (preferred) or **grok** (alternative) on **branch changes** (merge-base vs the default base).
 4. Run **Bugbot** via the `review-bugbot` skill / `bugbot` subagent on **branch changes**.
-5. If the reviewer or Bugbot reports findings: **fix them** (or explicitly document why each is a false positive), push, re-run once after substantive fixes.
+5. If the reviewer or Bugbot reports findings: **fix them** (or explicitly document why each is a false positive), push, and **re-run CI + the reviewer + Bugbot against the latest PR head** after every substantive fix. Repeat until all gate results succeed with no findings. Treat failed, timed-out, missing, or stale results as **blocking gates** before merge.
 6. Triage external review comments on the PR before merge:
-   - Pull the thread (`gh api repos/{owner}/{repo}/pulls/<n>/comments --paginate`, `<n>/reviews`, issue comments) and classify each: `CONFIRMED` (fix it), `DISMISS` (document why it's a false positive), or `FOLD` (already addressed / duplicate).
+   - Pull the thread using complete `gh api` endpoint paths with a shell-safe PR number variable (e.g. `PR_NUM=123; gh api "repos/{owner}/{repo}/pulls/$PR_NUM/comments" --paginate`, `gh api "repos/{owner}/{repo}/pulls/$PR_NUM/reviews" --paginate`, `gh api "repos/{owner}/{repo}/issues/$PR_NUM/comments" --paginate`) and classify each: `CONFIRMED` (fix it), `DISMISS` (document why it's a false positive), or `FOLD` (already addressed / duplicate). Avoid bare `<n>` placeholders — the shell can interpret them as redirection.
    - Do **not** auto-apply a CodeRabbit-suggested fix without ground-truthing it against the code / real API — a suggested fix can be wrong.
    - Human `REQUEST_CHANGES` / substantive inline comments **outrank** bot comments. A bare bot comment doesn't block merge by itself, but unresolved `CONFIRMED` bot findings do not merge clean.
 7. Only then merge (`gh pr merge` with the repo's usual strategy).
