@@ -79,6 +79,25 @@ jobs:
       - name: Set SOURCE_DATE_EPOCH from release tag
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
 
+      - name: Assert feed PKG_VERSION == release tag (release-consistency)
+        run: |
+          want="${USRMANAGE_RELEASE_TAG#v}"
+          for src in \
+            "openwrt-feed/usrmanage/Makefile" \
+            "openwrt-feed/luci-app-usrmanage/Makefile" \
+          ; do
+            pkg="$(sed -n 's/^PKG_VERSION:=\(.*\)/\1/p' "$src")"
+            if [ -z "$pkg" ]; then
+              echo "PKG_VERSION not found in $src" >&2
+              exit 1
+            fi
+            if [ "$pkg" != "$want" ]; then
+              echo "$src PKG_VERSION '$pkg' != release tag version '$want'" >&2
+              exit 1
+            fi
+            echo "$src PKG_VERSION $pkg matches tag $USRMANAGE_RELEASE_TAG" >&2
+          done
+
       - name: Host smoke
         run: |
           sudo apt-get update
