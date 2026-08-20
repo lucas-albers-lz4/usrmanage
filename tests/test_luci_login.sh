@@ -828,6 +828,11 @@ um_with_lock um_mut_set_luci_login ops enable full
 grep -q "option usrmanage_scope 'full'" "$USRMANAGE_RPCD_CONFIG" && ok "scope full recorded" || bad "missing scope full"
 grep -Fq "list read '*'" "$USRMANAGE_RPCD_CONFIG" && ok "full list read *" || bad "missing read *"
 grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && ok "full list write *" || bad "missing write *"
+um_with_lock um_mut_set_luci_login ops enable
+grep -q "option usrmanage_scope 'full'" "$USRMANAGE_RPCD_CONFIG" && ok "re-enable without --scope keeps full" \
+	|| bad "re-enable dropped full scope"
+grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && ok "re-enable without --scope keeps write *" \
+	|| bad "re-enable dropped write *"
 
 # demote drops * to health
 um_with_lock um_mut_set_role ops readonly
@@ -919,6 +924,13 @@ if grep -q "option username 'luciadd'" "$USRMANAGE_RPCD_CONFIG" && grep -Fq "lis
 	fi
 else
 	ok "migrate fail-closed dropped luciadd *"
+fi
+
+_seed_unparsable abbreviated
+if um_with_lock um_luci_login_migrate_observer 2>/dev/null; then
+	bad "migrate unparsable should fail (uci-defaults must retry)"
+else
+	ok "migrate unparsable fails closed (uci-defaults retries)"
 fi
 
 [ "$fail" = "0" ] || exit 1

@@ -562,11 +562,17 @@ um_luci_login_enable_user() {
 	# Returns 0/1; sets UM_LUCI_ERR on failure (no um_die — add path must rollback).
 	_ull_name=$1
 	_ull_role=$(um_role_of "$_ull_name")
-	_ull_scope=$(um_luci_login_normalize_scope "${2:-app}") || {
-		um_audit denied "$_ull_name" denied invalid_luci_scope "$_ull_role"
-		UM_LUCI_ERR=invalid_luci_scope
-		return 1
-	}
+	if [ -n "$2" ]; then
+		_ull_scope=$(um_luci_login_normalize_scope "$2") || {
+			um_audit denied "$_ull_name" denied invalid_luci_scope "$_ull_role"
+			UM_LUCI_ERR=invalid_luci_scope
+			return 1
+		}
+	elif [ -n "$(um_luci_login_ours_index "$_ull_name" 2>/dev/null || true)" ]; then
+		_ull_scope=$(um_luci_login_read_ours_scope "$_ull_name")
+	else
+		_ull_scope=app
+	fi
 	UM_LUCI_ERR=
 	if [ "$_ull_scope" = "full" ] && [ "$_ull_role" != "admin" ]; then
 		um_audit denied "$_ull_name" denied luci_scope_readonly "$_ull_role"
@@ -984,7 +990,9 @@ um_mut_set_luci_login() {
 		}
 		_ull_scope=$(um_luci_login_normalize_scope "$_ull_scope")
 	else
-		_ull_scope=app
+		# Omitted --scope: enable preserves existing owned scope (do not
+		# silently drop full → app).
+		_ull_scope=
 	fi
 	case "$_ull_mode" in
 		enable|1|on)
@@ -1053,8 +1061,8 @@ um_luci_login_migrate_observer() {
 	# Preserve admin app matrix; never auto-grant *. Ownership gate only
 	# (ours_index: marker + $p$user + managed). Never unmarked or root.
 	# Caller should hold um_with_lock. Uses um_tx_*.
-	um_rpcd_config_parsable || return 0
-	um_rpcd_pending_ok || return 0
+	um_rpcd_config_parsable || return 1
+	um_rpcd_pending_ok || return 1
 	[ -f "$USRMANAGE_RPCD_CONFIG" ] || return 0
 	_uf=$(um_luci_login_sep)
 	_dumpf=$(mktemp "${TMPDIR:-/tmp}/um-obs-mig.XXXXXX") || return 1
