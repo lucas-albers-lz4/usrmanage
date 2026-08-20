@@ -15,6 +15,7 @@ shellcheck -s sh \
 	"$ROOT/openwrt-feed/usrmanage/files/usr/lib/usrmanage/usrmanage-luci-login.sh" \
 	"$ROOT/openwrt-feed/usrmanage/files/etc/uci-defaults/90-usrmanage" \
 	"$ROOT/openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage" \
+	"$ROOT/openwrt-feed/luci-app-usrmanage/root/etc/uci-defaults/91-usrmanage-readonly-observer" \
 	"$ROOT/scripts/smoke-package-layout.sh" \
 	"$ROOT/scripts/smoke-host.sh"
 

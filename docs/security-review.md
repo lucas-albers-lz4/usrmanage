@@ -19,23 +19,23 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh` | 2026-08-15 (#125 L12 incomplete marker) | none |
-| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-12 (multi-model) | none new (ACL split re-confirmed) |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-08-19 (readonly observer HARD path) | none |
+| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-19 (health method + session/health/app split) | none new |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-13 (doctor banner severity) | none (XSS / expect convention re-confirmed) |
-| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry) | 2026-08-15 (#125 L12) | none |
+| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry), luci-app `91-usrmanage-readonly-observer` | 2026-08-19 (readonly ACL migration) | none |
 | CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-15 (#126 peaceiris pin checklist) | none |
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-18 (R7 layout: sdk-export + sibling mounts) | none |
 | Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-18 (R7 layout: `sdk-export` service, no workspace mount) | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
-| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-12 (LuCI-login + #107 asserts; multi-model did not re-run guest) | none open (I3 accepted residual) — fixtures remain lab-only by design |
+| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-19 (observer deny/allow + demote `*`→health asserts) | none open (I3 accepted residual) — fixtures remain lab-only by design |
 
 ## How to re-verify (current gates)
 
 | Command | What it covers |
 |---------|----------------|
-| `./scripts/smoke-host.sh` | shellcheck, package layout, link check, validators, mutators-under-lock, rpcd argv (password-safe stub), busybox fallback, theme/i18n/parity |
+| `./scripts/smoke-host.sh` | shellcheck, package layout, link check, validators, mutators-under-lock, rpcd argv (password-safe stub), busybox fallback, luci-login + health schema, theme/i18n/parity |
 | `python3 scripts/z3-verify.py --full` | Formal proof of username / actor grammars (empty, length, deny-list, injection alphabet) |
-| `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → add/list/set-role/passwd/del → audit → last-admin → **LuCI session revoke** (create session → disable → SID destroyed) → LuCI/ubus |
+| `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → add/list/set-role/passwd/del → audit → last-admin → **LuCI session revoke** → **readonly observer denies** (uci/wireless/shadow/list) + **health allow** → admin app cannot wireless / admin full can / demote leftover SID dead → LuCI/ubus |
 | `gh api repos/:owner/:repo/code-scanning/alerts` | CodeQL findings, **including dismissed ones** — check before filing, a finding may already have a decision |
 
 Notes:
@@ -67,7 +67,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Password in argv / `ps` / logs | `--password-fd` or stdin; rpcd pipes fd 0; never audit/syslog | host | `tests/test_mutators.sh` stub argv |
 | Audit field injection (actor/src) | Whitelist + 64-char cap (`um_actor_resolve`, `sanitize_actor`); audit tokens may contain `=` but never a space, so no new field can be introduced | host | #3 C1 · Z3 P2 |
 | Unquoted argv rpcd → CLI | Explicit argv per ubus method | host | #3 C2 · `tests/test_mutators.sh` |
-| View → manage escalation | Split rpcd ACL; server authoritative | host | `acl.d/luci-app-usrmanage.json` |
+| View → manage escalation | Split rpcd ACL (`luci-app-usrmanage-session` / `-health` / app); server authoritative | host | `acl.d/luci-app-usrmanage.json` · `tests/test_health.sh` |
 | Non-root mutators | `um_require_root` before manage commands | host | `tests/test_validators.sh` |
 | XSS via username / audit text in LuCI | DOM via LuCI `E()`; no `innerHTML` | manual | Manual review of `usrmanage.js` |
 
@@ -96,6 +96,10 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Same-role / ACL-repair `set-role` leaves elevated live sessions | After `um_luci_login_sync_acls` in set-role (including same-role), `_um_set_role_revoke` runs fail-closed | host | `tests/test_luci_login.sh` (behavioral same-role mock) |
 | `set-luci-login` multi-index rewrite crash window | Resolved — `um_mut_set_luci_login` uses `um_tx_*` for enable/disable/reset ([#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) / [PR #114](https://github.com/lucas-albers-lz4/usrmanage/pull/114)) | host | `tests/test_luci_login.sh` (L2 tx asserts) |
 | New `session.login` denied after disable; demote drops write on re-login | lab for **canonical** owned login sections (P1/P2) | lab | `scripts/qemu-smoke-usrmanage.sh` (#107 / [PR #116](https://github.com/lucas-albers-lz4/usrmanage/pull/116)) |
+| Readonly owned LuCI obtains secrets (K1–K8) via stock ACL groups | Session ACL is `session.access` + `luci.getFeatures` only (no uci). Health group is `usrmanage.health` only, no `write`. Readonly expected reads = session+health; `*` / `luci-base` / `luci-mod-*` → tampered | host + lab | `tests/test_health.sh` · `tests/test_luci_login.sh` · `scripts/qemu-smoke-usrmanage.sh` (readonly deny uci/file/list; allow health) |
+| Health RPC grows secret fields / pass-through blobs | Frozen schema projector (`um_health_json_emit`); `health` takes no params; hostile body ignored (no `read_input`); DRY_RUN fixture equality | host | `tests/test_health.sh` (schema equality, not deny-list grep as sole proof) |
+| Admin `--scope full` (`*`) on upgrade / readonly | `usrmanage_scope=full` only after explicit `set-luci-login --enable --scope full`; refuse full on readonly; refuse full if rpcd unparsable; luci-app uci-defaults migrate readonly→health and **never auto-`*`** | host | `tests/test_luci_login.sh` (scope matrix + migrate) · `91-usrmanage-readonly-observer` |
+| Demote admin (`*` or app) leaves live SID with old ACLs | Rewrite ACL first (drop `*` → health), revoke, drop wheel, revoke again; fail closed if SID remains when ubus present | lab | `scripts/qemu-smoke-usrmanage.sh` (demote full → leftover SID dead; re-login health only). Host order mock in `tests/test_luci_login.sh` is **not** lab proof |
 | rpcd pending UCI changes during enable/disable | Refuse when `uci changes rpcd` non-empty | host | `tests/test_luci_login.sh` |
 
 ### Supply chain
@@ -315,6 +319,14 @@ Scope: `scripts/lib/feed-publish.sh` opkg/apk sign steps; first publish after th
 **Fix.** (1) Sign step switched from `docker compose run --network none` to `docker run --rm --network none --platform linux/amd64` with the digest-pinned `$SDK_MATRIX_IMAGE` (fwlive's R7 pattern; no `/builder` mount, keys `:ro`). (2) Export copies the wrapper **and** the hidden `.bin` into `tools_dir` and the shared-lib tree (`*.so*` only) into a separate `lib_dir`, mounted as siblings at `/feed/tools` + `/feed/lib`; export runs in the dedicated `sdk-export` compose service (SDK volume only, **no workspace mount**) as the invoking uid — the workspace holds the signing keys, so the export container must never see them. `validate-feed-keys.sh` was already correct (runs usign in-image with `--network none`).
 
 **Result.** `bash -n` clean; fix verified by re-running the publish workflow (v0.1.5). Controls in force unchanged — the R7 security properties (digest pin before secret mount, `--network none`, no `/builder` in secret containers, keys never visible to the export container) are preserved.
+
+### 2026-08-19 — Readonly observer LuCI (HARD path, spec revision 2)
+
+Scope: owned LuCI ACL matrix, `usrmanage.health` RPC, demote order, luci-app upgrade migration. Design SoT: [developer/readonly-observer-luci.md](developer/readonly-observer-luci.md).
+
+**Locks implemented.** Readonly owned reads = session + health only (no app list/enum). Session ACL has no `uci`. Health method is declared read, takes no params, ignores the request body, and emits a frozen schema (no WAN IP / SSID / MAC / lease lists). Admin default stays app scope; `*` only via `--scope full` (refused on readonly and if rpcd is unparsable). Demote rewrites ACLs to health before revoke, revokes twice, and fails closed if a SID remains when ubus is present. luci-app uci-defaults migrate owned readonly logins with `um_luci_login_ours_index` + flock/tx; never unmarked/`root`; never auto-`*`.
+
+**Proof.** Host: `tests/test_luci_login.sh`, `tests/test_health.sh`, `scripts/smoke-package-layout.sh`. Lab asserts added to `scripts/qemu-smoke-usrmanage.sh` (readonly deny/allow, admin app vs full wireless, demote leftover SID). DRY_RUN is not lab proof. SSH residual for the same UNIX password remains an accepted LuCI-only guarantee (spec §12 / §16).
 
 ## Review procedure
 

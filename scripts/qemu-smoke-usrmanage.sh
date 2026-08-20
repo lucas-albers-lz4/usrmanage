@@ -192,6 +192,123 @@ ssh_guest 'usrmanage set-luci-login umdemote --disable' || true
 ssh_guest 'usrmanage del umdemote' || die "del umdemote failed"
 ok "del umdemote"
 
+# Readonly observer + admin app/full ACL probes (revision 2). Passwords stay on
+# the guest command line only (lab fixture residual); never printed here.
+_sid_access() {
+	# _sid_access <sid> <scope> <object> <function>
+	ssh_guest "ubus call session access \"{\\\"ubus_rpc_session\\\":\\\"$1\\\",\\\"scope\\\":\\\"$2\\\",\\\"object\\\":\\\"$3\\\",\\\"function\\\":\\\"$4\\\"}\""
+}
+
+_assert_denied() {
+	_body=$1
+	_what=$2
+	if printf '%s' "$_body" | grep -qiE '"access"[[:space:]]*:[[:space:]]*true'; then
+		die "expected deny for ${_what} (got: ${_body})"
+	fi
+	if ! printf '%s' "$_body" | grep -qiE '"access"[[:space:]]*:[[:space:]]*false'; then
+		die "deny not confirmed for ${_what} (got: ${_body})"
+	fi
+}
+
+_assert_allowed() {
+	_body=$1
+	_what=$2
+	if printf '%s' "$_body" | grep -qiE '"access"[[:space:]]*:[[:space:]]*false'; then
+		die "expected allow for ${_what} (got: ${_body})"
+	fi
+	if ! printf '%s' "$_body" | grep -qiE '"access"[[:space:]]*:[[:space:]]*true'; then
+		die "allow not confirmed for ${_what} (got: ${_body})"
+	fi
+}
+
+ssh_guest 'usrmanage del umobs >/dev/null 2>&1 || true'
+ssh_guest 'printf "LabObs1!\n" | usrmanage add umobs --role readonly --password-fd 0' \
+	|| die "add umobs failed"
+ssh_guest 'usrmanage set-luci-login umobs --enable' \
+	|| die "set-luci-login umobs --enable failed"
+ok "umobs readonly luci login enabled"
+
+_obs_login="$(ssh_guest 'ubus call session login "{\"username\":\"umobs\",\"password\":\"LabObs1!\"}"')" \
+	|| die "session login as umobs failed"
+_obs_sid="$(printf '%s' "$_obs_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
+[[ -n "$_obs_sid" ]] || die "no umobs session id"
+
+_assert_denied "$(_sid_access "$_obs_sid" ubus uci get)" "readonly ubus uci get"
+_assert_denied "$(_sid_access "$_obs_sid" uci wireless get)" "readonly uci wireless get"
+_assert_denied "$(_sid_access "$_obs_sid" uci network get)" "readonly uci network get"
+_assert_denied "$(_sid_access "$_obs_sid" uci openvpn get)" "readonly uci openvpn get"
+_assert_denied "$(_sid_access "$_obs_sid" uci firewall get)" "readonly uci firewall get"
+_assert_denied "$(_sid_access "$_obs_sid" file /etc/shadow read)" "readonly file.read /etc/shadow"
+_assert_denied "$(_sid_access "$_obs_sid" ubus usrmanage list)" "readonly usrmanage.list"
+_assert_denied "$(_sid_access "$_obs_sid" ubus usrmanage add)" "readonly usrmanage.add"
+_assert_denied "$(_sid_access "$_obs_sid" ubus log read)" "readonly log.read"
+_assert_denied "$(_sid_access "$_obs_sid" access-group luci-mod-status-index read)" "readonly luci-mod-status-index"
+_assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage health)" "readonly usrmanage.health"
+ok "readonly session denies secrets; allows health"
+
+_h="$(ssh_guest "ubus call usrmanage health \"{\\\"ubus_rpc_session\\\":\\\"${_obs_sid}\\\"}\"")" \
+	|| die "readonly usrmanage.health call failed"
+printf '%s' "$_h" | grep -q '"ok"' || die "health reply missing ok (got: ${_h})"
+printf '%s' "$_h" | grep -qiE 'ssid|sae_password|private_key|"key"|mesh_id|bssid' \
+	&& die "health reply contains secret class token"
+printf '%s' "$_h" | grep -qE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' \
+	&& die "health reply contains MAC"
+ok "readonly health reply has no ssid/key/MAC"
+
+if ssh_guest "ubus call usrmanage list \"{\\\"ubus_rpc_session\\\":\\\"${_obs_sid}\\\"}\"" >/dev/null 2>&1; then
+	die "readonly usrmanage.list call succeeded (must be denied)"
+fi
+ok "readonly usrmanage.list call denied"
+
+ssh_guest 'usrmanage set-luci-login umobs --disable' || true
+ssh_guest 'usrmanage del umobs' || die "del umobs failed"
+ok "del umobs"
+
+# Admin app cannot uci get wireless; admin full can; demote then leftover SID dead.
+ssh_guest 'usrmanage del umapp >/dev/null 2>&1 || true'
+ssh_guest 'printf "LabApp1!\n" | usrmanage add umapp --role admin --password-fd 0' \
+	|| die "add umapp failed"
+ssh_guest 'usrmanage set-luci-login umapp --enable' \
+	|| die "set-luci-login umapp --enable failed"
+_app_login="$(ssh_guest 'ubus call session login "{\"username\":\"umapp\",\"password\":\"LabApp1!\"}"')" \
+	|| die "session login as umapp failed"
+_app_sid="$(printf '%s' "$_app_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
+[[ -n "$_app_sid" ]] || die "no umapp session id"
+_assert_denied "$(_sid_access "$_app_sid" uci wireless get)" "admin app uci wireless get"
+ok "admin app cannot uci get wireless"
+
+ssh_guest 'usrmanage del umfull >/dev/null 2>&1 || true'
+ssh_guest 'printf "LabFull1!\n" | usrmanage add umfull --role admin --password-fd 0' \
+	|| die "add umfull failed"
+ssh_guest 'usrmanage set-luci-login umfull --enable --scope full' \
+	|| die "set-luci-login umfull --scope full failed"
+_full_login="$(ssh_guest 'ubus call session login "{\"username\":\"umfull\",\"password\":\"LabFull1!\"}"')" \
+	|| die "session login as umfull failed"
+_full_sid="$(printf '%s' "$_full_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
+[[ -n "$_full_sid" ]] || die "no umfull session id"
+_assert_allowed "$(_sid_access "$_full_sid" uci wireless get)" "admin full uci wireless get"
+ok "admin full can uci get wireless"
+
+ssh_guest 'usrmanage set-role umfull --role readonly' || die "demote umfull failed"
+ok "umfull demoted to readonly"
+if ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\"}\"" >/dev/null 2>&1; then
+	die "admin-full session still alive after demote"
+fi
+ok "umfull leftover SID dead after demote"
+
+_full_re="$(ssh_guest 'ubus call session login "{\"username\":\"umfull\",\"password\":\"LabFull1!\"}"')" \
+	|| die "re-login as demoted umfull failed"
+_full_re_sid="$(printf '%s' "$_full_re" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
+_assert_denied "$(_sid_access "$_full_re_sid" uci wireless get)" "demoted full uci wireless get"
+_assert_allowed "$(_sid_access "$_full_re_sid" ubus usrmanage health)" "demoted full usrmanage.health"
+ok "demote from full → health (no wireless)"
+
+ssh_guest 'usrmanage set-luci-login umapp --disable' || true
+ssh_guest 'usrmanage del umapp' || die "del umapp failed"
+ssh_guest 'usrmanage set-luci-login umfull --disable' || true
+ssh_guest 'usrmanage del umfull' || die "del umfull failed"
+ok "del umapp + umfull"
+
 # LuCI assets + ubus
 ssh_guest 'test -f /www/luci-static/resources/view/system/usrmanage.js' \
 	|| die "missing LuCI view JS"

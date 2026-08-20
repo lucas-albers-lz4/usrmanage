@@ -1,13 +1,19 @@
 {
 	"luci-app-usrmanage-session": {
-		"description": "Minimal LuCI shell for usrmanage web logins (no luci-base filesystem listing)",
+		"description": "Minimal LuCI shell for usrmanage web logins (no uci, no filesystem listing)",
 		"read": {
 			"ubus": {
 				"session": [ "access" ],
-				"luci": [ "getFeatures" ],
-				"uci": [ "get", "changes" ]
-			},
-			"uci": [ "luci", "system" ]
+				"luci": [ "getFeatures" ]
+			}
+		}
+	},
+	"luci-app-usrmanage-health": {
+		"description": "Redacted device health for owned readonly LuCI logins",
+		"read": {
+			"ubus": {
+				"usrmanage": [ "health" ]
+			}
 		}
 	},
 	"luci-app-usrmanage": {

@@ -13,6 +13,7 @@ need "$FEED/usrmanage/Makefile"
 need "$FEED/usrmanage/files/usr/sbin/usrmanage"
 need "$FEED/usrmanage/files/usr/lib/usrmanage/usrmanage-lib.sh"
 need "$FEED/usrmanage/files/usr/lib/usrmanage/usrmanage-luci-login.sh"
+need "$FEED/usrmanage/files/usr/lib/usrmanage/usrmanage-health.sh"
 need "$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
 need "$FEED/usrmanage/files/etc/usrmanage/users"
 need "$FEED/usrmanage/files/etc/uci-defaults/90-usrmanage"
@@ -22,6 +23,7 @@ need "$FEED/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanag
 need "$FEED/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage"
 need "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/luci-app-usrmanage.json"
 need "$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json"
+need "$FEED/luci-app-usrmanage/root/etc/uci-defaults/91-usrmanage-readonly-observer"
 
 grep -q 'PKGARCH:=all' "$FEED/usrmanage/Makefile"
 grep -q 'LUCI_PKGARCH:=all' "$FEED/luci-app-usrmanage/Makefile"
@@ -39,6 +41,21 @@ grep -q 'chmod 0440 /etc/sudoers.d/usrmanage' \
 # JSON ACLs parse
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json'))"
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/luci-app-usrmanage.json'))"
+
+# Health ACL: read usrmanage.health only; no write object; no globs. Session: no uci.
+python3 - "$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json" <<'PY'
+import json, sys
+acl = json.load(open(sys.argv[1]))
+h = acl["luci-app-usrmanage-health"]
+assert "write" not in h, "health ACL must not have write"
+assert h["read"]["ubus"]["usrmanage"] == ["health"], h["read"]
+blob = json.dumps(h)
+assert "*" not in blob and "?" not in blob, "globs in health ACL"
+sess = acl["luci-app-usrmanage-session"]["read"]
+assert "uci" not in sess and "uci" not in sess.get("ubus", {}), sess
+assert "luci-app-usrmanage" in acl
+print("acl health/session: ok")
+PY
 
 # LuCI APP_VERSION must match luci-app Makefile PKG_VERSION (fwlive-style)
 pkg_ver=$(sed -n 's/^PKG_VERSION:=//p' "$FEED/luci-app-usrmanage/Makefile" | head -1)
