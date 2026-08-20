@@ -289,7 +289,7 @@ _app_login="$(ssh_guest 'ubus call session login "{\"username\":\"umapp\",\"pass
 	|| die "session login as umapp failed"
 _app_sid="$(printf '%s' "$_app_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_app_sid" ]] || die "no umapp session id"
-_assert_denied "$(_sid_access "$_app_sid" uci wireless get)" "admin app uci wireless get"
+_assert_denied "$(_sid_access "$_app_sid" ubus uci get)" "admin app ubus uci get (uci get wireless)"
 ok "admin app cannot uci get wireless"
 
 ssh_guest 'usrmanage del umfull >/dev/null 2>&1 || true'
@@ -301,7 +301,7 @@ _full_login="$(ssh_guest 'ubus call session login "{\"username\":\"umfull\",\"pa
 	|| die "session login as umfull failed"
 _full_sid="$(printf '%s' "$_full_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_full_sid" ]] || die "no umfull session id"
-_assert_allowed "$(_sid_access "$_full_sid" uci wireless get)" "admin full uci wireless get"
+_assert_allowed "$(_sid_access "$_full_sid" ubus uci get)" "admin full ubus uci get (uci get wireless)"
 ok "admin full can uci get wireless"
 
 ssh_guest 'usrmanage set-role umfull --role readonly' || die "demote umfull failed"
@@ -314,7 +314,7 @@ ok "umfull leftover SID dead after demote"
 _full_re="$(ssh_guest 'ubus call session login "{\"username\":\"umfull\",\"password\":\"LabFull1!\"}"')" \
 	|| die "re-login as demoted umfull failed"
 _full_re_sid="$(printf '%s' "$_full_re" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
-_assert_denied "$(_sid_access "$_full_re_sid" uci wireless get)" "demoted full uci wireless get"
+_assert_denied "$(_sid_access "$_full_re_sid" ubus uci get)" "demoted full ubus uci get (uci get wireless)"
 _assert_allowed "$(_sid_access "$_full_re_sid" ubus usrmanage health)" "demoted full usrmanage.health"
 ok "demote from full → health (no wireless)"
 
