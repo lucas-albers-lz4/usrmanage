@@ -878,6 +878,7 @@ EOF
 [ "$(um_luci_login_state luciadd)" = "tampered" ] && ok "legacy readonly classifies tampered before migrate" \
 	|| bad "legacy readonly state $(um_luci_login_state luciadd)"
 _ops_before=$(awk '/option username '\''ops'\''/,/^$/' "$USRMANAGE_RPCD_CONFIG")
+_root_before=$(awk '/option username '\''root'\''/,/^$/' "$USRMANAGE_RPCD_CONFIG")
 um_with_lock um_luci_login_migrate_observer
 [ "$(um_luci_login_state luciadd)" = "owned" ] && ok "migrate readonly → owned health" \
 	|| bad "migrate luciadd state $(um_luci_login_state luciadd)"
@@ -889,16 +890,11 @@ grep -q "list write 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" && ok "migrat
 	|| bad "migrate dropped admin write"
 grep -q "option username 'spy'" "$USRMANAGE_RPCD_CONFIG" && ok "migrate left unmarked foreign" \
 	|| bad "migrate touched unmarked"
-if awk '
-	BEGIN { inlogin=0; isroot=0; star=0 }
-	/^config login/ { if (inlogin && isroot && star) found=1; inlogin=1; isroot=0; star=0; next }
-	inlogin && /option username '\''root'\''/ { isroot=1 }
-	inlogin && /list read '\''\*'\''/ { star=1 }
-	END { if (inlogin && isroot && star) found=1; exit !found }
-' "$USRMANAGE_RPCD_CONFIG"; then
-	ok "migrate left root section (never auto-rewrite root)"
+_root_after=$(awk '/option username '\''root'\''/,/^$/' "$USRMANAGE_RPCD_CONFIG")
+if [ "$_root_before" = "$_root_after" ]; then
+	ok "migrate left root section byte-identical (read * / write * intact)"
 else
-	bad "migrate rewrote or dropped root"
+	bad "migrate modified root section: $_root_after"
 fi
 
 # Fail-closed: a failed ACL rewrite must drop the owned login, not restore *.

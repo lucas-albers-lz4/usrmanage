@@ -29,6 +29,7 @@ ACTOR_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._@
 
 
 def _char_in(s, i, alphabet: str):
+	"""Z3 OR constraint: character at position i of s is one of alphabet."""
 	return Or(*[SubString(s, i, 1) == StringVal(c) for c in alphabet])
 
 
@@ -48,6 +49,7 @@ def username_ok(s):
 
 
 def actor_ok(s):
+	"""Z3 predicate approximating um_actor_resolve's actor alphabet."""
 	n = Length(s)
 	conds = [n >= 1, n <= 64]
 	for i in range(64):
@@ -57,6 +59,7 @@ def actor_ok(s):
 
 
 def check_unsat(name: str, formula) -> bool:
+	"""Assert formula is unsatisfiable; print ok/FAIL and return success."""
 	sol = Solver()
 	sol.add(formula)
 	r = sol.check()
@@ -71,6 +74,7 @@ def check_unsat(name: str, formula) -> bool:
 
 
 def check_sat(name: str, formula) -> bool:
+	"""Assert formula is satisfiable; print ok/FAIL and return success."""
 	sol = Solver()
 	sol.add(formula)
 	r = sol.check()
@@ -82,6 +86,7 @@ def check_sat(name: str, formula) -> bool:
 
 
 def run_fast() -> int:
+	"""Run the pre-commit subset of sanitation properties; return failure count."""
 	fail = 0
 	u = String("u")
 	# P1: empty rejected
@@ -113,6 +118,7 @@ def run_fast() -> int:
 
 
 def run_full() -> int:
+	"""Run the full sanitation suite (deny list, case, hyphen, underscore); return failure count."""
 	fail = run_fast()
 	u = String("u")
 	# Additional deny-list members
@@ -132,6 +138,7 @@ def run_full() -> int:
 
 
 def main() -> int:
+	"""Parse args and run the fast or full Z3 suite; return the process exit code."""
 	ap = argparse.ArgumentParser(description=__doc__)
 	g = ap.add_mutually_exclusive_group()
 	g.add_argument("--fast", action="store_true", help="pre-commit subset")

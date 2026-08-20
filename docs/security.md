@@ -72,7 +72,7 @@ The **no-secrets guarantee applies to LuCI/ubus sessions only.** A readonly acco
 
 **LuCI-login gaps (2026-08-12 audit) — resolved:** the controls below are now in force; the manual workarounds are no longer needed.
 
-- [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) — **resolved** (fail-closed parser): `um_rpcd_config_parsable` refuses indented, abbreviated, quoted-type sections, quoted option/list keys, and trailing `#` lines instead of silently missing them, so a non-canonical login cannot survive disable/del. See the LuCI login lifecycle controls in [security-review.md](security-review.md).
+- [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) — **resolved** (fail-closed parser): `um_rpcd_config_parsable` rejects non-canonical `config login` sections (indented, abbreviated, quoted-type, quoted option/list keys, trailing `#`). `set-luci-login --disable` / `del` then **fail closed without mutating the login** — the section remains until the configuration is repaired and the operation is retried. See the LuCI login lifecycle controls in [security-review.md](security-review.md).
 - [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) — **resolved** (mode-preserving rewrite): `um_rpcd_atomic_replace` captures the destination mode (default `0600`) and the rollback path restores `0600`, so rewrites no longer widen `/etc/config/rpcd`.
 - [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) — **resolved** (same-role revoke): after `um_luci_login_sync_acls` in `set-role` (including same-role), `_um_set_role_revoke` runs fail-closed and revokes live sessions.
 
