@@ -1078,26 +1078,38 @@ um_luci_login_migrate_observer() {
 			continue
 		fi
 		_need_tx=1
-		_changed_users="${_changed_users} ${_ru}"
+		case " ${_changed_users} " in
+			*" ${_ru} "*) ;;
+			*) _changed_users="${_changed_users} ${_ru}" ;;
+		esac
 	done < "$_dumpf"
 	rm -f "$_dumpf"
 	[ "$_need_tx" = "1" ] || return 0
 	um_tx_begin
+	_mig_fail=0
 	for _ru in $_changed_users; do
 		[ -n "$_ru" ] || continue
 		[ "$_ru" = "root" ] && continue
 		_idxs=$(um_luci_login_ours_index "$_ru")
 		[ -n "$_idxs" ] || continue
-		um_luci_login_sync_acls "$_ru" readonly app || {
-			um_tx_rollback || true
-			return 1
-		}
-		um_session_revoke_user "$_ru" || {
-			um_tx_rollback || true
-			return 1
-		}
+		# Never rollback the whole snapshot on a single-user failure: that
+		# would restore leftover * / app-read ACLs (fail-open on upgrade).
+		if ! um_luci_login_sync_acls "$_ru" readonly app; then
+			um_luci_login_remove_owned_best_effort "$_ru" || true
+			um_session_revoke_user "$_ru" || true
+			um_audit fail "$_ru" fail luci_login_migrate_observer readonly
+			_mig_fail=1
+			continue
+		fi
+		if ! um_session_revoke_user "$_ru"; then
+			um_luci_login_remove_owned_best_effort "$_ru" || true
+			um_session_revoke_user "$_ru" || true
+			um_audit fail "$_ru" fail luci_login_migrate_revoke readonly
+			_mig_fail=1
+			continue
+		fi
 	done
 	um_tx_commit
-	return 0
+	[ "$_mig_fail" = "0" ]
 }
 

@@ -45,6 +45,7 @@ function formatLoad(load) {
 	}).join(', ');
 }
 
+function upDown(v) {
 	return v ? _('Up') : _('Down');
 }
 

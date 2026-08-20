@@ -50,6 +50,17 @@ _FIX='{"ok":true,"hostname":"dry-run","release":"24.10.x","uptime_s":86400,"load
 _got=$(um_cmd_health --json)
 [ "$_got" = "$_FIX" ] && ok "DRY_RUN health fixture equality" || bad "DRY_RUN fixture: $_got"
 
+# gather failure must emit exactly one JSON error (not gather+cmd double print).
+_unav=$(
+	USRMANAGE_DRY_RUN=0
+	um_health_gather_json() { return 1; }
+	um_cmd_health
+)
+_nunav=$(printf '%s\n' "$_unav" | grep -c 'health_unavailable' || true)
+[ "$_unav" = '{"ok":false,"error":"health_unavailable"}' ] && [ "$_nunav" = "1" ] \
+	&& ok "health_unavailable is a single JSON object" \
+	|| bad "health_unavailable duplicate: $_unav"
+
 _cli=$(USRMANAGE_DRY_RUN=1 JSON_OUT=1 "$CLI" health --json)
 [ "$_cli" = "$_FIX" ] && ok "CLI health --json DRY_RUN equality" || bad "CLI health: $_cli"
 

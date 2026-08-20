@@ -21,6 +21,12 @@ for (const view of views) {
 		console.error('forbidden hex colors in', base, '(use LuCI theme classes/variables):', hex);
 		process.exit(1);
 	}
+	try {
+		require('child_process').execFileSync('node', ['--check', view], { stdio: 'pipe' });
+	} catch (e) {
+		console.error('syntax error in', base, (e.stderr && e.stderr.toString()) || e.message);
+		process.exit(1);
+	}
 	const required = base === 'usrmanage.js'
 		? ['cbi-map', 'table', 'btn']
 		: ['cbi-map', 'btn'];

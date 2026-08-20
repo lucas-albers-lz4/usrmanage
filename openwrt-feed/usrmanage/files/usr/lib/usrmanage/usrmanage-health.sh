@@ -167,7 +167,7 @@ um_health_gather_json() {
 		_rel=${DISTRIB_RELEASE:-}
 	fi
 	[ -n "$_rel" ] || _rel=unknown
-	[ -n "$_hn" ] || { um_health_unavailable; return 1; }
+	[ -n "$_hn" ] || return 1
 
 	_uptime_s=0
 	if [ -r /proc/uptime ]; then

@@ -888,5 +888,38 @@ grep -q "option username 'root'" "$USRMANAGE_RPCD_CONFIG" && grep -Fq "list read
 	&& ok "migrate left root section (never auto-rewrite root)" \
 	|| bad "migrate rewrote or dropped root"
 
+# Fail-closed: a failed ACL rewrite must drop the owned login, not restore *.
+printf 'config rpcd\n\n' > "$USRMANAGE_RPCD_CONFIG"
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+config login
+	option username 'luciadd'
+	option password '$p$luciadd'
+	option usrmanage '1'
+	list read '*'
+	list write '*'
+EOF
+_mig_rc=0
+(
+	um_luci_login_sync_acls() { return 1; }
+	um_with_lock um_luci_login_migrate_observer
+) || _mig_rc=$?
+[ "$_mig_rc" != "0" ] && ok "migrate returns fail when sync fails" || bad "migrate swallowed sync failure"
+if grep -q "option username 'luciadd'" "$USRMANAGE_RPCD_CONFIG" && grep -Fq "list read '*'" "$USRMANAGE_RPCD_CONFIG"; then
+	# * on luciadd specifically
+	if awk '
+		BEGIN { inlogin=0; isadd=0; star=0 }
+		/^config login/ { if (inlogin && isadd && star) found=1; inlogin=1; isadd=0; star=0; next }
+		inlogin && /option username '\''luciadd'\''/ { isadd=1 }
+		inlogin && /list read '\''\*'\''/ { star=1 }
+		END { if (inlogin && isadd && star) found=1; exit !found }
+	' "$USRMANAGE_RPCD_CONFIG"; then
+		bad "migrate fail-open left luciadd *"
+	else
+		ok "migrate fail-closed dropped luciadd *"
+	fi
+else
+	ok "migrate fail-closed dropped luciadd *"
+fi
+
 [ "$fail" = "0" ] || exit 1
 echo "luci-login tests: ok"

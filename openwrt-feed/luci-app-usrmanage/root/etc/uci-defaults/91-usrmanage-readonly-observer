@@ -9,5 +9,6 @@
 . /usr/lib/usrmanage/usrmanage-lib.sh
 
 command -v um_luci_login_migrate_observer >/dev/null 2>&1 || exit 0
-um_with_lock um_luci_login_migrate_observer || exit 0
+# Fail the postinst (uci-defaults retries) rather than leaving elevated ACLs.
+um_with_lock um_luci_login_migrate_observer || exit 1
 exit 0
