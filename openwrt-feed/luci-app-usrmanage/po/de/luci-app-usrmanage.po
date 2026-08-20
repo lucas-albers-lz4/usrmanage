@@ -353,7 +353,7 @@ msgid "Health data is unavailable (%s)."
 msgstr "Statusdaten sind nicht verfügbar (%s)."
 
 msgid "Redacted device status for observer logins. Wireless keys, user accounts, and configuration secrets are not shown here."
-msgstr "Reduzierter Gerätestatus für Beobachter-Anmeldungen. WLAN-Schlüssel, Benutzerkonten und Konfigurationsgeheimnisse werden hier nicht angezeigt."
+msgstr "Redigierter Gerätestatus für Beobachter-Anmeldungen. WLAN-Schlüssel, Benutzerkonten und Konfigurationsgeheimnisse werden hier nicht angezeigt."
 
 msgid "This LuCI login is for device health only, not account administration."
 msgstr "Diese LuCI-Anmeldung dient nur dem Gerätestatus, nicht der Kontoverwaltung."

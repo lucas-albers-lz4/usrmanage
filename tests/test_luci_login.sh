@@ -889,9 +889,17 @@ grep -q "list write 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" && ok "migrat
 	|| bad "migrate dropped admin write"
 grep -q "option username 'spy'" "$USRMANAGE_RPCD_CONFIG" && ok "migrate left unmarked foreign" \
 	|| bad "migrate touched unmarked"
-grep -q "option username 'root'" "$USRMANAGE_RPCD_CONFIG" && grep -Fq "list read '*'" "$USRMANAGE_RPCD_CONFIG" \
-	&& ok "migrate left root section (never auto-rewrite root)" \
-	|| bad "migrate rewrote or dropped root"
+if awk '
+	BEGIN { inlogin=0; isroot=0; star=0 }
+	/^config login/ { if (inlogin && isroot && star) found=1; inlogin=1; isroot=0; star=0; next }
+	inlogin && /option username '\''root'\''/ { isroot=1 }
+	inlogin && /list read '\''\*'\''/ { star=1 }
+	END { if (inlogin && isroot && star) found=1; exit !found }
+' "$USRMANAGE_RPCD_CONFIG"; then
+	ok "migrate left root section (never auto-rewrite root)"
+else
+	bad "migrate rewrote or dropped root"
+fi
 
 # Fail-closed: a failed ACL rewrite must drop the owned login, not restore *.
 printf 'config rpcd\n\n' > "$USRMANAGE_RPCD_CONFIG"

@@ -64,6 +64,20 @@ _nunav=$(printf '%s\n' "$_unav" | grep -c 'health_unavailable' || true)
 _cli=$(USRMANAGE_DRY_RUN=1 JSON_OUT=1 "$CLI" health --json)
 [ "$_cli" = "$_FIX" ] && ok "CLI health --json DRY_RUN equality" || bad "CLI health: $_cli"
 
+# Dispatcher: a missing health helper (partial upgrade / stripped image) must emit
+# the structured error, not a shell trace with no JSON on stdout.
+mkdir -p "$TMP/usr"
+cp -a "$ROOT/openwrt-feed/usrmanage/files/usr/." "$TMP/usr/"
+rm -f "$TMP/usr/lib/usrmanage/usrmanage-health.sh"
+_missing=$(sh "$TMP/usr/sbin/usrmanage" health --json 2>&1)
+[ "$_missing" = '{"ok":false,"error":"health_unavailable"}' ] \
+	&& ok "dispatcher health missing-helper emits JSON error" \
+	|| bad "dispatcher health missing-helper: $_missing"
+_missing_txt=$(sh "$TMP/usr/sbin/usrmanage" health 2>&1 || true)
+printf '%s' "$_missing_txt" | grep -q 'health_unavailable' \
+	&& ok "dispatcher health missing-helper text error" \
+	|| bad "dispatcher health missing-helper text: $_missing_txt"
+
 # Schema equality (exact keys/types) — deny-list grep is not the proof.
 if python3 - "$_got" <<'PY'
 import json, re, sys
@@ -161,7 +175,7 @@ _list=$(sh "$RPCD" list)
 printf '%s' "$_list" | grep -q '"health": {}' && ok "rpcd list health {}" || bad "rpcd list health: $_list"
 printf '%s' "$_list" | grep -qE '"health[?*]' && bad "rpcd health glob in list" || ok "rpcd health method has no glob"
 
-# rpcd health: no read_input; hostile body byte-identical to empty body.
+# rpcd health: no read_input (proven behaviorally below); hostile body byte-identical to empty body.
 cat > "$TMP/bin/usrmanage-stub" <<'STUB'
 #!/bin/sh
 printf '%s\n' '{"ok":true,"hostname":"dry-run","release":"24.10.x","uptime_s":86400,"load":[0.01,0.02,0.00],"wan":{"up":true,"ipv4":true,"ipv6":true},"lan":{"up":true},"wifi":{"radios_up":2,"radios_total":2,"assoc_count":4},"dhcp_lease_count":6}'
@@ -174,8 +188,6 @@ _c=$(printf '{"ssid":"leak"}' | sh "$RPCD" call health)
 [ "$_a" = "$_b" ] && ok "rpcd health hostile JSON body byte-identical" || bad "hostile body diverged: a=$_a b=$_b"
 [ "$_a" = "$_c" ] && ok "rpcd health stdin body ignored (byte-identical)" || bad "stdin body diverged"
 printf '%s' "$_a" | grep -q SecretSSID && bad "rpcd health echoed hostile ssid" || ok "rpcd health did not echo hostile body"
-grep -q 'read_input' "$RPCD" && grep -q 'METHOD" = "health"' "$RPCD" \
-	&& ok "rpcd health skips read_input" || bad "rpcd health still uses read_input"
 
 # Declared read: health is not in the write object of app ACL (already checked) and
 # rpcd plugin has no write branch for health.

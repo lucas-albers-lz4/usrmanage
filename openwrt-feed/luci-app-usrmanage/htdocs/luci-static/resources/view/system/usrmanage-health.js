@@ -60,13 +60,14 @@ function mountView(self, data) {
 	const vp = document.getElementById('view');
 	if (!vp)
 		return;
-	const nodes = self.render(data);
-	vp.textContent = '';
-	const list = Array.isArray(nodes) ? nodes : [ nodes ];
-	list.forEach(function(n) {
-		if (n)
-			vp.appendChild(n);
-	});
+	const node = self.render(data);
+	const old = self.rootNode ||
+		vp.querySelector('[data-testid^="usrmanage-health-"]');
+	self.rootNode = node;
+	if (old && old.parentNode)
+		old.parentNode.replaceChild(node, old);
+	else
+		vp.appendChild(node);
 }
 
 return view.extend({

@@ -70,11 +70,11 @@ Managed users default to **SSH-only**. Opt-in LuCI logins created by usrmanage:
 
 The **no-secrets guarantee applies to LuCI/ubus sessions only.** A readonly account with SSH can still reach K1–K7 classes via the shell with the same UNIX password; that residual is documented, not hidden.
 
-**Open gaps (2026-08-12 audit — read before relying on `--disable` as a revocation control):**
+**LuCI-login gaps (2026-08-12 audit) — resolved:** the controls below are now in force; the manual workarounds are no longer needed.
 
-- [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) — usrmanage only recognizes `config login` sections written in canonical UCI syntax at column 0. libuci also accepts indented sections, the abbreviated `c`/`o`/`l` keywords, and quoted section types. A login written in one of those forms is invisible: `set-luci-login --disable` reports success and audits `luci_revoke result=ok` while the login still authenticates, and `del` can leave it behind. Until this is fixed, verify `/etc/config/rpcd` by hand (`uci show rpcd | grep login`) after disabling web access for an account.
-- [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) — the first `set-luci-login` on a device changes `/etc/config/rpcd` from `0600` to `0644`. If any rpcd login on that device stores a crypt hash rather than `$p$user`, that hash becomes readable by every local user. Re-`chmod 0600 /etc/config/rpcd` after use until fixed.
-- [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) — same-role `set-role` that only repairs ACL drift does not revoke live sessions.
+- [#108](https://github.com/lucas-albers-lz4/usrmanage/issues/108) — **resolved** (fail-closed parser): `um_rpcd_config_parsable` refuses indented, abbreviated, quoted-type sections, quoted option/list keys, and trailing `#` lines instead of silently missing them, so a non-canonical login cannot survive disable/del. See the LuCI login lifecycle controls in [security-review.md](security-review.md).
+- [#109](https://github.com/lucas-albers-lz4/usrmanage/issues/109) — **resolved** (mode-preserving rewrite): `um_rpcd_atomic_replace` captures the destination mode (default `0600`) and the rollback path restores `0600`, so rewrites no longer widen `/etc/config/rpcd`.
+- [#105](https://github.com/lucas-albers-lz4/usrmanage/issues/105) — **resolved** (same-role revoke): after `um_luci_login_sync_acls` in `set-role` (including same-role), `_um_set_role_revoke` runs fail-closed and revokes live sessions.
 
 Enabling web login makes the SSH/sudo password reachable via unauthenticated `session.login` (often over HTTP). Prefer HTTPS and a management VLAN/VPN. Write ACL on `luci-app-usrmanage` remains root-equivalent.
 

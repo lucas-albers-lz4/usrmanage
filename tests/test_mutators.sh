@@ -283,7 +283,7 @@ grep -q 'arg5=--password-fd' "$USRMANAGE_STUB_LOG" && ok "rpcd add --password-fd
 grep -q 'arg6=0' "$USRMANAGE_STUB_LOG" && ok "rpcd add password-fd 0" || bad "rpcd add fd number"
 grep -q 'stdin=nonempty' "$USRMANAGE_STUB_LOG" && ok "rpcd add password on stdin" || bad "rpcd add stdin"
 # Password must not appear in stub argv log
-grep -F 'LabPass1!' "$USRMANAGE_STUB_LOG" && bad "password leaked into stub log" || ok "password not in stub argv log"
+grep -qF 'LabPass1!' "$USRMANAGE_STUB_LOG" && bad "password leaked into stub log" || ok "password not in stub argv log"
 
 rm -f "$USRMANAGE_STUB_LOG"
 sh "$RPCD" call set_luci_login '{"name":"ops","enable":true}' >/dev/null
@@ -305,7 +305,7 @@ grep -q 'arg1=add' "$USRMANAGE_STUB_LOG" && ok "rpcd add luci+scope cmd" || bad 
 grep -q 'arg5=--luci-login' "$USRMANAGE_STUB_LOG" && ok "rpcd add --luci-login" || bad "rpcd add luci-login: $(cat "$USRMANAGE_STUB_LOG")"
 grep -q 'arg6=--scope' "$USRMANAGE_STUB_LOG" && ok "rpcd add --scope" || bad "rpcd add --scope: $(cat "$USRMANAGE_STUB_LOG")"
 grep -q 'arg7=full' "$USRMANAGE_STUB_LOG" && ok "rpcd add scope full" || bad "rpcd add scope value: $(cat "$USRMANAGE_STUB_LOG")"
-grep -F 'LabPass1!' "$USRMANAGE_STUB_LOG" && bad "add+scope password leaked into stub log" || ok "add+scope password not in stub argv"
+grep -qF 'LabPass1!' "$USRMANAGE_STUB_LOG" && bad "add+scope password leaked into stub log" || ok "add+scope password not in stub argv"
 
 rm -f "$USRMANAGE_STUB_LOG"
 sh "$RPCD" call set_luci_login '{"name":"ops","enable":false}' >/dev/null

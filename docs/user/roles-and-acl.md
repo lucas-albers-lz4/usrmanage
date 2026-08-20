@@ -11,10 +11,10 @@ Readonly **is** the observer profile on the web: look, don’t touch, don’t se
 
 ## App access (this package)
 
-| Tier | ubus methods | Who |
-|------|--------------|-----|
+| Tier | CLI/ubus operations | Who |
+|------|---------------------|-----|
 | **health** | `health` | readonly owned LuCI (`luci-app-usrmanage-health`) |
-| **view** | `list`, `show`, `audit`, `doctor`, `policy` | SSH readonly / admin app read ACL |
+| **view** | `list`, `show`, `audit`, `doctor`, `policy` | readonly SSH CLI (view-only) · admin app read ACL over ubus |
 | **manage** | `add`, `del`, `set_role`, `passwd`, `set_luci_login`, `get_policy`, `set_policy` | admins / write ACL / root CLI |
 
 **Write ACL is root-equivalent:** a web session with `luci-app-usrmanage` write can create admins and change passwords (same blast radius as SSH admin + sudo).

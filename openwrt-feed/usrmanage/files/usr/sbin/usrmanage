@@ -273,6 +273,14 @@ case "$CMD" in
 		fi
 		;;
 	health)
+		if ! command -v um_cmd_health >/dev/null 2>&1; then
+			if [ "$JSON_OUT" = "1" ]; then
+				printf '%s\n' '{"ok":false,"error":"health_unavailable"}'
+				exit 0
+			fi
+			echo "error: health_unavailable" >&2
+			exit 1
+		fi
 		if [ "$JSON_OUT" = "1" ]; then
 			um_cmd_health --json
 		else
