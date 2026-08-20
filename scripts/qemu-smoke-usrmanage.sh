@@ -255,10 +255,25 @@ printf '%s' "$_h" | grep -qE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' \
 	&& die "health reply contains MAC"
 ok "readonly health reply has no ssid/key/MAC"
 
-if ssh_guest "ubus call usrmanage list \"{\\\"ubus_rpc_session\\\":\\\"${_obs_sid}\\\"}\"" >/dev/null 2>&1; then
-	die "readonly usrmanage.list call succeeded (must be denied)"
+# The rpcd ACL layer is enforced by uhttpd-mod-ubus on the HTTP /ubus path
+# (session.access, stock no_ubusauth=0), NOT on raw ubus: rpcd shell
+# plugins never validate the in-body ubus_rpc_session, so a root SSH
+# `ubus call usrmanage list` always succeeds regardless of ACLs. Prove the
+# deny on the real web path with the observer session instead.
+_obs_deny="$(curl -sS -H 'Content-Type: application/json' \
+	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"list\",{}]}" \
+	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
+if ! printf '%s' "$_obs_deny" | grep -q '"Access denied"'; then
+	die "readonly usrmanage.list not denied over HTTP /ubus (got: ${_obs_deny})"
 fi
-ok "readonly usrmanage.list call denied"
+# Positive control on the same path: health must be allowed for the observer.
+_obs_allow="$(curl -sS -H 'Content-Type: application/json' \
+	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"health\",{}]}" \
+	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
+if ! printf '%s' "$_obs_allow" | grep -q '"result"'; then
+	die "readonly usrmanage.health not allowed over HTTP /ubus (got: ${_obs_allow})"
+fi
+ok "readonly usrmanage.list denied + health allowed over HTTP /ubus"
 
 ssh_guest 'usrmanage set-luci-login umobs --disable' || true
 ssh_guest 'usrmanage del umobs' || die "del umobs failed"
