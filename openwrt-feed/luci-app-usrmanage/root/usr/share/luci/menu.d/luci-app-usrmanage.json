@@ -1,4 +1,15 @@
 {
+	"admin/system/usrmanage-health": {
+		"title": "Device health",
+		"order": 54,
+		"action": {
+			"type": "view",
+			"path": "system/usrmanage-health"
+		},
+		"depends": {
+			"acl": [ "luci-app-usrmanage-health" ]
+		}
+	},
 	"admin/system/usrmanage": {
 		"title": "User Management",
 		"order": 55,

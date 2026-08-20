@@ -46,11 +46,12 @@ View:
   audit [--json] [--last N]
   doctor [--json]
   policy [--json] [--full]
+  health [--json]
 
 Manage (root):
-  add <user> --role readonly|admin [--luci-login] [--password-fd N] [--json]
+  add <user> --role readonly|admin [--luci-login] [--scope app|full] [--password-fd N] [--json]
   set-role <user> --role readonly|admin [--json]
-  set-luci-login <user> --enable|--disable|--reset [--json]
+  set-luci-login <user> --enable|--disable|--reset [--scope app|full] [--json]
   passwd <user> [--password-fd N] [--json]
   del <user> [--purge-home] [--json]
   set-policy --preset openwrt|standard|strict|custom [options] [--json]
@@ -68,6 +69,7 @@ ROLE=
 PURGE=0
 LUCI_LOGIN=0
 LUCI_LOGIN_MODE=
+LUCI_LOGIN_SCOPE=
 NAME=
 LAST=50
 ALL=0
@@ -130,6 +132,11 @@ while [ "$#" -gt 0 ]; do
 		--reset)
 			LUCI_LOGIN_MODE=reset
 			shift
+			;;
+		--scope)
+			[ "$#" -ge 2 ] || um_die "error: --scope needs app|full"
+			LUCI_LOGIN_SCOPE=$2
+			shift 2
 			;;
 		--password-fd)
 			[ "$#" -ge 2 ] || um_die "error: --password-fd needs a number"
@@ -265,6 +272,21 @@ case "$CMD" in
 				"$UM_POL_PRESET" "$(um_policy_label "$UM_POL_PRESET")" "$UM_POL_MIN_LENGTH"
 		fi
 		;;
+	health)
+		if ! command -v um_cmd_health >/dev/null 2>&1; then
+			if [ "$JSON_OUT" = "1" ]; then
+				printf '%s\n' '{"ok":false,"error":"health_unavailable"}'
+				exit 0
+			fi
+			echo "error: health_unavailable" >&2
+			exit 1
+		fi
+		if [ "$JSON_OUT" = "1" ]; then
+			um_cmd_health --json
+		else
+			um_cmd_health
+		fi
+		;;
 	set-policy)
 		um_require_root
 		[ -n "$SET_PRESET" ] || um_die "usage: usrmanage set-policy --preset openwrt|standard|strict|custom ..."
@@ -283,9 +305,9 @@ case "$CMD" in
 		;;
 	add)
 		um_require_root
-		[ -n "$NAME" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login]"
-		[ -n "$ROLE" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login]"
-		um_with_lock um_mut_add "$NAME" "$ROLE" "$PASS_FD" "$LUCI_LOGIN"
+		[ -n "$NAME" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login] [--scope app|full]"
+		[ -n "$ROLE" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login] [--scope app|full]"
+		um_with_lock um_mut_add "$NAME" "$ROLE" "$PASS_FD" "$LUCI_LOGIN" "$LUCI_LOGIN_SCOPE"
 		;;
 	set-role)
 		um_require_root
@@ -295,9 +317,9 @@ case "$CMD" in
 		;;
 	set-luci-login)
 		um_require_root
-		[ -n "$NAME" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset"
-		[ -n "$LUCI_LOGIN_MODE" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset"
-		um_with_lock um_mut_set_luci_login "$NAME" "$LUCI_LOGIN_MODE"
+		[ -n "$NAME" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset [--scope app|full]"
+		[ -n "$LUCI_LOGIN_MODE" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset [--scope app|full]"
+		um_with_lock um_mut_set_luci_login "$NAME" "$LUCI_LOGIN_MODE" "$LUCI_LOGIN_SCOPE"
 		;;
 	passwd)
 		um_require_root

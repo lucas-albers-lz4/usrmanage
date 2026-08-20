@@ -10,6 +10,7 @@ below; testing/release details stay in the linked docs.
 - Read ACL: policy **name/label only**. Write ACL: `get_policy` / `set_policy` + mutators.
 - Passwords: never on argv or in audit/logs; LuCI → rpcd → `--password-fd` / stdin only.
 - LuCI web logins for managed users are **opt-in** (`set-luci-login` / Add checkbox); owned logins use `$p$user` only. Manual `luci-app-acl` still supported for foreign principals.
+- Readonly owned LuCI = **observer** (Device health ACL only; no secrets over ubus). Admin owned LuCI defaults to **app** scope; `*` only via explicit `--scope full` (never auto on upgrade).
 - Admin = full root via sudo after password (no NOPASSWD) — by design.
 
 ## Code conventions

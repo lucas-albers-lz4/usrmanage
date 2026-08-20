@@ -1,0 +1,14 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# luci-app postinst: migrate owned readonly LuCI logins to session+health.
+# Preserve admin app matrix; never auto-grant *. Ownership gate + flock/tx.
+# Never unmarked sections or username root.
+
+[ -f /usr/lib/usrmanage/usrmanage-lib.sh ] || exit 0
+# shellcheck disable=SC1091
+. /usr/lib/usrmanage/usrmanage-lib.sh
+
+command -v um_luci_login_migrate_observer >/dev/null 2>&1 || exit 0
+# Fail the postinst (uci-defaults retries) rather than leaving elevated ACLs.
+um_with_lock um_luci_login_migrate_observer || exit 1
+exit 0

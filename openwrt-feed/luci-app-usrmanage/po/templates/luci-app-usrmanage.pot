@@ -413,3 +413,107 @@ msgstr ""
 #: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Error"
 msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "User Management only"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Full LuCI (all menus)"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Readonly LuCI logins see Device health only — not user accounts, wireless keys, or configuration backups."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Readonly LuCI logins are for device health only (System → Device health), not user administration."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "LuCI web scope"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Full LuCI exposes all menus and configuration (including wireless keys and backups). Prefer HTTPS and a management network."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "%d days"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "%d hours"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "%d minutes"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Up"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Down"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Device health"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Health data is unavailable (%s)."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Redacted device status for observer logins. Wireless keys, user accounts, and configuration secrets are not shown here."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "This LuCI login is for device health only, not account administration."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Hostname"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "OpenWrt release"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Uptime"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Load (1 / 5 / 15 min)"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "WAN link"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "WAN IPv4"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "WAN IPv6"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "LAN link"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Wi-Fi radios up"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "Wi-Fi associated stations"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage-health.js
+msgid "DHCP lease count"
+msgstr ""
