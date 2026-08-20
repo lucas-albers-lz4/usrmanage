@@ -6,21 +6,28 @@
 const fs = require('fs');
 const path = require('path');
 
-const view = path.join(__dirname, '../openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js');
+const views = [
+	'usrmanage.js',
+	'usrmanage-health.js'
+].map(function(name) {
+	return path.join(__dirname, '../openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system', name);
+});
 const pot = path.join(__dirname, '../openwrt-feed/luci-app-usrmanage/po/templates/luci-app-usrmanage.pot');
 
-const src = fs.readFileSync(view, 'utf8');
 const potText = fs.readFileSync(pot, 'utf8');
-
 const re = /_\(\s*'((?:\\'|[^'])*)'\s*\)|_\(\s*"((?:\\"|[^"])*)"\s*\)/g;
 const strings = new Set();
-let m;
-while ((m = re.exec(src)) !== null) {
-	strings.add((m[1] !== undefined ? m[1] : m[2]).replace(/\\'/g, "'").replace(/\\"/g, '"'));
+
+for (const view of views) {
+	const src = fs.readFileSync(view, 'utf8');
+	let m;
+	while ((m = re.exec(src)) !== null) {
+		strings.add((m[1] !== undefined ? m[1] : m[2]).replace(/\\'/g, "'").replace(/\\"/g, '"'));
+	}
 }
 
 if (strings.size < 5) {
-	console.error('expected more _() strings in view; found', strings.size);
+	console.error('expected more _() strings in views; found', strings.size);
 	process.exit(1);
 }
 

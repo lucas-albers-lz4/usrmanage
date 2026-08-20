@@ -15,10 +15,12 @@
 
 ## Actors
 
-- **Manage LuCI session** — read+write ACL on `luci-app-usrmanage`
-- **View LuCI session** — read ACL only
+- **Manage LuCI session** — write ACL on `luci-app-usrmanage` (admin app scope)
+- **Full LuCI owned session** — admin with `--scope full` (`*` ACL; explicit opt-in)
+- **Observer LuCI session** — readonly owned login; `health` ACL only (device health, no secrets over ubus)
+- **View LuCI session (legacy)** — pre-0.1.7 readonly with app read ACL (removed in 0.1.7 upgrade rewrite)
 - **Root CLI operator**
-- **SSH readonly managed user** — no sudo; CLI view-only
+- **SSH readonly managed user** — no sudo; CLI view-only; same password as observer LuCI if enabled
 - **Compromised non-wheel user**
 - **Compromised root / full device compromise** — out of TCB; can rewrite audit
 - **Publish job (`publish-packages`)** — holds the signing keys and the deploy key; anything that can inject shell into it, or that it fetches unpinned, is inside the release TCB

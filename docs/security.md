@@ -64,8 +64,11 @@ Managed users default to **SSH-only**. Opt-in LuCI logins created by usrmanage:
 
 - Always use `$p$username` (UNIX shadow). Empty or locked (`!`/`*`) shadow hashes are refused — rpcd treats an empty hash as **any password**.
 - Are marked `option usrmanage '1'` and only mutated when marker + registry + `$p$` match.
-- Never grant `*` or `luci-base` write; use fixed role ACL matrix (see [roles-and-acl.md](user/roles-and-acl.md)).
+- **Readonly owned:** session + health ACL only — Device health menu; no user table, wireless keys, or config backups over ubus.
+- **Admin owned (default app scope):** User Management ACL only (same as pre-0.1.7). **Full LuCI (`*`)** only with explicit `--scope full` / admin scope control — never auto-granted on upgrade.
 - Revoke the target user's ubus sessions on disable, role change, delete, and password change (live sessions keep ACLs until destroyed).
+
+The **no-secrets guarantee applies to LuCI/ubus sessions only.** A readonly account with SSH can still reach K1–K7 classes via the shell with the same UNIX password; that residual is documented, not hidden.
 
 **Open gaps (2026-08-12 audit — read before relying on `--disable` as a revocation control):**
 

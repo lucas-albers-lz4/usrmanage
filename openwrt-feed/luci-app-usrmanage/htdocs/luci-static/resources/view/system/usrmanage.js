@@ -7,7 +7,7 @@
 'require poll';
 
 /* Keep in sync with openwrt-feed/luci-app-usrmanage/Makefile PKG_VERSION */
-const APP_VERSION = '0.1.6';
+const APP_VERSION = '0.1.7';
 
 const callList = rpc.declare({
 	object: 'usrmanage',
@@ -63,7 +63,7 @@ const callSetPolicy = rpc.declare({
 const callAdd = rpc.declare({
 	object: 'usrmanage',
 	method: 'add',
-	params: [ 'name', 'role', 'password', 'luci_login' ],
+	params: [ 'name', 'role', 'password', 'luci_login', 'scope' ],
 	expect: { '': { ok: true } }
 });
 
@@ -84,7 +84,7 @@ const callSetRole = rpc.declare({
 const callSetLuciLogin = rpc.declare({
 	object: 'usrmanage',
 	method: 'set_luci_login',
-	params: [ 'name', 'mode' ],
+	params: [ 'name', 'mode', 'scope' ],
 	expect: { '': { ok: true } }
 });
 
@@ -112,6 +112,58 @@ const PRESET_VALUES = {
 		require_digit: true, require_special: true
 	}
 };
+
+function luciScopeForRole(role, wantLuci, scopeSelect) {
+	if (!wantLuci || role !== 'admin')
+		return '';
+	const v = scopeSelect ? scopeSelect.value : 'app';
+	return (v === 'full') ? 'full' : 'app';
+}
+
+function buildLuciScopeSelect(defaultScope) {
+	return E('select', {
+		'class': 'cbi-input-select',
+		'data-testid': 'usrmanage-luci-scope'
+	}, [
+		E('option', {
+			'value': 'app',
+			'selected': defaultScope !== 'full' ? 'selected' : null
+		}, _('User Management only')),
+		E('option', {
+			'value': 'full',
+			'selected': defaultScope === 'full' ? 'selected' : null
+		}, _('Full LuCI (all menus)'))
+	]);
+}
+
+function buildReadonlyLuciBanner() {
+	return E('div', {
+		'class': 'alert-message notice',
+		'data-testid': 'usrmanage-readonly-luci-banner'
+	}, [
+		E('p', {}, _('Readonly LuCI logins see Device health only — not user accounts, wireless keys, or configuration backups.'))
+	]);
+}
+
+function wireLuciRoleExtras(roleSelect, luciCheck, readonlyBanner, scopeWrap) {
+	const sync = function() {
+		const role = roleSelect.value;
+		const wantLuci = !!luciCheck.checked;
+		if (wantLuci && role === 'readonly') {
+			readonlyBanner.removeAttribute('hidden');
+		} else {
+			readonlyBanner.setAttribute('hidden', 'hidden');
+		}
+		if (wantLuci && role === 'admin') {
+			scopeWrap.removeAttribute('hidden');
+		} else {
+			scopeWrap.setAttribute('hidden', 'hidden');
+		}
+	};
+	roleSelect.addEventListener('change', sync);
+	luciCheck.addEventListener('change', sync);
+	sync();
+}
 
 function hasWriteAcl() {
 	try {
@@ -408,7 +460,7 @@ return view.extend({
 					actions.push(E('button', {
 						'class': 'btn cbi-button',
 						'data-testid': 'usrmanage-luci-enable',
-						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, 'enable')
+						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, 'enable', u.role)
 					}, _('Enable LuCI')));
 					actions.push(' ');
 				}
@@ -416,7 +468,7 @@ return view.extend({
 					actions.push(E('button', {
 						'class': 'btn cbi-button',
 						'data-testid': 'usrmanage-luci-disable',
-						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, 'disable')
+						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, 'disable', u.role)
 					}, _('Disable LuCI')));
 					actions.push(' ');
 				}
@@ -424,7 +476,7 @@ return view.extend({
 					actions.push(E('button', {
 						'class': 'btn cbi-button',
 						'data-testid': 'usrmanage-luci-reset',
-						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, 'reset')
+						'click': ui.createHandlerFn(self, 'handleLuciLogin', u.name, 'reset', u.role)
 					}, _('Reset LuCI')));
 					actions.push(' ');
 				}
@@ -515,6 +567,8 @@ return view.extend({
 			E('h2', {}, _('User Management')),
 			E('div', { 'class': 'cbi-map-descr' }, [
 				_('Manage local UNIX/SSH accounts on this device. LuCI web login is optional per user (same UNIX password via $p$).'),
+				E('br'),
+				_('Readonly LuCI logins are for device health only (System → Device health), not user administration.'),
 				E('br'),
 				_('Admin role grants wheel + sudo (full root after password). Write ACL on this app is root-equivalent. Audit log is operational (local + syslog), not compliance-grade evidence.')
 			]),
@@ -726,6 +780,18 @@ return view.extend({
 			'type': 'checkbox',
 			'data-testid': 'usrmanage-add-luci-login'
 		});
+		const readonlyBanner = buildReadonlyLuciBanner();
+		readonlyBanner.setAttribute('hidden', 'hidden');
+		const scopeSelect = buildLuciScopeSelect('app');
+		const scopeWrap = E('div', { 'class': 'cbi-value', 'hidden': 'hidden' }, [
+			E('label', { 'class': 'cbi-value-title' }, _('LuCI web scope')),
+			E('div', { 'class': 'cbi-value-field' }, [
+				scopeSelect,
+				E('div', { 'class': 'cbi-value-description' },
+					_('Full LuCI exposes all menus and configuration (including wireless keys and backups). Prefer HTTPS and a management network.'))
+			])
+		]);
+		wireLuciRoleExtras(roleSelect, luciCheck, readonlyBanner, scopeWrap);
 		const addBtn = E('button', {
 			'class': 'btn cbi-button-positive cbi-button-disabled',
 			'disabled': 'disabled',
@@ -753,7 +819,7 @@ return view.extend({
 				ui.addNotification(null, E('p', {}, _('Password does not meet the current policy')), 'danger');
 				return;
 			}
-			return callAdd(name, role, p1, wantLuci).then(function(res) {
+			return callAdd(name, role, p1, wantLuci, luciScopeForRole(role, wantLuci, scopeSelect)).then(function(res) {
 				passInput.value = '';
 				pass2Input.value = '';
 				return finishMutator(res, _('User added'), self);
@@ -790,6 +856,8 @@ return view.extend({
 							_('Uses the same UNIX password. Off by default. Exposes this password to the web login path.'))
 					])
 				]),
+				readonlyBanner,
+				scopeWrap,
 				policyBox
 			]),
 			E('div', { 'class': 'right' }, [
@@ -800,7 +868,7 @@ return view.extend({
 		]);
 	},
 
-	handleLuciLogin: function(name, mode, ev) {
+	handleLuciLogin: function(name, mode, role, ev) {
 		const self = this;
 		const isEnable = (mode === 'enable');
 		const isReset = (mode === 'reset');
@@ -815,8 +883,23 @@ return view.extend({
 				? _('Removes the usrmanage-owned web login (even if tampered). Allows re-enabling with a fresh configuration.')
 				: _('Removes the usrmanage-owned web login. SSH still works. If this is your current session, you will be logged out.');
 
-		ui.showModal(title, [
-			E('p', {}, body),
+		const modalKids = [ E('p', {}, body) ];
+		let scopeSelect = null;
+		if (isEnable && role === 'readonly')
+			modalKids.push(buildReadonlyLuciBanner());
+		if (isEnable && role === 'admin') {
+			scopeSelect = buildLuciScopeSelect('app');
+			modalKids.push(E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('LuCI web scope')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					scopeSelect,
+					E('div', { 'class': 'cbi-value-description' },
+						_('Full LuCI exposes all menus and configuration (including wireless keys and backups). Prefer HTTPS and a management network.'))
+				])
+			]));
+		}
+
+		ui.showModal(title, modalKids.concat([
 			E('div', { 'class': 'right' }, [
 				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
 				' ',
@@ -824,7 +907,10 @@ return view.extend({
 					'class': isEnable ? 'btn cbi-button-positive' : 'btn cbi-button-negative',
 					'data-testid': isEnable ? 'usrmanage-luci-enable-confirm' : isReset ? 'usrmanage-luci-reset-confirm' : 'usrmanage-luci-disable-confirm',
 					'click': ui.createHandlerFn(self, function() {
-						return callSetLuciLogin(name, mode).then(function(res) {
+						const scope = isEnable
+							? luciScopeForRole(role, true, scopeSelect)
+							: '';
+						return callSetLuciLogin(name, mode, scope).then(function(res) {
 							const successMsg = isEnable ? _('LuCI login enabled') : isReset ? _('LuCI login reset') : _('LuCI login disabled');
 							return finishMutator(res, successMsg, self);
 						}).catch(function(err) {
@@ -835,7 +921,7 @@ return view.extend({
 					})
 				}, isEnable ? _('Enable') : isReset ? _('Reset') : _('Disable'))
 			])
-		]);
+		]));
 	},
 
 	handleSetRole: function(name, current, ev) {

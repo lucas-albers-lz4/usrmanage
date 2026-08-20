@@ -313,3 +313,81 @@ msgstr "Verwendet das UNIX-Passwort erneut für die Web-Anmeldung ($p$). Bevorzu
 msgid "Uses the same UNIX password. Off by default. Exposes this password to the web login path."
 msgstr "Verwendet dasselbe UNIX-Passwort. Standardmäßig aus. Macht dieses Passwort über den Web-Anmeldeweg erreichbar."
 
+msgid "User Management only"
+msgstr "Nur Benutzerverwaltung"
+
+msgid "Full LuCI (all menus)"
+msgstr "Vollständiges LuCI (alle Menüs)"
+
+msgid "Readonly LuCI logins see Device health only — not user accounts, wireless keys, or configuration backups."
+msgstr "Schreibgeschützte LuCI-Anmeldungen sehen nur Gerätestatus — keine Benutzerkonten, WLAN-Schlüssel oder Konfigurationssicherungen."
+
+msgid "Readonly LuCI logins are for device health only (System → Device health), not user administration."
+msgstr "Schreibgeschützte LuCI-Anmeldungen dienen nur dem Gerätestatus (System → Gerätestatus), nicht der Kontoverwaltung."
+
+msgid "LuCI web scope"
+msgstr "LuCI-Web-Umfang"
+
+msgid "Full LuCI exposes all menus and configuration (including wireless keys and backups). Prefer HTTPS and a management network."
+msgstr "Vollständiges LuCI zeigt alle Menüs und die Konfiguration (einschließlich WLAN-Schlüssel und Sicherungen). Bevorzugen Sie HTTPS und ein Management-Netzwerk."
+
+msgid "%d days"
+msgstr "%d Tage"
+
+msgid "%d hours"
+msgstr "%d Stunden"
+
+msgid "%d minutes"
+msgstr "%d Minuten"
+
+msgid "Up"
+msgstr "Aktiv"
+
+msgid "Down"
+msgstr "Inaktiv"
+
+msgid "Device health"
+msgstr "Gerätestatus"
+
+msgid "Health data is unavailable (%s)."
+msgstr "Statusdaten sind nicht verfügbar (%s)."
+
+msgid "Redacted device status for observer logins. Wireless keys, user accounts, and configuration secrets are not shown here."
+msgstr "Reduzierter Gerätestatus für Beobachter-Anmeldungen. WLAN-Schlüssel, Benutzerkonten und Konfigurationsgeheimnisse werden hier nicht angezeigt."
+
+msgid "This LuCI login is for device health only, not account administration."
+msgstr "Diese LuCI-Anmeldung dient nur dem Gerätestatus, nicht der Kontoverwaltung."
+
+msgid "Hostname"
+msgstr "Hostname"
+
+msgid "OpenWrt release"
+msgstr "OpenWrt-Version"
+
+msgid "Uptime"
+msgstr "Betriebszeit"
+
+msgid "Load (1 / 5 / 15 min)"
+msgstr "Last (1 / 5 / 15 Min.)"
+
+msgid "WAN link"
+msgstr "WAN-Verbindung"
+
+msgid "WAN IPv4"
+msgstr "WAN IPv4"
+
+msgid "WAN IPv6"
+msgstr "WAN IPv6"
+
+msgid "LAN link"
+msgstr "LAN-Verbindung"
+
+msgid "Wi-Fi radios up"
+msgstr "WLAN-Funkgeräte aktiv"
+
+msgid "Wi-Fi associated stations"
+msgstr "WLAN zugeordnete Stationen"
+
+msgid "DHCP lease count"
+msgstr "Anzahl DHCP-Leases"
+

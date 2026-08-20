@@ -29,6 +29,7 @@
 - [ ] Document observed BusyBox / sudo versions per release line
 - [ ] Optional: PR CI single-cell SDK compile (cost vs coverage)
 - [x] Opt-in LuCI login lifecycle (`set-luci-login` + UI) — [#86](https://github.com/lucas-albers-lz4/usrmanage/issues/86)
+- [x] Readonly owned LuCI = observer (Device health, split ACL, admin `--scope full`) — v0.1.7; [readonly-observer-luci.md](developer/readonly-observer-luci.md)
 - [ ] Upstream PRs to `openwrt/packages` + `openwrt/luci` ([upstream.md](upstream.md))
 - [ ] Remote syslog deployment examples for audit retention
 
