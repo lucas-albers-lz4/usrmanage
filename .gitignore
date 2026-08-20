@@ -32,6 +32,10 @@ fwlive-feed.rsa.pub
 .idea/
 .vscode/
 
+# Python
+__pycache__/
+*.pyc
+
 # Node
 node_modules/
 test-results/
