@@ -1797,6 +1797,7 @@ um_mut_add() {
 	_role=$2
 	_pfd=$3
 	_luci_login=${4:-0}
+	_luci_scope=${5:-}
 	um_mut_require_valid_username "$_name" "$_role"
 	um_validate_role "$_role" || {
 		um_audit denied "$_name" denied invalid_role
@@ -1847,7 +1848,7 @@ um_mut_add() {
 	um_set_password "$_name" "$_pfd" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 	um_registry_add "$_name" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" registry "error: registry_failed"
 	if [ "$_luci_login" = "1" ] && command -v um_luci_login_enable_user >/dev/null 2>&1; then
-		if ! um_luci_login_enable_user "$_name"; then
+		if ! um_luci_login_enable_user "$_name" "$_luci_scope"; then
 			um_luci_login_remove_owned_best_effort "$_name" 2>/dev/null || true
 			um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" luci_login \
 				"error: ${UM_LUCI_ERR:-luci_login_failed}"

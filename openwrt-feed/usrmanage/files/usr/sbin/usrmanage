@@ -49,7 +49,7 @@ View:
   health [--json]
 
 Manage (root):
-  add <user> --role readonly|admin [--luci-login] [--password-fd N] [--json]
+  add <user> --role readonly|admin [--luci-login] [--scope app|full] [--password-fd N] [--json]
   set-role <user> --role readonly|admin [--json]
   set-luci-login <user> --enable|--disable|--reset [--scope app|full] [--json]
   passwd <user> [--password-fd N] [--json]
@@ -297,9 +297,9 @@ case "$CMD" in
 		;;
 	add)
 		um_require_root
-		[ -n "$NAME" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login]"
-		[ -n "$ROLE" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login]"
-		um_with_lock um_mut_add "$NAME" "$ROLE" "$PASS_FD" "$LUCI_LOGIN"
+		[ -n "$NAME" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login] [--scope app|full]"
+		[ -n "$ROLE" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login] [--scope app|full]"
+		um_with_lock um_mut_add "$NAME" "$ROLE" "$PASS_FD" "$LUCI_LOGIN" "$LUCI_LOGIN_SCOPE"
 		;;
 	set-role)
 		um_require_root

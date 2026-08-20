@@ -158,8 +158,13 @@ run_manage_password() {
 	_name=$1
 	_role=$2
 	_luci=$3
+	_scope=$4
 	if [ "$_luci" = "1" ]; then
-		run_password_cli add "$_name" --role "$_role" --luci-login
+		if [ -n "$_scope" ]; then
+			run_password_cli add "$_name" --role "$_role" --luci-login --scope "$_scope"
+		else
+			run_password_cli add "$_name" --role "$_role" --luci-login
+		fi
 	else
 		run_password_cli add "$_name" --role "$_role"
 	fi
@@ -209,10 +214,10 @@ case "$1" in
 		echo '  "policy": {},'
 		echo '  "get_policy": {},'
 		echo '  "set_policy": { "preset": "", "min_length": 8, "reject_username": true, "require_lower": false, "require_upper": false, "require_digit": false, "require_special": false },'
-		echo '  "add": { "name": "", "role": "", "password": "", "luci_login": false },'
+		echo '  "add": { "name": "", "role": "", "password": "", "luci_login": false, "scope": "" },'
 		echo '  "del": { "name": "", "purge_home": false },'
 		echo '  "set_role": { "name": "", "role": "" },'
-		echo '  "set_luci_login": { "name": "", "mode": "" },'
+		echo '  "set_luci_login": { "name": "", "mode": "", "scope": "" },'
 		echo '  "passwd": { "name": "", "password": "" }'
 		echo '}'
 		;;
@@ -264,7 +269,8 @@ case "$1" in
 				_name=$(json_get name)
 				_role=$(json_get role)
 				_luci=$(json_get_bool luci_login)
-				run_manage_password "$_name" "$_role" "$_luci"
+				_scope=$(json_get scope)
+				run_manage_password "$_name" "$_role" "$_luci" "$_scope"
 				;;
 			del)
 				_name=$(json_get name)
