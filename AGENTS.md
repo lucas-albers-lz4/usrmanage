@@ -36,6 +36,14 @@ PR / done gate: `./scripts/smoke-host.sh` (needs `flock` locally). Host-only —
 
 Lab and Playwright: [docs/developer/testing.md](docs/developer/testing.md). Never put passwords in MCP traces.
 
+## CodeRabbit (review bot)
+
+Draft PRs are **not** reviewed (`auto_review.drafts: false`). Mark the PR ready
+when the work is final — that starts the review. CodeRabbit takes ~5–10 min to
+write a round; **wait for the round to complete before pushing fixes**, batch
+all fixes into one push, and never declare the gate green while a round is
+still in flight. Full protocol: [docs/developer/coderabbit.md](docs/developer/coderabbit.md).
+
 ## Release / feed
 
 Bump **third octet** of `PKG_VERSION` in both Makefiles (+ `APP_VERSION` mirror in the view); `PKG_RELEASE:=1`; tag `v0.1.N`. Never commit secrets. Details: [docs/release.md](docs/release.md), [docs/binary-feed.md](docs/binary-feed.md).
