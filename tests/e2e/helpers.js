@@ -242,6 +242,10 @@ async function expectLuciLoginDenied(page, username, password = E2E_USER_PASSWOR
 	await loginBtn.click();
 	// Stay on the login form — no session cookie / admin chrome.
 	await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible({ timeout: 15_000 });
+	// Confirm no sysauth cookie was issued (login truly denied).
+	const cookies = await page.context().cookies();
+	const hasSysauth = cookies.some((c) => c.name === 'sysauth' || c.name === 'sysauth_https');
+	expect(hasSysauth, 'sysauth cookie must not be set after a denied login').toBe(false);
 	await page.goto('/cgi-bin/luci/admin/system/usrmanage', {
 		waitUntil: 'domcontentloaded',
 	});

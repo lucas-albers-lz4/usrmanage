@@ -351,7 +351,11 @@ msgid "Allow LuCI web login"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
-msgid "Uses the same UNIX password. Off by default. Exposes this password to the web login path."
+msgid "LuCI menus follow UNIX role: admin → Full LuCI; readonly → diagnostic (Status/Network/health + view-only User Management)."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Uses the same UNIX password. Off by default. Exposes this password to the web login path. LuCI menus follow the UNIX role (admin=Full, readonly=diagnostic)."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js

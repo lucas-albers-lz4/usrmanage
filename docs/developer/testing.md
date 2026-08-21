@@ -83,12 +83,12 @@ Specs use unique usernames (`pwflow_*`) and clean up via SSH/`usrmanage del` whe
 
 ### LuCI login matrix (role × opt-in)
 
-Owned web login is **opt-in** (`--luci-login` / Add checkbox). Efficient coverage is a **2×2 allow/deny** plus one disable lifecycle — not every disable×role or `--scope full` cell (those stay in `qemu-smoke-usrmanage.sh` + `test_luci_login.sh`).
+Owned web login is **opt-in** (`--luci-login` / Add checkbox). Scope is **role-locked** (no `--scope` picker); `--scope` is rejected with `luci_scope_role_locked`. Efficient coverage is a **2×2 allow/deny** plus one disable lifecycle — not every disable×role cell (full ACL probes stay in `qemu-smoke-usrmanage.sh` + `test_luci_login.sh`).
 
 | Role | LuCI | Expect (e2e) | Host state pin |
 |------|------|--------------|----------------|
-| readonly | on | login → Device health | `owned` + session/health, no app write |
-| admin | on | login → User Management | `owned` + app read/write, no health |
+| readonly | on | login → Device health | `owned` + diagnostic 8-set reads (session, health, app, status-{index,routes,realtime}, network-{config,diagnostics}), no writes |
+| admin | on | login → Full LuCI (User Management + all menus) | `owned` + scope=full: `read *` / `write *` |
 | readonly | off (never enabled) | cannot web-login | `none`, no `$p$user` |
 | admin | off (never enabled) | cannot web-login | `none`, no `$p$user` |
 | readonly | disable after enable | cannot web-login | `none` (lifecycle) |

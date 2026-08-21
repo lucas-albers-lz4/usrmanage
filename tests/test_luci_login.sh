@@ -814,7 +814,7 @@ rm -rf "$_star_dir"
 
 # --scope <any> → luci_scope_role_locked (scope is always role-derived; CLI rejects it immediately)
 printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
-um_with_lock um_mut_set_role ops readonly 2>/dev/null || true
+um_with_lock um_mut_set_role ops readonly
 _lerr=$(um_with_lock um_mut_set_luci_login ops enable full 2>&1) && bad "--scope should be rejected for readonly" \
 	|| ok "--scope rejected for readonly"
 printf '%s' "$_lerr" | grep -q 'luci_scope_role_locked' && ok "readonly --scope denial token" || bad "readonly --scope token: $_lerr"
@@ -846,7 +846,6 @@ grep -q "option usrmanage_scope 'full'" "$USRMANAGE_RPCD_CONFIG" && ok "promote 
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "owned after promote" || bad "state after promote"
 
 um_with_lock um_mut_set_role ops admin
-_seed_unparsable abbreviated
 
 # Upgrade migration: legacy admin app → full; legacy readonly session+app → diagnostic; skip unmarked/root
 printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
@@ -1007,7 +1006,13 @@ fi
 printf 'goodpass12\n' | um_with_lock um_mut_add mxaon admin 0 1
 [ "$(um_luci_login_state mxaon)" = "owned" ] && ok "matrix: admin luci=1 → owned" \
 	|| bad "matrix mxaon $(um_luci_login_state mxaon)"
-grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" \
+awk '
+	BEGIN { inlogin=0; is=0; hasw=0 }
+	/^config login/ { if (inlogin && is && hasw) found=1; inlogin=1; is=0; hasw=0; next }
+	inlogin && /option username '\''mxaon'\''/ { is=1 }
+	inlogin && /list write '\''[*]'\''/ { hasw=1 }
+	END { if (inlogin && is && hasw) found=1; exit !found }
+' "$USRMANAGE_RPCD_CONFIG" \
 	&& ok "matrix: admin luci=1 write *" || bad "matrix mxaon missing write *"
 grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" \
 	&& awk '

@@ -24,7 +24,8 @@ test.describe('LuCI User Management', () => {
 
 	test.beforeAll(async () => {
 		await sshDelUser(keeper);
-		await sshAddUser(keeper, 'admin');
+		// keeper may still exist if last_admin blocked del — acceptable; it is already admin.
+		await sshAddUser(keeper, 'admin').catch(() => {});
 	});
 
 	test.afterAll(async () => {
@@ -360,7 +361,8 @@ test.describe('LuCI login matrix (role × luci opt-in)', () => {
 
 	test.beforeAll(async () => {
 		await sshDelUser(keeper);
-		await sshAddUser(keeper, 'admin');
+		// keeper may still exist if last_admin blocked del — acceptable; it is already admin.
+		await sshAddUser(keeper, 'admin').catch(() => {});
 	});
 
 	test.afterAll(async () => {
@@ -435,8 +437,8 @@ test.describe('LuCI login matrix (role × luci opt-in)', () => {
 		const logout = page.getByRole('link', { name: /log\s*out/i })
 			.or(page.getByRole('button', { name: /log\s*out/i }))
 			.or(page.getByTestId('usrmanage-health-logout'));
-		await expect(logout.first()).toBeVisible({ timeout: 10_000 });
-		await logout.first().click();
+		await expect(logout).toBeVisible({ timeout: 10_000 });
+		await logout.click();
 		await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible({ timeout: 30_000 });
 	});
 });

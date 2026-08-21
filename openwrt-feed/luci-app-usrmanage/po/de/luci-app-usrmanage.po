@@ -310,8 +310,11 @@ msgstr "Manipuliert"
 msgid "This reuses the UNIX password for web login ($p$). Prefer HTTPS and a management network."
 msgstr "Verwendet das UNIX-Passwort erneut für die Web-Anmeldung ($p$). Bevorzugen Sie HTTPS und ein Management-Netzwerk."
 
-msgid "Uses the same UNIX password. Off by default. Exposes this password to the web login path."
-msgstr "Verwendet dasselbe UNIX-Passwort. Standardmäßig aus. Macht dieses Passwort über den Web-Anmeldeweg erreichbar."
+msgid "LuCI menus follow UNIX role: admin → Full LuCI; readonly → diagnostic (Status/Network/health + view-only User Management)."
+msgstr ""
+
+msgid "Uses the same UNIX password. Off by default. Exposes this password to the web login path. LuCI menus follow the UNIX role (admin=Full, readonly=diagnostic)."
+msgstr "Verwendet dasselbe UNIX-Passwort. Standardmäßig aus. Macht dieses Passwort über den Web-Anmeldeweg erreichbar. LuCI-Menüs folgen der UNIX-Rolle (admin=Vollständig, readonly=Diagnose)."
 
 msgid "View only — you can list users and audit events, but not add, change roles, passwords, policy, or LuCI login."
 msgstr "Nur Ansicht — Benutzer und Audit können gelesen werden, aber nicht hinzufügen, Rollen, Passwörter, Richtlinie oder LuCI-Login ändern."

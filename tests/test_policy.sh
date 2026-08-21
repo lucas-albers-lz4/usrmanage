@@ -101,8 +101,6 @@ for _cell in 'standard:10:1:1:1:0' 'strict:12:1:1:1:1' 'openwrt:8:0:0:0:0'; do
 		&& [ "$UM_POL_REQUIRE_DIGIT" = "$_di" ] && [ "$UM_POL_REQUIRE_SPECIAL" = "$_sp" ] \
 		&& ok "preset $_p toggles" \
 		|| bad "preset $_p toggles lo=$UM_POL_REQUIRE_LOWER up=$UM_POL_REQUIRE_UPPER di=$UM_POL_REQUIRE_DIGIT sp=$UM_POL_REQUIRE_SPECIAL"
-	[ "$(um_policy_label "$_p")" = "$(echo "$_p" | awk '{print toupper(substr($0,1,1)) substr($0,2)}' | sed 's/openwrt/OpenWrt/;s/standard/Standard/;s/strict/Strict/')" ] \
-		|| true
 	case "$_p" in
 		openwrt) [ "$(um_policy_label "$_p")" = "OpenWrt" ] && ok "label OpenWrt" || bad "label $(um_policy_label "$_p")" ;;
 		standard) [ "$(um_policy_label "$_p")" = "Standard" ] && ok "label Standard" || bad "label $(um_policy_label "$_p")" ;;
@@ -117,15 +115,18 @@ um_policy_set_fields custom 14 1 1 1 1 0 || bad "set_fields custom"
 
 # Password gate under strict
 um_policy_apply_preset_values strict
-if printf 'Short1!\n' | um_password_capture_fd ops 0 2>"$TMP/pol.err"; then
+printf 'Short1!\n' > "$TMP/pol_in"
+if um_password_capture_fd ops 3 3<"$TMP/pol_in" 2>"$TMP/pol.err"; then
 	bad "strict should reject Short1!"
 else
 	ok "strict rejects short password"
 fi
-[ -n "${UM_POL_FAIL_REASON:-}" ] && ok "strict fail reason=$UM_POL_FAIL_REASON" \
-	|| ok "strict rejection (reason optional)"
+[ "${UM_POL_FAIL_REASON:-}" = "min_length" ] \
+	&& ok "strict fail reason token: min_length" \
+	|| bad "strict fail reason: want min_length, got '${UM_POL_FAIL_REASON:-}'"
 
-if printf 'StrictPass12!\n' | um_password_capture_fd ops 0 2>"$TMP/pol2.err"; then
+printf 'StrictPass12!\n' > "$TMP/pol2_in"
+if um_password_capture_fd ops 3 3<"$TMP/pol2_in" 2>"$TMP/pol2.err"; then
 	ok "strict accepts matching password"
 else
 	bad "strict rejected good password: reason=${UM_POL_FAIL_REASON:-} $(cat "$TMP/pol2.err")"

@@ -59,11 +59,11 @@ um_with_lock um_mut_set_role alice admin
 um_in_wheel alice && ok "flow: alice promote → wheel" || bad "flow: alice not in wheel after promote"
 [ "$(um_role_of alice)" = "admin" ] && ok "flow: alice role admin" || bad "flow: alice role $(um_role_of alice)"
 grep -q 'grant user=alice\|result=ok' "$USRMANAGE_AUDIT" && ok "flow: promote audited" \
-	|| ok "flow: promote completed (audit format permissive)"
+	|| bad "flow: promote not audited"
 
 printf 'FlowPass1!\n' | um_with_lock um_mut_passwd alice 0
 ok "flow: passwd alice"
-grep -q 'passwd\|password' "$USRMANAGE_AUDIT" && ok "flow: passwd audited" || true
+grep -q 'passwd\|password' "$USRMANAGE_AUDIT" && ok "flow: passwd audited" || bad "flow: passwd not audited"
 
 um_with_lock um_mut_set_role alice readonly
 um_in_wheel alice && bad "flow: alice still in wheel after demote" || ok "flow: alice demote cleared wheel"

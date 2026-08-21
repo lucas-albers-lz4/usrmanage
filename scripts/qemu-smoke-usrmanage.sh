@@ -283,6 +283,12 @@ ssh_guest 'usrmanage del umobs' || die "del umobs failed"
 ok "del umobs"
 
 # Admin full (role-locked, no --scope): can uci get wireless; demote → diagnostic.
+# Second admin so last_admin does not abort the demote of umfull below.
+ssh_guest 'usrmanage del umkeep >/dev/null 2>&1 || true'
+ssh_guest 'printf "LabKeep1!\n" | usrmanage add umkeep --role admin --password-fd 0' \
+	|| die "add umkeep failed"
+ok "add umkeep (second admin for umfull demote)"
+
 ssh_guest 'usrmanage del umfull >/dev/null 2>&1 || true'
 ssh_guest 'printf "LabFull1!\n" | usrmanage add umfull --role admin --password-fd 0' \
 	|| die "add umfull failed"
@@ -300,8 +306,8 @@ _full_login="$(ssh_guest 'ubus call session login "{\"username\":\"umfull\",\"pa
 	|| die "session login as umfull failed"
 _full_sid="$(printf '%s' "$_full_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_full_sid" ]] || die "no umfull session id"
-_assert_allowed "$(_sid_access "$_full_sid" ubus uci get)" "admin full ubus uci get (uci get wireless)"
-ok "admin full can uci get wireless"
+_assert_allowed "$(_sid_access "$_full_sid" ubus uci get)" "admin full ubus uci.get"
+ok "admin full can uci.get (role-locked full)"
 
 # Demote full → diagnostic: leftover SID dead; new session has diagnostic ACLs.
 ssh_guest 'usrmanage set-role umfull --role readonly' || die "demote umfull failed"
@@ -322,6 +328,9 @@ ok "demote from full → diagnostic: add denied, health allowed"
 ssh_guest 'usrmanage set-luci-login umfull --disable' || true
 ssh_guest 'usrmanage del umfull' || die "del umfull failed"
 ok "del umfull"
+
+ssh_guest 'usrmanage del umkeep' || die "del umkeep failed"
+ok "del umkeep"
 
 # LuCI assets + ubus
 ssh_guest 'test -f /www/luci-static/resources/view/system/usrmanage.js' \
