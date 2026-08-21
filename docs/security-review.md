@@ -119,7 +119,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 ## Open findings
 
-Two open security findings ([#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148) and [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149), tracked below). #125 (L12/R7) and #126 (CodeQL alert-2 record + pin checklist) closed in the 2026-08-15 closeout. I3 remains an accepted residual.
+Three open security findings ([#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148), [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149), [#150](https://github.com/lucas-albers-lz4/usrmanage/issues/150), tracked below). #125 (L12/R7) and #126 (CodeQL alert-2 record + pin checklist) closed in the 2026-08-15 closeout. I3 remains an accepted residual.
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|

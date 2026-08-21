@@ -1597,10 +1597,16 @@ ${_sev} ${_id}: ${_msg}"
 	# auto-revoked inside um_luci_login_state; doctor only reports. The health
 	# JSON schema is frozen — no fields are added there.
 	_tam_users=
+	_insp_fail=
 	if [ -f "$USRMANAGE_REGISTRY" ] && command -v um_luci_login_state >/dev/null 2>&1; then
 		while IFS= read -r _tam_u || [ -n "$_tam_u" ]; do
 			[ -n "$_tam_u" ] || continue
-			_tam_st=$(um_luci_login_state "$_tam_u" 2>/dev/null) || _tam_st=
+			# Fail closed on inspection errors (CodeRabbit fold): an unreadable
+			# state must never be reported as "no tampered owned logins".
+			if ! _tam_st=$(um_luci_login_state "$_tam_u" 2>/dev/null); then
+				_insp_fail="$_insp_fail $_tam_u"
+				continue
+			fi
 			[ "$_tam_st" = "tampered" ] || continue
 			if [ -n "$_tam_users" ]; then
 				_tam_users="$_tam_users $_tam_u"
@@ -1611,6 +1617,8 @@ ${_sev} ${_id}: ${_msg}"
 	fi
 	if [ -n "$_tam_users" ]; then
 		_add_check luci_tampered false "tampered owned logins (live sessions revoked): ${_tam_users}"
+	elif [ -n "$_insp_fail" ]; then
+		_add_check luci_tampered false "luci login state inspection failed:${_insp_fail}"
 	else
 		_add_check luci_tampered true "no tampered owned logins"
 	fi

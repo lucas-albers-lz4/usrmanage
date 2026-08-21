@@ -1135,11 +1135,21 @@ printf '%s' "$_human" | grep -q 'error luci_tampered:' \
 	|| bad "#150: doctor human output missing tampered line"
 
 # Doctor tampered check passes on a clean config.
-printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+printf 'config rpcd\n	option socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
 _doc=$(um_doctor_checks --json 2>/dev/null) || true
 printf '%s' "$_doc" | grep -q '"id":"luci_tampered","ok":true' \
 	&& ok "#150: doctor tampered check ok when clean" \
 	|| bad "#150: doctor tampered check not ok when clean: $_doc"
+
+# Doctor fails closed when state inspection itself fails: an unreadable state
+# must not be reported as "no tampered owned logins" (CodeRabbit r3 fold).
+_doc=$( ( um_luci_login_state() { return 1; }; um_doctor_checks --json 2>/dev/null ) ) || true
+printf '%s' "$_doc" | grep -q '"id":"luci_tampered","ok":false' \
+	&& ok "#150: doctor inspection failure fails closed" \
+	|| bad "#150: doctor inspection failure reported clean: $_doc"
+printf '%s' "$_doc" | grep -q 'state inspection failed' \
+	&& ok "#150: doctor inspection failure names the failing user" \
+	|| bad "#150: doctor inspection failure missing message: $_doc"
 
 [ "$fail" = "0" ] || exit 1
 echo "luci-login tests: ok"
