@@ -5,7 +5,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=usrmanage
-PKG_VERSION:=0.1.10
+PKG_VERSION:=0.1.11
 PKG_RELEASE:=1
 
 PKG_LICENSE:=Apache-2.0
