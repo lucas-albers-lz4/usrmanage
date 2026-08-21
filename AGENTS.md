@@ -40,7 +40,7 @@ Lab and Playwright: [docs/developer/testing.md](docs/developer/testing.md). Neve
 
 Draft PRs are **not automatically** reviewed (`auto_review.drafts: false`);
 manual `@coderabbitai review` can still trigger on drafts. Review limits are
-**plan-specific** (e.g. Free 1/hr, Pro 5/hr, Pro+ 10/hr — check remaining
+**plan-specific rolling allowances** (e.g. Free 1/hr, Pro 5/hr, Pro+ 10/hr — check remaining
 quota with `@coderabbitai rate limit`), not a fixed ~3/hr cap. Marking Ready
 makes the PR *eligible* for automatic review. CodeRabbit takes ~5–10 min to
 write a round; **wait for the round to complete before pushing fixes** (new
