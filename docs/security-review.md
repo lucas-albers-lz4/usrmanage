@@ -119,12 +119,13 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 ## Open findings
 
-Two open security findings ([#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148) and [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149), tracked below). #125 (L12/R7) and #126 (CodeQL alert-2 record + pin checklist) closed in the 2026-08-15 closeout. I3 remains an accepted residual.
+Three open security findings ([#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148), [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149), [#150](https://github.com/lucas-albers-lz4/usrmanage/issues/150), tracked below). #125 (L12/R7) and #126 (CodeQL alert-2 record + pin checklist) closed in the 2026-08-15 closeout. I3 remains an accepted residual.
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
 | [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149) | — | Low | rpcd ACL | Diagnostic `list --all` enumeration via read scope; write-ACL gate landed in the fix PR — open until merge |
 | [#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148) | — | Medium | password | Preferred chpasswd path did not pin SHA-512 (D6); verify-then-fallback-then-fail-loudly landed in the fix PR — open until merge |
+| [#150](https://github.com/lucas-albers-lz4/usrmanage/issues/150) | — | Low | LuCI login | Tampered (ACL-escalated) owned logins stayed active until manual reset; fail-closed auto-revoke + doctor error surfaced in the fix PR — open until merge |
 
 ## Resolved findings
 
@@ -353,6 +354,14 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Fix.** `um_password_write` now verifies the stored shadow hash is `$6$` after every write (`um_user_hash_is_sha512`, field-anchored awk). A non-`$6$` result after `chpasswd` falls through to the pinned `passwd -a sha512` path, which is itself re-verified; if a weak hash still survives the write fails loudly (`password_hash_unverified`). Password never on argv in either path.
 
 **Proof.** host: `tests/test_password_sha512_pin.sh` (shimmed chpasswd/passwd: `$6$` accepted without fallback; weak `$1$` triggers the pinned fallback with `-a sha512` argv proof; double-weak fails loudly; password absent from tool argv; no-chpasswd environment same discipline). Red on revert (6 assertions). Full `./scripts/smoke-host.sh` green incl. shellcheck. lab: none — no new lab surface.
+
+### 2026-08-21 — Tampered LuCI logins fail closed (#150)
+
+**Scope.** From the same zen security pass as #148/#149: when an owned login's ACL matrix no longer matches its role (e.g. /etc/config/rpcd edited to escalate a readonly login), classification correctly returned `tampered` but the login kept working with elevated ACLs until a manual reset — detection was passive, with only a UI badge. `usrmanage-health.sh` did not report it (and its schema is frozen — not touched).
+
+**Fix.** `um_luci_login_state` now revokes the tampered user's live ubus SIDs on detection (best-effort, idempotent; no ACL rewrite — forensics preserved; no login deletion). Doctor gained a `luci_tampered` check reporting tampered owned logins at **error** severity (JSON + human output).
+
+**Proof.** host: `tests/test_luci_login.sh` (#150 block — tampered fixture classified tampered; revoke observed via function override; clean owned state performs no revoke; doctor JSON/human error surfacing; clean config ok:true). Red on revert (revoke assertion fails). Full `./scripts/smoke-host.sh` green. lab: none — no new lab surface.
 
 ## Review procedure
 

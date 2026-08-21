@@ -1069,5 +1069,101 @@ else
 	ok "luci-login.sh has no greedy 32-hex SID extract"
 fi
 
+# --- #150: fail closed when an owned LuCI login is tampered ---
+
+# Fixture: owned login + drifted marked duplicate (marker + $p$ match, ACL
+# matrix matching neither admin-full nor readonly-diagnostic).
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_luci_login ops enable
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+config login
+	option username 'ops'
+	option password '$p$ops'
+	option usrmanage '1'
+	list read 'luci-app-usrmanage-session'
+	list read 'luci-app-usrmanage'
+	list write 'luci-app-usrmanage'
+EOF
+_t150=$(um_luci_login_state ops)
+[ "$_t150" = "tampered" ] && ok "#150: tampered fixture classified tampered" \
+	|| bad "#150: tampered fixture state $_t150"
+
+# Auto-revoke: a state query on a tampered login must invoke
+# um_session_revoke_user for that user (observed via override).
+rm -f "$TMP/t150_revokes"
+(
+	um_session_revoke_user() { printf '%s\n' "$1" >> "$TMP/t150_revokes"; return 0; }
+	um_luci_login_state ops >/dev/null
+)
+grep -qx 'ops' "$TMP/t150_revokes" 2>/dev/null \
+	&& ok "#150: tampered state revokes user sessions" \
+	|| bad "#150: no session revoke observed for tampered user"
+
+# Clean owned login: state query reports owned and performs NO revoke.
+printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+um_with_lock um_mut_set_luci_login ops enable
+rm -f "$TMP/t150_clean_revokes"
+_clean_rc=0
+(
+	um_session_revoke_user() { printf '%s\n' "$1" >> "$TMP/t150_clean_revokes"; return 0; }
+	_cl=$(um_luci_login_state ops)
+	[ "$_cl" = "owned" ] || exit 1
+) || _clean_rc=$?
+[ "$_clean_rc" = "0" ] && ok "#150: clean owned state stays owned" || bad "#150: clean owned state wrong"
+[ ! -s "$TMP/t150_clean_revokes" ] && ok "#150: owned state performs no revoke" \
+	|| bad "#150: unexpected revoke on owned state"
+
+# Doctor surfaces tampered owned logins at error severity.
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+config login
+	option username 'ops'
+	option password '$p$ops'
+	option usrmanage '1'
+	list read 'luci-app-usrmanage-session'
+	list read 'luci-app-usrmanage'
+	list write 'luci-app-usrmanage'
+EOF
+_doc=$(um_doctor_checks --json 2>/dev/null) || true
+printf '%s' "$_doc" | grep -q '"id":"luci_tampered","ok":false,"severity":"error"' \
+	&& ok "#150: doctor json flags tampered login as error" \
+	|| bad "#150: doctor json missing tampered error: $_doc"
+_human=$(um_doctor_checks 2>/dev/null) || true
+printf '%s' "$_human" | grep -q 'error luci_tampered:' \
+	&& ok "#150: doctor human output lists tampered error" \
+	|| bad "#150: doctor human output missing tampered line"
+
+# Doctor tampered check passes on a clean config.
+printf 'config rpcd\n	option socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
+_doc=$(um_doctor_checks --json 2>/dev/null) || true
+printf '%s' "$_doc" | grep -q '"id":"luci_tampered","ok":true' \
+	&& ok "#150: doctor tampered check ok when clean" \
+	|| bad "#150: doctor tampered check not ok when clean: $_doc"
+
+# Doctor fails closed when state inspection itself fails: an unreadable state
+# must not be reported as "no tampered owned logins" (CodeRabbit r3 fold).
+printf 'ops\n' > "$USRMANAGE_REGISTRY"
+_doc=$( ( um_luci_login_state() { return 1; }; um_doctor_checks --json 2>/dev/null ) ) || true
+printf '%s' "$_doc" | grep -q '"id":"luci_tampered","ok":false,"severity":"error"' \
+	&& ok "#150: doctor inspection failure is error severity" \
+	|| bad "#150: doctor inspection failure not error severity: $_doc"
+printf '%s' "$_doc" | grep -q 'state inspection failed: ops' \
+	&& ok "#150: doctor inspection failure names the failing user" \
+	|| bad "#150: doctor inspection failure missing user: $_doc"
+
+# Mixed tampered + inspection failure: BOTH must surface in the message
+# (CodeRabbit r4 fold).
+printf 'ops\naudit\n' > "$USRMANAGE_REGISTRY"
+_doc=$( ( um_luci_login_state() {
+	case "$1" in
+		audit) return 1 ;;
+		*) printf 'tampered\n' ;;
+	esac
+}; um_doctor_checks --json 2>/dev/null ) ) || true
+printf '%s' "$_doc" | grep -q 'tampered owned logins.*ops.*state inspection failed.*audit' \
+	&& ok "#150: doctor mixed outcome reports both" \
+	|| bad "#150: doctor mixed outcome incomplete: $_doc"
+
 [ "$fail" = "0" ] || exit 1
 echo "luci-login tests: ok"

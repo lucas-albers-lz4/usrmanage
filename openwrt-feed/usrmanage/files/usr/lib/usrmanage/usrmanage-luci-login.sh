@@ -434,6 +434,13 @@ um_luci_login_state() {
 		esac
 	done < "$_stf"
 	rm -f "$_stf"
+	# Fail closed (#150): a tampered owned login must not keep live elevated
+	# ubus sessions. Revoke best-effort — idempotent (list then destroy), so
+	# repeated state queries do not spam. Never rewrite the ACL section
+	# (forensics preserved) and never delete the login here.
+	if [ "$_tampered" -gt 0 ]; then
+		um_session_revoke_user "$_ull_name" || true
+	fi
 	if [ "$_tampered" -gt 0 ] || [ "$_owned" -gt 1 ]; then
 		printf 'tampered'
 	elif [ "$_foreign" -gt 0 ]; then
