@@ -258,10 +258,16 @@ printf '%s' "$_h" | grep -qE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' \
 ok "readonly health reply has no ssid/key/MAC"
 
 # HTTP /ubus: view list allowed; mutator add denied.
+# Parse result[0] with guest-side jsonfilter (host may lack jsonfilter); a
+# malformed response yields empty rc and fails the assert.
+_ubus_rc() {
+	# _ubus_rc <json> → ubus return code, empty on parse failure
+	printf '%s' "$1" | ssh_guest 'jsonfilter -s "$(cat)" -e "@.result[0]"' 2>/dev/null || true
+}
 _obs_list="$(curl -sS -H 'Content-Type: application/json' \
 	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"list\",{}]}" \
 	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
-if ! printf '%s' "$_obs_list" | grep -qE '"result"[[:space:]]*:[[:space:]]*\[[[:space:]]*0'; then
+if [ "$(_ubus_rc "$_obs_list")" != "0" ]; then
 	die "readonly usrmanage.list not allowed over HTTP /ubus (got: ${_obs_list})"
 fi
 _obs_add="$(curl -sS -H 'Content-Type: application/json' \
@@ -274,7 +280,7 @@ fi
 _obs_allow="$(curl -sS -H 'Content-Type: application/json' \
 	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"health\",{}]}" \
 	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
-if ! printf '%s' "$_obs_allow" | grep -qE '"result"[[:space:]]*:[[:space:]]*\[[[:space:]]*0'; then
+if [ "$(_ubus_rc "$_obs_allow")" != "0" ]; then
 	die "readonly usrmanage.health not allowed over HTTP /ubus (got: ${_obs_allow})"
 fi
 ok "readonly usrmanage.list denied + health allowed over HTTP /ubus"
