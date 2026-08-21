@@ -66,24 +66,30 @@ export FAKE_CLI_LOG="$TMP/cli-args.log"
 
 SID=0123456789abcdef
 FULLPATH="$TMP/bin:$TMP/jbin:$PATH"
-# PATH without the fake-ubus dir (jsonfilter shim stays).
-NOUBUSPATH="$TMP/jbin:$(printf '%s' "$PATH" | tr ':' '\n' | grep -v "^$TMP/bin$" | paste -sd: -)"
+# Allowlist PATH for the missing-ubus case (CodeRabbit r2 fold): only the
+# jsonfilter shim + /bin, so the result cannot depend on whether the host
+# happens to have ubus installed. The assertion below makes a leak loud.
+NOUBUSPATH="$TMP/jbin:/bin"
 
 # 1. Write ACL present (access:true) -> all honored (--all passed to CLI).
-FAKE_ACCESS=true RPC_SESSION=$SID PATH="$FULLPATH" \
+FAKE_ACCESS=true RPC_SESSION="$SID" PATH="$FULLPATH" \
 	sh "$RPCD" call list '{"all":true}' >/dev/null || true
 grep -q -- '--all' "$FAKE_CLI_LOG" && ok "write ACL: --all honored" || bad "write ACL: --all missing"
 
 # 2. Read-only session (access:false) -> all stripped (no --all).
 : > "$FAKE_CLI_LOG"
-FAKE_ACCESS=false RPC_SESSION=$SID PATH="$FULLPATH" \
+FAKE_ACCESS=false RPC_SESSION="$SID" PATH="$FULLPATH" \
 	sh "$RPCD" call list '{"all":true}' >/dev/null || true
 [ -s "$FAKE_CLI_LOG" ] && ok "readonly: plain-list CLI path ran" || bad "readonly: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "readonly: --all still passed" || ok "readonly: --all stripped"
 
-# 3. No ubus on PATH -> fail closed (no --all).
+# 3. No ubus on PATH -> fail closed (no --all). The allowlist PATH must
+# genuinely lack ubus (else this silently tests the probe path instead).
+if PATH="$NOUBUSPATH" command -v ubus >/dev/null 2>&1; then
+	bad "no-ubus: allowlist PATH still resolves ubus"
+fi
 : > "$FAKE_CLI_LOG"
-RPC_SESSION=$SID PATH="$NOUBUSPATH" \
+RPC_SESSION="$SID" PATH="$NOUBUSPATH" \
 	sh "$RPCD" call list '{"all":true}' >/dev/null || true
 [ -s "$FAKE_CLI_LOG" ] && ok "no-ubus: plain-list CLI path ran" || bad "no-ubus: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "no-ubus: --all passed" || ok "no-ubus: fail closed"
@@ -97,7 +103,7 @@ grep -q -- '--all' "$FAKE_CLI_LOG" && bad "bad sid: --all passed" || ok "bad sid
 
 # 5. Plain list (all:false) unchanged -> no --all.
 : > "$FAKE_CLI_LOG"
-FAKE_ACCESS=true RPC_SESSION=$SID PATH="$FULLPATH" \
+FAKE_ACCESS=true RPC_SESSION="$SID" PATH="$FULLPATH" \
 	sh "$RPCD" call list '{"all":false}' >/dev/null || true
 [ -s "$FAKE_CLI_LOG" ] && ok "all:false: plain-list CLI path ran" || bad "all:false: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "all:false: --all passed" || ok "all:false: plain list"
