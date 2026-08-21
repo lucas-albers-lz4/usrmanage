@@ -211,6 +211,7 @@ export CHPASSWD_STUB_HASH='$1$md5sal$weakhash'
 export PASSWD_STUB_HASH='$1$still$weakhash'
 reset_shadow
 _orig=$(shadow_hash ops)
+: > "$USRMANAGE_AUDIT"
 if printf 'FixPass148t\n' | um_with_lock um_mut_passwd ops 0 2>/dev/null; then
 	bad "tx-rollback: um_mut_passwd succeeded despite unverifiable hash"
 else
@@ -220,6 +221,12 @@ case "$(shadow_hash ops)" in
 	"$_orig") ok "tx-rollback: shadow restored to pre-change state" ;;
 	*) bad "tx-rollback: shadow NOT restored (got $(shadow_hash ops), orig $_orig)" ;;
 esac
+# rc=2 path (CodeRabbit r2 fold): the failure must be audited as
+# password_hash_unverified (denied) — NOT a policy failure, which had already
+# passed before the write.
+grep -q 'password_hash_unverified' "$USRMANAGE_AUDIT" \
+	&& ok "tx-rollback: audit records password_hash_unverified (denied)" \
+	|| bad "tx-rollback: audit missing hash reason: $(cat "$USRMANAGE_AUDIT" 2>/dev/null)"
 
 [ "$fail" = "0" ] || { echo "sha512-pin tests FAILED" >&2; exit 1; }
 echo "PASSWORD SHA512 PIN TESTS PASSED"

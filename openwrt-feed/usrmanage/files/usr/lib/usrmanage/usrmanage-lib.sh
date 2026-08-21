@@ -1016,7 +1016,9 @@ um_password_write() {
 		return 0
 	fi
 	um_err "error: password_hash_unverified"
-	return 1
+	# rc=2 signals "unverifiable hash" distinctly from a tool failure (rc=1),
+	# so um_mut_passwd can audit/report the real reason (CodeRabbit r2 fold).
+	return 2
 }
 
 um_password_capture_fd() {
@@ -2049,7 +2051,15 @@ um_mut_passwd() {
 	# failure never leaves a half-applied (e.g. weak-hash) password.
 	um_tx_begin
 	um_password_commit "$_name" || {
+		_rc=$?
 		um_incomplete_clear
+		# rc=2 = unverifiable hash (weak hash survived the pinned fallback):
+		# report the real reason — policy already passed before the write
+		# (CodeRabbit r2 fold). Any other failure keeps the legacy label.
+		if [ "$_rc" = "2" ]; then
+			um_audit denied "$_name" denied password_hash_unverified "$_role"
+			um_die "error: password_hash_unverified"
+		fi
 		um_audit fail "$_name" fail password
 		um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 	}
