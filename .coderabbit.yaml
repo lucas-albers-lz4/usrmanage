@@ -13,7 +13,7 @@ reviews:
   collapse_walkthrough: true
   auto_review:
     enabled: true
-    drafts: true
+    drafts: false  # automatic reviews skip drafts; manual @coderabbitai review still works
     base: auto
   tools:
     ast_grep: true
