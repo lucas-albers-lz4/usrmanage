@@ -237,7 +237,7 @@ _assert_denied "$(_sid_access "$_obs_sid" file /etc/shadow read)" "readonly file
 _assert_denied "$(_sid_access "$_obs_sid" ubus usrmanage add)" "readonly usrmanage.add"
 _assert_denied "$(_sid_access "$_obs_sid" ubus log read)" "readonly log.read"
 _assert_denied "$(_sid_access "$_obs_sid" uci openvpn get)" "readonly uci openvpn get"
-# Diagnostic grants luci-mod-network-config on READ → uci get wireless/network/firewall allowed.
+# Diagnostic grants luci-mod-network-config on READ → uci get wireless/network allowed.
 _assert_allowed "$(_sid_access "$_obs_sid" uci wireless get)" "readonly diagnostic uci wireless get"
 _assert_allowed "$(_sid_access "$_obs_sid" uci network get)" "readonly diagnostic uci network get"
 _assert_denied "$(_sid_access "$_obs_sid" uci wireless set)" "readonly diagnostic uci wireless set"
@@ -260,7 +260,7 @@ ok "readonly health reply has no ssid/key/MAC"
 _obs_list="$(curl -sS -H 'Content-Type: application/json' \
 	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"list\",{}]}" \
 	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
-if ! printf '%s' "$_obs_list" | grep -q '"result"'; then
+if ! printf '%s' "$_obs_list" | grep -qE '"result"[[:space:]]*:[[:space:]]*\[[[:space:]]*0'; then
 	die "readonly usrmanage.list not allowed over HTTP /ubus (got: ${_obs_list})"
 fi
 _obs_add="$(curl -sS -H 'Content-Type: application/json' \
@@ -273,7 +273,7 @@ fi
 _obs_allow="$(curl -sS -H 'Content-Type: application/json' \
 	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"health\",{}]}" \
 	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
-if ! printf '%s' "$_obs_allow" | grep -q '"result"'; then
+if ! printf '%s' "$_obs_allow" | grep -qE '"result"[[:space:]]*:[[:space:]]*\[[[:space:]]*0'; then
 	die "readonly usrmanage.health not allowed over HTTP /ubus (got: ${_obs_allow})"
 fi
 ok "readonly usrmanage.list denied + health allowed over HTTP /ubus"

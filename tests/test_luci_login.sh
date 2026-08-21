@@ -896,8 +896,14 @@ grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" && ok "
 	|| bad "migrate missing health"
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "migrate admin app → full owned" \
 	|| bad "migrate ops state $(um_luci_login_state ops)"
-grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && ok "migrate admin: write * present" \
-	|| bad "migrate missing write *"
+awk '
+	BEGIN { inlogin=0; is=0; hasw=0 }
+	/^config login/ { if (inlogin && is && hasw) found=1; inlogin=1; is=0; hasw=0; next }
+	inlogin && /option username '\''ops'\''/ { is=1 }
+	inlogin && /list write '\''[*]'\''/ { hasw=1 }
+	END { if (inlogin && is && hasw) found=1; exit !found }
+' "$USRMANAGE_RPCD_CONFIG" && ok "migrate admin: write * present (ops section)" \
+	|| bad "migrate missing write * for ops"
 grep -q "option username 'spy'" "$USRMANAGE_RPCD_CONFIG" && ok "migrate left unmarked foreign" \
 	|| bad "migrate touched unmarked"
 _root_after=$(awk '/option username '\''root'\''/,/^$/' "$USRMANAGE_RPCD_CONFIG")
