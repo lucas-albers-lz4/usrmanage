@@ -2043,11 +2043,17 @@ um_mut_passwd() {
 	if command -v um_session_revoke_required >/dev/null 2>&1; then
 		um_session_revoke_required "$_name"
 	fi
+	# Transaction wrap (#152 fold): a failed or unverified hash write must
+	# roll the shadow back to the pre-change state — the um_tx EXIT hook
+	# restores the snapshotted files unless um_tx_commit runs, so a reported
+	# failure never leaves a half-applied (e.g. weak-hash) password.
+	um_tx_begin
 	um_password_commit "$_name" || {
 		um_incomplete_clear
 		um_audit fail "$_name" fail password
 		um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 	}
+	um_tx_commit
 	um_incomplete_clear
 	um_audit passwd "$_name" ok "" "$(um_role_of "$_name")"
 	if [ "${JSON_OUT:-0}" = "1" ]; then

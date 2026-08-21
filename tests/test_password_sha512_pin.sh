@@ -164,7 +164,10 @@ case "$(shadow_hash ops)" in
 esac
 
 # --- password must never reach argv of either account tool ---
-if grep -qF 'FixPass148y' "$CHPASSWD_STUB_LOG" "$PASSWD_STUB_LOG" 2>/dev/null; then
+# Every password used in this file is searched, so a future regression that
+# puts the password on argv (chpasswd currently takes NO args; passwd only
+# takes -a sha512 <user>) fails here.
+if grep -qE 'FixPass148[xytwvz]' "$CHPASSWD_STUB_LOG" "$PASSWD_STUB_LOG" 2>/dev/null; then
 	bad "password leaked into tool argv logs"
 else
 	ok "password absent from chpasswd/passwd argv"
@@ -198,6 +201,24 @@ fi
 case "$(shadow_hash ops)" in
 	'$6$'*) bad "no-chpasswd weak left \$6\$: $(shadow_hash ops)" ;;
 	*) ok "no-chpasswd weak hash not accepted" ;;
+esac
+
+# --- tx rollback (#152 fold): a failed mutator write must restore the
+# pre-change shadow, never leave a half-applied (weak-hash) password. ---
+printf 'ops\n' > "$USRMANAGE_REGISTRY"
+printf 'root:x:0:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
+export CHPASSWD_STUB_HASH='$1$md5sal$weakhash'
+export PASSWD_STUB_HASH='$1$still$weakhash'
+reset_shadow
+_orig=$(shadow_hash ops)
+if printf 'FixPass148t\n' | um_with_lock um_mut_passwd ops 0 2>/dev/null; then
+	bad "tx-rollback: um_mut_passwd succeeded despite unverifiable hash"
+else
+	ok "tx-rollback: um_mut_passwd fails loudly"
+fi
+case "$(shadow_hash ops)" in
+	"$_orig") ok "tx-rollback: shadow restored to pre-change state" ;;
+	*) bad "tx-rollback: shadow NOT restored (got $(shadow_hash ops), orig $_orig)" ;;
 esac
 
 [ "$fail" = "0" ] || { echo "sha512-pin tests FAILED" >&2; exit 1; }
