@@ -1012,7 +1012,13 @@ um_password_write() {
 	printf '%s\n%s\n' "$_pw" "$_pw" | passwd -a sha512 "$_u" >/dev/null 2>&1
 	_rc=$?
 	_pw=
-	if [ "$_rc" = "0" ] && um_user_hash_is_sha512 "$_u"; then
+	if [ "$_rc" != "0" ]; then
+		# Tool failure (missing/broken passwd): NOT an unverified-hash
+		# condition — rc=1 so um_mut_passwd keeps the legacy fail audit
+		# instead of mislabeling it password_hash_unverified (CodeRabbit r4).
+		return 1
+	fi
+	if um_user_hash_is_sha512 "$_u"; then
 		return 0
 	fi
 	um_err "error: password_hash_unverified"

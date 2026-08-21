@@ -81,6 +81,10 @@ cat > "$TMP/bin/passwd" <<'PWP'
 _u=$3
 [ -n "$_u" ] || exit 1
 printf 'invoked args=%s %s %s\n' "$1" "$2" "$3" >> "${PASSWD_STUB_LOG:?}"
+if [ "${PASSWD_STUB_FAIL:-0}" = "1" ]; then
+	# models a broken/missing busybox passwd (CodeRabbit r4 fold)
+	exit 1
+fi
 _tmp=$(mktemp)
 awk -F: -v u="$_u" -v h="${PASSWD_STUB_HASH:-\$6\$fbsal\$fixedhash}" \
 	'BEGIN{OFS=":"} $1==u{$2=h} {print}' "$USRMANAGE_SHADOW" > "$_tmp" || exit 1
@@ -224,9 +228,32 @@ esac
 # rc=2 path (CodeRabbit r2 fold): the failure must be audited as
 # password_hash_unverified (denied) — NOT a policy failure, which had already
 # passed before the write.
-grep -q 'password_hash_unverified' "$USRMANAGE_AUDIT" \
-	&& ok "tx-rollback: audit records password_hash_unverified (denied)" \
-	|| bad "tx-rollback: audit missing hash reason: $(cat "$USRMANAGE_AUDIT" 2>/dev/null)"
+grep -q 'result=denied reason=password_hash_unverified' "$USRMANAGE_AUDIT" \
+	&& ok "tx-rollback: audit records denied password_hash_unverified" \
+	|| bad "tx-rollback: audit missing denied hash reason: $(cat "$USRMANAGE_AUDIT" 2>/dev/null)"
+
+# --- passwd TOOL failure (CodeRabbit r4 fold): a broken/missing passwd must
+# NOT be mislabeled password_hash_unverified — tool failures return rc=1 and
+# the mutator keeps the legacy fail audit.
+export CHPASSWD_STUB_HASH='$1$md5sal$weakhash'
+export PASSWD_STUB_FAIL=1
+printf 'ops\n' > "$USRMANAGE_REGISTRY"
+printf 'root:x:0:\nwheel:x:10:ops\n' > "$USRMANAGE_GROUP"
+reset_shadow
+if um_password_write ops 'FixPass148w' 2>/dev/null; then
+	bad "passwd-fail: write returned 0"
+else
+	_rc=$?
+	[ "$_rc" = "1" ] && ok "passwd-fail: rc=1 (tool failure, not unverified)" || bad "passwd-fail: rc=$_rc (want 1)"
+fi
+: > "$USRMANAGE_AUDIT"
+printf 'FixPass148t\n' | um_with_lock um_mut_passwd ops 0 2>/dev/null || true
+if grep -q 'password_hash_unverified' "$USRMANAGE_AUDIT"; then
+	bad "passwd-fail: wrongly audited password_hash_unverified: $(cat "$USRMANAGE_AUDIT")"
+else
+	ok "passwd-fail: no unverified audit on tool failure"
+fi
+unset PASSWD_STUB_FAIL
 
 [ "$fail" = "0" ] || { echo "sha512-pin tests FAILED" >&2; exit 1; }
 echo "PASSWORD SHA512 PIN TESTS PASSED"
