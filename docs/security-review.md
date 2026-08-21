@@ -123,8 +123,7 @@ No open security findings. #125 (L12/R7) and #126 (CodeQL alert-2 record + pin c
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
-
-(none)
+| [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149) | — | Low | rpcd ACL | Diagnostic `list --all` enumeration via read scope; write-ACL gate landed in the fix PR — open until merge |
 
 ## Resolved findings
 
@@ -337,6 +336,14 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Opus 5 security pass (same day).** No medium+ vulnerabilities vs the intentional product model. Scope is server/role-derived (client `scope` ignored). Demote/migrate ordering + field-anchored SID revoke sound. Intentional exposures (not bugs): diagnostic `uci get wireless` (network-config read); admin LuCI always full (upgrade widen). Residuals unchanged: SSH same-password shell; I3 concurrent login race; UI `hasWriteAcl` best-effort vs server ACL.
 
 **Proof class.** `host`: `tests/test_luci_login.sh`, `tests/test_mutators.sh`, `./scripts/smoke-host.sh`. `lab`: `scripts/qemu-smoke-usrmanage.sh` (diagnostic get allow / set+add deny; admin full wireless get; `--scope` rejected; demote SID) — **lab run pending**: the dated successful qemu-smoke run must be recorded here before merge. `manual`: Opus review of branch diff.
+
+### 2026-08-21 — Zen security pass + rpcd list write-ACL gate (#149)
+
+**Scope.** Read-only security review of the shipped surface (main @ 8959550) using the zen `x-preview-f-free` model at max reasoning; findings triaged against code. Filed #148 (chpasswd sha512 pin), #149 (`list --all` enumeration), #150 (tampered fail-open). This entry covers the #149 fix: the ubus `list` method honored `all` from any read-ACL session, enumerating every passwd row >= UID floor. The LuCI view only ever sends `all:false`, so `--all` was reachable only via direct ubus — including diagnostic-scope sessions.
+
+**Fix.** `session_has_write_acl` in the rpcd plugin probes `ubus call session access` on `usrmanage.add` (RPC_SESSION hex-guarded before interpolation; ANY failure fails closed). `all` is honored only when the caller holds the write ACL; plain `list` unchanged; CLI `list --all` remains root-only.
+
+**Proof.** host: `tests/test_rpcd_list_acl.sh` (shimmed ubus/jsonfilter/CLI — write-ACL honored / readonly stripped / no-ubus fail-closed / bad-SID fail-closed / `all:false` unchanged; red on gate revert), full `./scripts/smoke-host.sh` green. lab: none — no new lab surface, method scope unchanged.
 
 ## Review procedure
 
