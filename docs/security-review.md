@@ -124,6 +124,7 @@ One open security finding ([#149](https://github.com/lucas-albers-lz4/usrmanage/
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
 | [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149) | — | Low | rpcd ACL | Diagnostic `list --all` enumeration via read scope; write-ACL gate landed in the fix PR — open until merge |
+| [#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148) | — | Medium | password | Preferred chpasswd path did not pin SHA-512 (D6); verify-then-fallback-then-fail-loudly landed in the fix PR — open until merge |
 
 ## Resolved findings
 
@@ -344,6 +345,14 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Fix.** `session_has_write_acl` in the rpcd plugin probes `ubus call session access` on `usrmanage.add` (RPC_SESSION hex-guarded before interpolation; ANY failure fails closed). `all` is honored only when the caller holds the write ACL; plain `list` unchanged; CLI `list --all` remains root-only.
 
 **Proof.** host: `tests/test_rpcd_list_acl.sh` (shimmed ubus/jsonfilter/CLI — write-ACL honored / readonly stripped / no-ubus fail-closed / bad-SID fail-closed / `all:false` unchanged; red on gate revert), full `./scripts/smoke-host.sh` green. lab: none — no new lab surface, method scope unchanged.
+
+### 2026-08-21 — SHA-512 pin on the preferred password path (#148)
+
+**Scope.** From the same zen security pass as #149/#150: `um_password_write` preferred `chpasswd`, which hashes with the BusyBox build-time `CONFIG_FEATURE_DEFAULT_PASSWD_ALGO` (may be md5/des on some images/rebuilds) — the documented D6 control ("chpasswd/passwd -a sha512 fed on stdin only", security-audit-luci-login-2026-08-12:211) was not enforced on the preferred path.
+
+**Fix.** `um_password_write` now verifies the stored shadow hash is `$6$` after every write (`um_user_hash_is_sha512`, field-anchored awk). A non-`$6$` result after `chpasswd` falls through to the pinned `passwd -a sha512` path, which is itself re-verified; if a weak hash still survives the write fails loudly (`password_hash_unverified`). Password never on argv in either path.
+
+**Proof.** host: `tests/test_password_sha512_pin.sh` (shimmed chpasswd/passwd: `$6$` accepted without fallback; weak `$1$` triggers the pinned fallback with `-a sha512` argv proof; double-weak fails loudly; password absent from tool argv; no-chpasswd environment same discipline). Red on revert (6 assertions). Full `./scripts/smoke-host.sh` green incl. shellcheck. lab: none — no new lab surface.
 
 ## Review procedure
 
