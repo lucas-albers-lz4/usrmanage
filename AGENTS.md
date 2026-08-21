@@ -39,13 +39,15 @@ Lab and Playwright: [docs/developer/testing.md](docs/developer/testing.md). Neve
 ## CodeRabbit (review bot)
 
 Draft PRs are **not automatically** reviewed (`auto_review.drafts: false`);
-manual `@coderabbitai review` can still trigger on drafts (subject to the plan
-review allowance). Marking Ready makes the PR *eligible* for automatic review.
-CodeRabbit takes ~5–10 min to write a round; **wait for the round to complete
-before pushing fixes** (new `COMMENTED` submission from `coderabbitai[bot]`
-with `commit_id` = your head; a rate-limit comment means the head was NOT
-reviewed), batch all fixes into one push, and never declare the gate green
-while a round is still in flight. Full protocol: [docs/developer/coderabbit.md](docs/developer/coderabbit.md).
+manual `@coderabbitai review` can still trigger on drafts. Review limits are
+**plan-specific rolling allowances** (e.g. Free 1/hr, Pro 5/hr, Pro+ 10/hr — check remaining
+quota with `@coderabbitai rate limit`), not a fixed ~3/hr cap. Marking Ready
+makes the PR *eligible* for automatic review. CodeRabbit takes ~5–10 min to
+write a round; **wait for the round to complete before pushing fixes** (new
+`COMMENTED` submission from `coderabbitai[bot]` with `commit_id` = your head;
+a rate-limit comment means the head was NOT reviewed), batch all fixes into
+one push, and never declare the gate green while a round is still in flight.
+Full protocol: [docs/developer/coderabbit.md](docs/developer/coderabbit.md).
 
 ## Release / feed
 
