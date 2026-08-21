@@ -1615,7 +1615,9 @@ ${_sev} ${_id}: ${_msg}"
 			fi
 		done < "$USRMANAGE_REGISTRY"
 	fi
-	if [ -n "$_tam_users" ]; then
+	if [ -n "$_tam_users" ] && [ -n "$_insp_fail" ]; then
+		_add_check luci_tampered false "tampered owned logins (live sessions revoked): ${_tam_users}; state inspection failed:${_insp_fail}"
+	elif [ -n "$_tam_users" ]; then
 		_add_check luci_tampered false "tampered owned logins (live sessions revoked): ${_tam_users}"
 	elif [ -n "$_insp_fail" ]; then
 		_add_check luci_tampered false "luci login state inspection failed:${_insp_fail}"

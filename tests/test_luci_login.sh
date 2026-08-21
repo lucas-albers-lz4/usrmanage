@@ -1143,13 +1143,27 @@ printf '%s' "$_doc" | grep -q '"id":"luci_tampered","ok":true' \
 
 # Doctor fails closed when state inspection itself fails: an unreadable state
 # must not be reported as "no tampered owned logins" (CodeRabbit r3 fold).
+printf 'ops\n' > "$USRMANAGE_REGISTRY"
 _doc=$( ( um_luci_login_state() { return 1; }; um_doctor_checks --json 2>/dev/null ) ) || true
-printf '%s' "$_doc" | grep -q '"id":"luci_tampered","ok":false' \
-	&& ok "#150: doctor inspection failure fails closed" \
-	|| bad "#150: doctor inspection failure reported clean: $_doc"
-printf '%s' "$_doc" | grep -q 'state inspection failed' \
+printf '%s' "$_doc" | grep -q '"id":"luci_tampered","ok":false,"severity":"error"' \
+	&& ok "#150: doctor inspection failure is error severity" \
+	|| bad "#150: doctor inspection failure not error severity: $_doc"
+printf '%s' "$_doc" | grep -q 'state inspection failed: ops' \
 	&& ok "#150: doctor inspection failure names the failing user" \
-	|| bad "#150: doctor inspection failure missing message: $_doc"
+	|| bad "#150: doctor inspection failure missing user: $_doc"
+
+# Mixed tampered + inspection failure: BOTH must surface in the message
+# (CodeRabbit r4 fold).
+printf 'ops\naudit\n' > "$USRMANAGE_REGISTRY"
+_doc=$( ( um_luci_login_state() {
+	case "$1" in
+		audit) return 1 ;;
+		*) printf 'tampered\n' ;;
+	esac
+}; um_doctor_checks --json 2>/dev/null ) ) || true
+printf '%s' "$_doc" | grep -q 'tampered owned logins.*ops.*state inspection failed.*audit' \
+	&& ok "#150: doctor mixed outcome reports both" \
+	|| bad "#150: doctor mixed outcome incomplete: $_doc"
 
 [ "$fail" = "0" ] || exit 1
 echo "luci-login tests: ok"
