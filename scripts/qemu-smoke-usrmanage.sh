@@ -240,6 +240,8 @@ _assert_denied "$(_sid_access "$_obs_sid" uci openvpn get)" "readonly uci openvp
 # Diagnostic grants luci-mod-network-config on READ → uci get wireless/network/firewall allowed.
 _assert_allowed "$(_sid_access "$_obs_sid" uci wireless get)" "readonly diagnostic uci wireless get"
 _assert_allowed "$(_sid_access "$_obs_sid" uci network get)" "readonly diagnostic uci network get"
+_assert_denied "$(_sid_access "$_obs_sid" uci wireless set)" "readonly diagnostic uci wireless set"
+_assert_denied "$(_sid_access "$_obs_sid" uci network set)" "readonly diagnostic uci network set"
 _assert_allowed "$(_sid_access "$_obs_sid" access-group luci-mod-status-index read)" "readonly diagnostic luci-mod-status-index"
 _assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage list)" "readonly usrmanage.list (view-only)"
 _assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage health)" "readonly usrmanage.health"
