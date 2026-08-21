@@ -71,6 +71,24 @@ session_actor() {
 	printf '%s' "unknown"
 }
 
+session_has_write_acl() {
+	# Issue #149: `list --all` enumerates every passwd row >= UID floor, so
+	# honor `all` only for sessions holding the usrmanage WRITE acl. Probe is
+	# the read-only session "access" check; ANY failure fails closed (plain
+	# managed-user list). RPC_SESSION is hex-guarded before interpolation.
+	[ -n "${RPC_SESSION:-}" ] || return 1
+	command -v ubus >/dev/null 2>&1 || return 1
+	case "$RPC_SESSION" in
+		''|*[!0-9a-fA-F]*) return 1 ;;
+	esac
+	_acc=$(ubus call session access "{\"ubus_rpc_session\":\"${RPC_SESSION}\",\"scope\":\"ubus\",\"object\":\"usrmanage\",\"function\":\"add\"}" 2>/dev/null \
+		| jsonfilter -e '@.access' 2>/dev/null) || return 1
+	case "$_acc" in
+		true|1) return 0 ;;
+	esac
+	return 1
+}
+
 run_cli() {
 	# Explicit argv only — never unquoted $* (issue #3 C2).
 	# Always return 0 so ubus delivers CLI JSON (incl. ok:false) instead of
@@ -231,6 +249,11 @@ case "$1" in
 		case "$METHOD" in
 			list)
 				_all=$(json_get_bool all)
+				if [ "$_all" = "1" ]; then
+					# Issue #149: diagnostic/read-only sessions must not
+					# enumerate system users — write acl gate or plain list.
+					session_has_write_acl || _all=0
+				fi
 				if [ "$_all" = "1" ]; then
 					run_cli list --json --all
 				else
