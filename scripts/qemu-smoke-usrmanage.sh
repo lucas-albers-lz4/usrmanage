@@ -237,12 +237,15 @@ _obs_sid="$(printf '%s' "$_obs_login" | grep -oE '"ubus_rpc_session":[[:space:]]
 _assert_denied "$(_sid_access "$_obs_sid" file /etc/shadow read)" "readonly file.read /etc/shadow"
 _assert_denied "$(_sid_access "$_obs_sid" ubus usrmanage add)" "readonly usrmanage.add"
 _assert_denied "$(_sid_access "$_obs_sid" ubus log read)" "readonly log.read"
-_assert_denied "$(_sid_access "$_obs_sid" uci openvpn get)" "readonly uci openvpn get"
-# Diagnostic grants luci-mod-network-config on READ → uci get wireless/network allowed.
-_assert_allowed "$(_sid_access "$_obs_sid" uci wireless get)" "readonly diagnostic uci wireless get"
-_assert_allowed "$(_sid_access "$_obs_sid" uci network get)" "readonly diagnostic uci network get"
-_assert_denied "$(_sid_access "$_obs_sid" uci wireless set)" "readonly diagnostic uci wireless set"
-_assert_denied "$(_sid_access "$_obs_sid" uci network set)" "readonly diagnostic uci network set"
+# Diagnostic grants luci-mod-network-config on READ → config-level uci read of
+# wireless/network (uci plugin checks read/write, not get). Web-path `uci get`
+# (ubus:uci:get) lives in luci-base, which readonly must NOT have (K1: PSK).
+_assert_denied "$(_sid_access "$_obs_sid" ubus uci get)" "readonly ubus uci get denied (no luci-base, K1)"
+_assert_denied "$(_sid_access "$_obs_sid" uci openvpn read)" "readonly uci openvpn read (not in diagnostic set)"
+_assert_allowed "$(_sid_access "$_obs_sid" uci wireless read)" "readonly diagnostic uci wireless read"
+_assert_allowed "$(_sid_access "$_obs_sid" uci network read)" "readonly diagnostic uci network read"
+_assert_denied "$(_sid_access "$_obs_sid" uci wireless write)" "readonly diagnostic uci wireless write"
+_assert_denied "$(_sid_access "$_obs_sid" uci network write)" "readonly diagnostic uci network write"
 _assert_allowed "$(_sid_access "$_obs_sid" access-group luci-mod-status-index read)" "readonly diagnostic luci-mod-status-index"
 _assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage list)" "readonly usrmanage.list (view-only)"
 _assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage health)" "readonly usrmanage.health"

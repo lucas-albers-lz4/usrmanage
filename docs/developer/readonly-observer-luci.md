@@ -207,7 +207,7 @@ Upgrade **must not** widen admin web privilege. Admin is role-locked to full sco
 
 **Lab (qemu-smoke, proof class `lab`)**
 
-- Readonly `session.access` **deny** `uci get` openvpn (non-diagnostic); `file.read` `/etc/shadow`; `usrmanage.add` (mutators); `log.read`. **Allow** the diagnostic 8-set reads: `usrmanage.list` / `audit` / `doctor` / `policy` (view-only), `health`, `uci get` wireless/network (via `luci-mod-network-config` read), and `session.access` on the five Status/Network ACLs (`luci-mod-status-{index,routes,realtime}`, `luci-mod-network-{config,diagnostics}`). Keep mutators and sensitive reads denied.
+- Readonly `session.access` **deny** config-level `uci read` openvpn (non-diagnostic), `uci write` wireless/network, `ubus uci get` (web-path method — no luci-base, K1); `file.read` `/etc/shadow`; `usrmanage.add` (mutators); `log.read`. **Allow** the diagnostic 8-set reads: `usrmanage.list` / `audit` / `doctor` / `policy` (view-only), `health`, config-level `uci read` wireless/network (via `luci-mod-network-config` read), and `session.access` on the five Status/Network ACLs (`luci-mod-status-{index,routes,realtime}`, `luci-mod-network-{config,diagnostics}`). Keep mutators and sensitive reads denied.
 - Readonly `usrmanage.health` allow; schema match; no ssid/key/MAC.
 - Admin **full** can `uci get wireless`; demote then racing login cannot; leftover SID dead.
 - Menu: readonly receives the diagnostic Status/Network views (`luci-mod-status-index` probe allowed; `session.access` on those five ACL names), no Full LuCI menus.
