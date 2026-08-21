@@ -98,7 +98,7 @@ ssh_guest 'usrmanage set-luci-login umrev --enable' \
 	|| die "set-luci-login umrev --enable failed"
 ok "umrev luci login enabled"
 
-_login_json="$(printf '%s' '{"username":"umrev","password":"LabRevoke1!"}' | ssh_guest 'ubus call session login "$(cat)"')" \
+_login_json="$(printf '%s' '{"username":"umrev","password":"LabRevoke1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
 	|| die "session login as umrev failed"
 _sid="$(printf '%s' "$_login_json" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_sid" ]] || die "no session id from login"
@@ -148,7 +148,7 @@ ssh_guest 'usrmanage set-luci-login umdemote --enable' \
 	|| die "set-luci-login umdemote --enable failed"
 ok "umdemote luci login enabled"
 
-_admin_login="$(printf '%s' '{"username":"umdemote","password":"LabDemote1!"}' | ssh_guest 'ubus call session login "$(cat)"')" \
+_admin_login="$(printf '%s' '{"username":"umdemote","password":"LabDemote1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
 	|| die "admin session login as umdemote failed"
 _admin_sid="$(printf '%s' "$_admin_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_admin_sid" ]] || die "no admin session id"
@@ -173,7 +173,7 @@ if ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_admin_sid
 fi
 ok "umdemote admin session destroyed after demote"
 
-_ro_login="$(printf '%s' '{"username":"umdemote","password":"LabDemote1!"}' | ssh_guest 'ubus call session login "$(cat)"')" \
+_ro_login="$(printf '%s' '{"username":"umdemote","password":"LabDemote1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
 	|| die "readonly re-login as umdemote failed"
 _ro_sid="$(printf '%s' "$_ro_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_ro_sid" ]] || die "no readonly session id"
@@ -193,7 +193,8 @@ ssh_guest 'usrmanage del umdemote' || die "del umdemote failed"
 ok "del umdemote"
 
 # Readonly observer + admin app/full ACL probes (revision 2). Fixture passwords
-# go over SSH stdin only (--password-fd / $(cat)); never in argv or printed.
+# travel over SSH stdin (--password-fd / $(cat)); ubus stderr (which echoes
+# argv on error) is suppressed so the JSON never reaches host argv or logs.
 _sid_access() {
 	# _sid_access <sid> <scope> <object> <function>
 	ssh_guest "ubus call session access \"{\\\"ubus_rpc_session\\\":\\\"$1\\\",\\\"scope\\\":\\\"$2\\\",\\\"object\\\":\\\"$3\\\",\\\"function\\\":\\\"$4\\\"}\""
@@ -228,7 +229,7 @@ ssh_guest 'usrmanage set-luci-login umobs --enable' \
 	|| die "set-luci-login umobs --enable failed"
 ok "umobs readonly luci login enabled"
 
-_obs_login="$(printf '%s' '{"username":"umobs","password":"LabObs1!"}' | ssh_guest 'ubus call session login "$(cat)"')" \
+_obs_login="$(printf '%s' '{"username":"umobs","password":"LabObs1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
 	|| die "session login as umobs failed"
 _obs_sid="$(printf '%s' "$_obs_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_obs_sid" ]] || die "no umobs session id"
@@ -285,7 +286,7 @@ printf 'LabApp1!\n' | ssh_guest 'usrmanage add umapp --role admin --password-fd 
 	|| die "add umapp failed"
 ssh_guest 'usrmanage set-luci-login umapp --enable' \
 	|| die "set-luci-login umapp --enable failed"
-_app_login="$(printf '%s' '{"username":"umapp","password":"LabApp1!"}' | ssh_guest 'ubus call session login "$(cat)"')" \
+_app_login="$(printf '%s' '{"username":"umapp","password":"LabApp1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
 	|| die "session login as umapp failed"
 _app_sid="$(printf '%s' "$_app_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_app_sid" ]] || die "no umapp session id"
@@ -297,7 +298,7 @@ printf 'LabFull1!\n' | ssh_guest 'usrmanage add umfull --role admin --password-f
 	|| die "add umfull failed"
 ssh_guest 'usrmanage set-luci-login umfull --enable --scope full' \
 	|| die "set-luci-login umfull --scope full failed"
-_full_login="$(printf '%s' '{"username":"umfull","password":"LabFull1!"}' | ssh_guest 'ubus call session login "$(cat)"')" \
+_full_login="$(printf '%s' '{"username":"umfull","password":"LabFull1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
 	|| die "session login as umfull failed"
 _full_sid="$(printf '%s' "$_full_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_full_sid" ]] || die "no umfull session id"
@@ -311,7 +312,7 @@ if ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}
 fi
 ok "umfull leftover SID dead after demote"
 
-_full_re="$(printf '%s' '{"username":"umfull","password":"LabFull1!"}' | ssh_guest 'ubus call session login "$(cat)"')" \
+_full_re="$(printf '%s' '{"username":"umfull","password":"LabFull1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
 	|| die "re-login as demoted umfull failed"
 _full_re_sid="$(printf '%s' "$_full_re" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 _assert_denied "$(_sid_access "$_full_re_sid" ubus uci get)" "demoted full ubus uci get (uci get wireless)"
