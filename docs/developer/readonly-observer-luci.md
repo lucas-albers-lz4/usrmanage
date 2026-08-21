@@ -26,7 +26,7 @@ Keep **exactly two UNIX roles**: `admin` | `readonly`. Do not add an `observer` 
 
 Readonly **is** the observer profile: look, don’t touch, **don’t see secrets over LuCI/ubus**. Same UNIX password still allows SSH (nologin is a non-goal); that residual is documented, not “no secrets on the device.”
 
-Admin **is** a named root on **SSH** (`wheel`+sudo). Owned LuCI defaults to **app** scope (User Management), matching today. Full LuCI (`*`) is an **explicit** `--scope full` opt-in, not the upgrade default.
+Admin **is** a named root on **SSH** (`wheel`+sudo). Owned LuCI is **role-locked**: admin → **Full LuCI** (`*`); readonly → **diagnostic** (curated Status/Network/health + view-only User Management). There is no `--scope` picker.
 
 LuCI remains **opt-in** per managed user. Owned logins still use `$p$username` only. Foreign `luci-app-acl` principals stay untouched.
 
@@ -35,7 +35,7 @@ LuCI remains **opt-in** per managed user. Owned logins still use `$p$username` o
 **Goals**
 
 1. Readonly + owned LuCI can confirm device health without seeing secrets **in the web/ubus session**, and without changing config.
-2. Admin + owned LuCI can manage users in the web UI; **full** LuCI (keys, backups, all apps) only with `--scope full`.
+2. Admin + owned LuCI gets **Full LuCI** (keys, backups, all apps) — intentional; prefer HTTPS / management VLAN.
 3. Secret classes in §5 never appear in readonly ubus replies, menus, or HTML.
 4. Demote/disable/delete still revoke sessions and rewrite owned ACL lists (existing lifecycle).
 5. Host tests + lab (qemu-smoke) prove allow and **deny** (not only “page loads”).
@@ -51,8 +51,8 @@ LuCI remains **opt-in** per managed user. Owned logins still use `$p$username` o
 
 | Actor | UNIX | Story |
 |-------|------|--------|
-| IT operator | `admin` | Several named people with root **on SSH**. Create/revoke via usrmanage at scale. Web: User Management by default; optional `--scope full` for stock-root LuCI. |
-| Untrusted viewer | `readonly` | Customer/site contact confirms WAN/LAN/radio **up**, uptime, load. Cannot change anything. Must not see SSIDs, PSKs, VPN keys, user DB, backups. |
+| IT operator | `admin` | Several named people with root **on SSH**. Create/revoke via usrmanage at scale. Web: Full LuCI when enabled. |
+| Untrusted viewer | `readonly` | Customer/site contact troubleshoots with diagnostic menus (Overview/Routing/Realtime, Interfaces/Diagnostics, health) and **view-only** User Management. Cannot change config or mint users. Must not get Full LuCI / `luci-base` / mutator write. |
 | Root CLI | root | Unchanged. |
 | Foreign web login | (not owned) | `luci-app-acl` still supported; never adopted. |
 
@@ -89,9 +89,9 @@ Granting `luci-mod-status-*` or `luci-base` to readonly fails closed on paper an
 | `luci-mod-status-processes` write | `kill` |
 | `*` | everything |
 
-Readonly must **never** receive `*`, `luci-base`, or any stock status/network/system ACL group. Health data is served only through a **usrmanage-owned redacted RPC** (§7).
+Readonly must **never** receive `*`, `luci-base`, or stock groups on the **write** list. Diagnostic grants selected stock status/network ACL **names on `list read` only** so Interfaces/Overview remain non-mutating (rpcd applies a group’s internal write block only when the group is on the login write list). Health redacted RPC remains for Device health. Logs/processes/`luci-base` stay forbidden.
 
-**Product-lock change for admin:** today’s docs say owned logins never get `*` or `luci-base` write. This design **allows** `read *` + `write *` **only** for `usrmanage_scope=full`. Default owned admin stays today’s app ACL. Demote must drop `*` immediately (rewrite then revoke).
+**Product-lock change for admin:** enabling owned LuCI for admin **is** `read *` + `write *` (`usrmanage_scope=full`). Demote must drop `*` immediately (rewrite then revoke). Upgrade/sync rewrites legacy admin `app` → `full`.
 
 ## 7. ACL matrix (owned logins)
 
@@ -99,16 +99,15 @@ Constants (names are normative for tests):
 
 - `USRMANAGE_SESSION_ACL` = `luci-app-usrmanage-session` (LuCI shell only).
 - `USRMANAGE_HEALTH_ACL` = `luci-app-usrmanage-health` (`health` **only**; no `write` object in the JSON).
-- `USRMANAGE_APP_ACL` = `luci-app-usrmanage` (list/show/audit/doctor/policy + mutators). **Not** on readonly owned logins.
-- Admin web scope is recorded on the owned section (`option usrmanage_scope 'app'|'full'`). Default **`app`**. Wildcard `*` only for `full`.
+- `USRMANAGE_APP_ACL` = `luci-app-usrmanage` (read = list/show/audit/doctor/policy; write = mutators). Readonly diagnostic gets this group on **read only** (view-only UM).
+- Scope is recorded as `option usrmanage_scope 'diagnostic'|'full'` and is **derived from UNIX role** (no picker). Legacy `app` → `diagnostic`.
 
-| UNIX role | `list read` | `list write` |
-|-----------|-------------|--------------|
-| readonly | `luci-app-usrmanage-session`, `luci-app-usrmanage-health` | *(empty)* |
-| admin (legacy / default owned) | `luci-app-usrmanage-session`, `luci-app-usrmanage` | `luci-app-usrmanage` |
-| admin (`--scope full`) | `*` | `*` |
+| UNIX role | scope | `list read` | `list write` |
+|-----------|-------|-------------|--------------|
+| readonly | diagnostic | session, health, app, status-index, status-routes, status-realtime, network-config, network-diagnostics | *(empty)* |
+| admin | full | `*` | `*` |
 
-`um_luci_login_expected_reads` / `expected_writes` become **role-dependent** (today reads are the same for both roles). Tamper detection: any extra ACL name, `*`, or stock `luci-mod-*` / `luci-base` on a **readonly** owned section → state `tampered` (fail closed; do not “fix” by merging).
+`um_luci_login_expected_reads` / `expected_writes` are **role-derived**. Tamper detection: exact set mismatch, `*`, or `luci-base` on readonly → `tampered`.
 
 ### 7.1 Session ACL (both roles need a shell)
 

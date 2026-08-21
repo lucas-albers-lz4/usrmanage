@@ -313,20 +313,20 @@ msgstr "Verwendet das UNIX-Passwort erneut für die Web-Anmeldung ($p$). Bevorzu
 msgid "Uses the same UNIX password. Off by default. Exposes this password to the web login path."
 msgstr "Verwendet dasselbe UNIX-Passwort. Standardmäßig aus. Macht dieses Passwort über den Web-Anmeldeweg erreichbar."
 
-msgid "User Management only"
-msgstr "Nur Benutzerverwaltung"
+msgid "View only — you can list users and audit events, but not add, change roles, passwords, policy, or LuCI login."
+msgstr "Nur Ansicht — Benutzer und Audit können gelesen werden, aber nicht hinzufügen, Rollen, Passwörter, Richtlinie oder LuCI-Login ändern."
 
 msgid "Full LuCI (all menus)"
 msgstr "Vollständiges LuCI (alle Menüs)"
 
-msgid "Readonly LuCI logins see Device health only — not user accounts, wireless keys, or configuration backups."
-msgstr "Schreibgeschützte LuCI-Anmeldungen sehen nur Gerätestatus — keine Benutzerkonten, WLAN-Schlüssel oder Konfigurationssicherungen."
+msgid "Readonly LuCI is diagnostic scope: Status (Overview, Routing, Realtime Graphs), Network (Interfaces, Diagnostics), Device health, and view-only User Management. No configuration writes or Full LuCI menus."
+msgstr "Readonly-LuCI ist Diagnose-Scope: Status (Übersicht, Routing, Echtzeitdiagramme), Netzwerk (Schnittstellen, Diagnose), Gerätezustand und schreibgeschützte Benutzerverwaltung. Keine Konfigurationsänderungen oder volles LuCI."
 
 msgid "Readonly LuCI logins are for device health only (System → Device health), not user administration."
 msgstr "Schreibgeschützte LuCI-Anmeldungen dienen nur dem Gerätestatus (System → Gerätestatus), nicht der Kontoverwaltung."
 
-msgid "LuCI web scope"
-msgstr "LuCI-Web-Umfang"
+msgid "Admin LuCI is Full LuCI (all menus), including configuration and wireless keys/backups. Prefer HTTPS and a management network."
+msgstr "Admin-LuCI ist volles LuCI (alle Menüs), inklusive Konfiguration und WLAN-Schlüssel/Backups. HTTPS und Managementnetz bevorzugen."
 
 msgid "Full LuCI exposes all menus and configuration (including wireless keys and backups). Prefer HTTPS and a management network."
 msgstr "Vollständiges LuCI zeigt alle Menüs und die Konfiguration (einschließlich WLAN-Schlüssel und Sicherungen). Bevorzugen Sie HTTPS und ein Management-Netzwerk."

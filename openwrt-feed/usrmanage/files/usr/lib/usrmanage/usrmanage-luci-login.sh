@@ -12,6 +12,12 @@
 : "${USRMANAGE_SESSION_ACL:=luci-app-usrmanage-session}"
 : "${USRMANAGE_HEALTH_ACL:=luci-app-usrmanage-health}"
 : "${USRMANAGE_APP_ACL:=luci-app-usrmanage}"
+# Readonly diagnostic LuCI (read list only — stock group write blocks stay denied).
+: "${USRMANAGE_DIAG_STATUS_INDEX:=luci-mod-status-index}"
+: "${USRMANAGE_DIAG_STATUS_ROUTES:=luci-mod-status-routes}"
+: "${USRMANAGE_DIAG_STATUS_REALTIME:=luci-mod-status-realtime}"
+: "${USRMANAGE_DIAG_NETWORK_CONFIG:=luci-mod-network-config}"
+: "${USRMANAGE_DIAG_NETWORK_DIAG:=luci-mod-network-diagnostics}"
 
 # --- shadow / pending --------------------------------------------------------
 
@@ -60,8 +66,11 @@ um_session_revoke_user() {
 	fi
 	_raw=$(ubus call session list 2>/dev/null) || return 1
 	[ -n "$_raw" ] || return 0
-	# Session ids are 32-char hex keys in the list object.
-	_sid_list=$(printf '%s' "$_raw" | grep -oE '"[0-9a-f]{32}"' | tr -d '"' | sort -u)
+	# Field-anchor on ubus_rpc_session — never greedily match any 32-char hex
+	# in the blob (ACL / payload noise caused session_revoke_unavailable).
+	_sid_list=$(printf '%s' "$_raw" \
+		| grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' \
+		| grep -oE '[0-9a-f]{32}' | sort -u)
 	for _sid in $_sid_list; do
 		[ -n "$_sid" ] || continue
 		# One ubus call per session; capture its exit status separately so a
@@ -94,7 +103,9 @@ um_session_user_has_live_sid() {
 	fi
 	_raw=$(ubus call session list 2>/dev/null) || return 0
 	[ -n "$_raw" ] || return 1
-	_sid_list=$(printf '%s' "$_raw" | grep -oE '"[0-9a-f]{32}"' | tr -d '"' | sort -u)
+	_sid_list=$(printf '%s' "$_raw" \
+		| grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' \
+		| grep -oE '[0-9a-f]{32}' | sort -u)
 	for _sid in $_sid_list; do
 		[ -n "$_sid" ] || continue
 		_su=$(ubus call session get "{\"ubus_rpc_session\":\"${_sid}\"}" 2>/dev/null) || return 0
@@ -117,9 +128,10 @@ um_session_revoke_required() {
 # Dump login sections as records:
 # INDEX\x1fUSERNAME\x1fPASSWORD\x1fMARKER\x1fREADS\x1fWRITES\x1fSCOPE
 # INDEX is 0-based among login sections only. READS/WRITES are comma-separated.
-# SCOPE is option usrmanage_scope (empty when missing → treat as app).
-# Delimiter is ASCII unit separator (\x1f) — safe in $p$ refs and base64 hashes,
-# unlike | which can appear in foreign plaintext passwords (issue #98 m3).
+# SCOPE is option usrmanage_scope (empty when missing → role-derived via
+# um_luci_login_scope_for_role). Delimiter is ASCII unit separator (\x1f) —
+# safe in $p$ refs and base64 hashes, unlike | which can appear in foreign
+# plaintext passwords (issue #98 m3).
 um_luci_login_sep() {
 	# ASCII unit separator (0x1f) via POSIX octal escape — dash printf does not
 	# interpret \x hex, so \037 is the portable form. Safe in $p$ refs/base64.
@@ -199,13 +211,27 @@ um_luci_login_acl_sorted() {
 	printf '%s' "$_raw" | tr ',' '\n' | sed '/^$/d' | sort -u | tr '\n' ',' | sed 's/,$//'
 }
 
+um_luci_login_scope_for_role() {
+	# um_luci_login_scope_for_role <role> → full|diagnostic (1 if invalid role).
+	case "$1" in
+		admin) printf 'full'; return 0 ;;
+		readonly) printf 'diagnostic'; return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
 um_luci_login_normalize_scope() {
-	# um_luci_login_normalize_scope <scope> → app|full on stdout; 1 if invalid.
+	# um_luci_login_normalize_scope <scope> → diagnostic|full on stdout; 1 if invalid.
+	# Legacy usrmanage_scope 'app' maps to diagnostic.
 	_sc=$1
-	[ -n "$_sc" ] || _sc=app
+	[ -n "$_sc" ] || return 1
 	case "$_sc" in
-		app|full)
-			printf '%s' "$_sc"
+		full)
+			printf 'full'
+			return 0
+			;;
+		diagnostic|app)
+			printf 'diagnostic'
 			return 0
 			;;
 		*)
@@ -232,7 +258,8 @@ um_luci_login_csv_has_literal_star() {
 }
 
 um_luci_login_csv_has_forbidden_readonly() {
-	# luci-base or luci-mod-* token (readonly must never hold these).
+	# luci-base is never allowed on readonly (logout ACL / full UCI write).
+	# Diagnostic luci-mod-* names are allowed only via exact expected-set match.
 	_csv=$1
 	[ -n "$_csv" ] || return 1
 	_old_ifs=$IFS
@@ -244,36 +271,37 @@ um_luci_login_csv_has_forbidden_readonly() {
 	IFS=$_old_ifs
 	for _t in "$@"; do
 		[ "$_t" = "luci-base" ] && return 0
-		case "$_t" in
-			luci-mod-*) return 0 ;;
-		esac
 	done
 	return 1
 }
 
 um_luci_login_expected_reads() {
-	# um_luci_login_expected_reads <role> [scope]
+	# um_luci_login_expected_reads <role> [scope ignored — derived from role]
 	_role=$1
-	_scope=$(um_luci_login_normalize_scope "${2:-app}") || { printf ''; return 1; }
-	if [ "$_role" = "admin" ] && [ "$_scope" = "full" ]; then
+	_scope=$(um_luci_login_scope_for_role "$_role") || { printf ''; return 1; }
+	if [ "$_scope" = "full" ]; then
 		printf '*'
 		return 0
 	fi
-	if [ "$_role" = "admin" ]; then
-		printf '%s,%s' "$USRMANAGE_SESSION_ACL" "$USRMANAGE_APP_ACL" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//'
-		return 0
-	fi
-	printf '%s,%s' "$USRMANAGE_SESSION_ACL" "$USRMANAGE_HEALTH_ACL" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//'
+	# diagnostic (readonly): session + health + view-only UM + status/network.
+	printf '%s,%s,%s,%s,%s,%s,%s,%s' \
+		"$USRMANAGE_SESSION_ACL" \
+		"$USRMANAGE_HEALTH_ACL" \
+		"$USRMANAGE_APP_ACL" \
+		"$USRMANAGE_DIAG_STATUS_INDEX" \
+		"$USRMANAGE_DIAG_STATUS_ROUTES" \
+		"$USRMANAGE_DIAG_STATUS_REALTIME" \
+		"$USRMANAGE_DIAG_NETWORK_CONFIG" \
+		"$USRMANAGE_DIAG_NETWORK_DIAG" \
+		| tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//'
 }
 
 um_luci_login_expected_writes() {
-	# um_luci_login_expected_writes <role> [scope]
+	# um_luci_login_expected_writes <role> [scope ignored — derived from role]
 	_role=$1
-	_scope=$(um_luci_login_normalize_scope "${2:-app}") || { printf ''; return 1; }
-	if [ "$_role" = "admin" ] && [ "$_scope" = "full" ]; then
+	_scope=$(um_luci_login_scope_for_role "$_role") || { printf ''; return 1; }
+	if [ "$_scope" = "full" ]; then
 		printf '*'
-	elif [ "$_role" = "admin" ]; then
-		printf '%s' "$USRMANAGE_APP_ACL"
 	else
 		printf ''
 	fi
@@ -282,13 +310,19 @@ um_luci_login_expected_writes() {
 um_luci_login_acls_match_role() {
 	# um_luci_login_acls_match_role <role> <reads_csv> <writes_csv> [scope]
 	# Exact set equality on sorted CSV strings (never unquoted glob).
-	# Literal * is allowed only for admin + scope=full as the entire set.
+	# Scope must match role lock (admin→full, readonly→diagnostic).
 	_role=$1
-	_scope=$(um_luci_login_normalize_scope "${4:-app}") || return 1
+	_want_scope=$(um_luci_login_scope_for_role "$_role") || return 1
+	if [ -n "${4:-}" ]; then
+		_scope=$(um_luci_login_normalize_scope "$4") || return 1
+		[ "$_scope" = "$_want_scope" ] || return 1
+	else
+		_scope=$_want_scope
+	fi
 	_reads=$(um_luci_login_acl_sorted "$2")
 	_writes=$(um_luci_login_acl_sorted "$3")
-	_ereads=$(um_luci_login_expected_reads "$_role" "$_scope") || return 1
-	_ewrites=$(um_luci_login_expected_writes "$_role" "$_scope") || return 1
+	_ereads=$(um_luci_login_expected_reads "$_role") || return 1
+	_ewrites=$(um_luci_login_expected_writes "$_role") || return 1
 	[ "$_reads" = "$_ereads" ] || return 1
 	[ "$_writes" = "$_ewrites" ] || return 1
 	if um_luci_login_csv_has_literal_star "$_reads" || um_luci_login_csv_has_literal_star "$_writes"; then
@@ -312,12 +346,15 @@ um_luci_login_classify_row() {
 	_row_reads=$4
 	_row_writes=$5
 	_want=$6
-	_row_scope=${7:-app}
+	_row_scope=$7
 	[ "$_row_user" = "$_want" ] || { printf 'skip'; return 0; }
 	_expect_pass="\$p\$${_want}"
 	if [ "$_row_mark" = "1" ]; then
 		if um_is_managed "$_want" && [ "$_row_pass" = "$_expect_pass" ]; then
 			_role=$(um_role_of "$_want")
+			if [ -z "$_row_scope" ]; then
+				_row_scope=$(um_luci_login_scope_for_role "$_role") || _row_scope=
+			fi
 			if um_luci_login_acls_match_role "$_role" "$_row_reads" "$_row_writes" "$_row_scope"; then
 				printf 'owned'
 			else
@@ -473,15 +510,13 @@ um_rpcd_rewrite_without_login_index() {
 }
 
 um_rpcd_append_owned_login() {
-	# Append owned login section for user/role/scope to file path $1 (already exists).
-	# um_rpcd_append_owned_login <file> <user> <role> [scope]
+	# Append owned login section for user/role to file path $1 (already exists).
+	# Scope is always derived from role (admin→full, readonly→diagnostic).
+	# um_rpcd_append_owned_login <file> <user> <role> [ignored_scope]
 	_ull_out=$1
 	_ull_uname=$2
 	_ull_urole=$3
-	_ull_scope=$(um_luci_login_normalize_scope "${4:-app}") || _ull_scope=app
-	if [ "$_ull_urole" = "readonly" ]; then
-		_ull_scope=app
-	fi
+	_ull_scope=$(um_luci_login_scope_for_role "$_ull_urole") || _ull_scope=diagnostic
 	{
 		printf '\nconfig login\n'
 		printf '\toption username '\''%s'\''\n' "$_ull_uname"
@@ -490,16 +525,19 @@ um_rpcd_append_owned_login() {
 		printf '\toption password '\''$p$%s'\''\n' "$_ull_uname"
 		printf '\toption usrmanage '\''1'\''\n'
 		printf '\toption usrmanage_scope '\''%s'\''\n' "$_ull_scope"
-		if [ "$_ull_urole" = "admin" ] && [ "$_ull_scope" = "full" ]; then
+		if [ "$_ull_scope" = "full" ]; then
 			printf '\tlist read '\''*'\''\n'
 			printf '\tlist write '\''*'\''\n'
-		elif [ "$_ull_urole" = "admin" ]; then
-			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_SESSION_ACL"
-			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_APP_ACL"
-			printf '\tlist write '\''%s'\''\n' "$USRMANAGE_APP_ACL"
 		else
+			# diagnostic: read-only stock + usrmanage groups (empty write list).
 			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_SESSION_ACL"
 			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_HEALTH_ACL"
+			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_APP_ACL"
+			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_DIAG_STATUS_INDEX"
+			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_DIAG_STATUS_ROUTES"
+			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_DIAG_STATUS_REALTIME"
+			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_DIAG_NETWORK_CONFIG"
+			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_DIAG_NETWORK_DIAG"
 		fi
 	} >> "$_ull_out"
 }
@@ -529,10 +567,10 @@ um_rpcd_atomic_replace() {
 }
 
 um_luci_login_verify_owned_acls() {
-	# After write, confirm ours section has exact role+scope ACL membership.
+	# After write, confirm ours section has exact role ACL membership.
 	_ull_name=$1
 	_ull_role=$2
-	_ull_scope=$(um_luci_login_normalize_scope "${3:-app}") || return 1
+	_ull_scope=$(um_luci_login_scope_for_role "$_ull_role") || return 1
 	_ull_idx=$(um_luci_login_ours_index "$_ull_name" | head -n1)
 	[ -n "$_ull_idx" ] || return 1
 	_uf=$(um_luci_login_sep)
@@ -546,39 +584,34 @@ um_luci_login_verify_owned_acls() {
 }
 
 um_luci_login_read_ours_scope() {
-	# Scope recorded on the first ours section; default app.
+	# Scope recorded on the first ours section; default from role when missing.
 	_ull_name=$1
+	_ull_role=$(um_role_of "$_ull_name" 2>/dev/null || printf 'readonly')
 	_ull_idx=$(um_luci_login_ours_index "$_ull_name" | head -n1)
-	[ -n "$_ull_idx" ] || { printf 'app'; return 0; }
+	[ -n "$_ull_idx" ] || {
+		um_luci_login_scope_for_role "$_ull_role" || printf 'diagnostic'
+		return 0
+	}
 	_uf=$(um_luci_login_sep)
 	_row=$(um_rpcd_login_dump | awk -v i="$_ull_idx" -v FS="$_uf" '$1==i {print; exit}')
 	_got=$(printf '%s' "$_row" | awk -v FS="$_uf" '{print $7}')
-	um_luci_login_normalize_scope "$_got" || printf 'app'
+	if [ -n "$_got" ]; then
+		um_luci_login_normalize_scope "$_got" && return 0
+	fi
+	um_luci_login_scope_for_role "$_ull_role" || printf 'diagnostic'
 }
 
 um_luci_login_enable_user() {
 	# Create owned login for managed user. Caller holds flock.
-	# um_luci_login_enable_user <user> [scope]
+	# um_luci_login_enable_user <user> [ignored_scope — always role-derived]
 	# Returns 0/1; sets UM_LUCI_ERR on failure (no um_die — add path must rollback).
 	_ull_name=$1
 	_ull_role=$(um_role_of "$_ull_name")
-	if [ -n "$2" ]; then
-		_ull_scope=$(um_luci_login_normalize_scope "$2") || {
-			um_audit denied "$_ull_name" denied invalid_luci_scope "$_ull_role"
-			UM_LUCI_ERR=invalid_luci_scope
-			return 1
-		}
-	elif [ -n "$(um_luci_login_ours_index "$_ull_name" 2>/dev/null || true)" ]; then
-		_ull_scope=$(um_luci_login_read_ours_scope "$_ull_name")
-	else
-		_ull_scope=app
-	fi
-	UM_LUCI_ERR=
-	if [ "$_ull_scope" = "full" ] && [ "$_ull_role" != "admin" ]; then
-		um_audit denied "$_ull_name" denied luci_scope_readonly "$_ull_role"
-		UM_LUCI_ERR=luci_scope_readonly
+	_ull_scope=$(um_luci_login_scope_for_role "$_ull_role") || {
+		UM_LUCI_ERR=invalid_luci_scope
 		return 1
-	fi
+	}
+	UM_LUCI_ERR=
 	um_rpcd_config_parsable || {
 		um_audit denied "$_ull_name" denied rpcd_config_unparsable "$_ull_role"
 		UM_LUCI_ERR=rpcd_config_unparsable
@@ -610,7 +643,7 @@ um_luci_login_enable_user() {
 	case "$_ull_st" in
 		none) ;;
 		owned)
-			um_luci_login_sync_acls "$_ull_name" "$_ull_role" "$_ull_scope" || {
+			um_luci_login_sync_acls "$_ull_name" "$_ull_role" || {
 				UM_LUCI_ERR=luci_login_sync_failed
 				return 1
 			}
@@ -647,14 +680,14 @@ um_luci_login_enable_user() {
 		UM_LUCI_ERR=rpcd_config_failed
 		return 1
 	}
-	um_rpcd_append_owned_login "$_ull_work" "$_ull_name" "$_ull_role" "$_ull_scope"
+	um_rpcd_append_owned_login "$_ull_work" "$_ull_name" "$_ull_role"
 	um_rpcd_atomic_replace "$_ull_work" "$_ull_dest" || {
 		rm -f "$_ull_work"
 		UM_LUCI_ERR=rpcd_config_failed
 		return 1
 	}
 	rm -f "$_ull_work"
-	um_luci_login_verify_owned_acls "$_ull_name" "$_ull_role" "$_ull_scope" || {
+	um_luci_login_verify_owned_acls "$_ull_name" "$_ull_role" || {
 		_ull_rollback_idxs=$(um_luci_login_ours_index "$_ull_name")
 		# Process in reverse to avoid index shifting.
 		_ull_rollback_rev=$(printf '%s' "$_ull_rollback_idxs" | sort -nr)
@@ -672,7 +705,6 @@ um_luci_login_enable_user() {
 		return 1
 	}
 	_ull_acl=r
-	[ "$_ull_role" = "admin" ] && _ull_acl=rw
 	[ "$_ull_scope" = "full" ] && _ull_acl=star
 	um_audit luci_grant "$_ull_name" ok "acl=${_ull_acl} scope=${_ull_scope}" "$_ull_role"
 	return 0
@@ -782,27 +814,12 @@ um_luci_login_disable_user() {
 
 um_luci_login_sync_acls() {
 	# Recreate our login section with role-correct ACLs (delete + append).
-	# um_luci_login_sync_acls <user> <role> [scope]
-	# Omitted scope: readonly → app; admin → preserve ours section (default app).
+	# um_luci_login_sync_acls <user> <role> [ignored_scope — always role-derived]
 	# Works for owned and ACL-drifted (marker+$p$+managed) sections.
 	# Handles multiple matching indexes (issue #98 m6).
 	_ull_name=$1
 	_ull_role=$2
-	_ull_scope=$3
-	if [ -z "$_ull_scope" ]; then
-		if [ "$_ull_role" = "readonly" ]; then
-			_ull_scope=app
-		else
-			_ull_scope=$(um_luci_login_read_ours_scope "$_ull_name")
-		fi
-	fi
-	_ull_scope=$(um_luci_login_normalize_scope "$_ull_scope") || return 1
-	if [ "$_ull_role" = "readonly" ]; then
-		_ull_scope=app
-	fi
-	if [ "$_ull_scope" = "full" ] && [ "$_ull_role" != "admin" ]; then
-		return 1
-	fi
+	_ull_scope=$(um_luci_login_scope_for_role "$_ull_role") || return 1
 	# Refuse rewrite when awk cannot see the whole file (mixed canonical +
 	# hidden unparsable login must not leave elevated web access).
 	um_rpcd_config_parsable || return 1
@@ -833,13 +850,13 @@ um_luci_login_sync_acls() {
 			return 1
 		}
 	done
-	um_rpcd_append_owned_login "$_ull_tmp" "$_ull_name" "$_ull_role" "$_ull_scope"
+	um_rpcd_append_owned_login "$_ull_tmp" "$_ull_name" "$_ull_role"
 	um_rpcd_atomic_replace "$_ull_tmp" "$USRMANAGE_RPCD_CONFIG" || {
 		rm -f "$_ull_tmp"
 		return 1
 	}
 	rm -f "$_ull_tmp"
-	um_luci_login_verify_owned_acls "$_ull_name" "$_ull_role" "$_ull_scope" || return 1
+	um_luci_login_verify_owned_acls "$_ull_name" "$_ull_role" || return 1
 	return 0
 }
 
@@ -967,7 +984,8 @@ um_luci_login_remove_owned_best_effort() {
 }
 
 um_mut_set_luci_login() {
-	# um_mut_set_luci_login <user> <enable|disable|reset> [scope]
+	# um_mut_set_luci_login <user> <enable|disable|reset>
+	# Scope is always derived from UNIX role (no --scope).
 	# Wrap rpcd mutations in um_tx_* so a SIGKILL mid multi-index rewrite can
 	# restore the prior /etc/config/rpcd from the snapshot (issue #106 L2).
 	_ull_name=$1
@@ -977,38 +995,20 @@ um_mut_set_luci_login() {
 	um_mut_require_managed "$_ull_name" ""
 	um_mut_require_exists "$_ull_name" "" not_found
 	if [ -n "$_ull_scope" ]; then
-		case "$_ull_mode" in
-			enable|1|on) ;;
-			*)
-				um_audit denied "$_ull_name" denied scope_requires_enable
-				um_die "error: scope_requires_enable"
-				;;
-		esac
-		um_luci_login_normalize_scope "$_ull_scope" >/dev/null || {
-			um_audit denied "$_ull_name" denied invalid_luci_scope
-			um_die "error: invalid_luci_scope"
-		}
-		_ull_scope=$(um_luci_login_normalize_scope "$_ull_scope")
-	else
-		# Omitted --scope: enable preserves existing owned scope (do not
-		# silently drop full → app).
-		_ull_scope=
+		um_audit denied "$_ull_name" denied luci_scope_role_locked
+		um_die "error: luci_scope_role_locked"
 	fi
 	case "$_ull_mode" in
 		enable|1|on)
-			if [ "$_ull_scope" = "full" ]; then
+			if [ "$(um_role_of "$_ull_name")" = "admin" ]; then
 				um_rpcd_config_parsable || {
-					um_audit denied "$_ull_name" denied rpcd_config_unparsable "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
+					um_audit denied "$_ull_name" denied rpcd_config_unparsable admin
 					um_die "error: rpcd_config_unparsable"
 				}
-				if [ "$(um_role_of "$_ull_name")" != "admin" ]; then
-					um_audit denied "$_ull_name" denied luci_scope_readonly "$(um_role_of "$_ull_name")"
-					um_die "error: luci_scope_readonly"
-				fi
 			fi
 			um_tx_begin
 			um_incomplete_set "luci-login:${_ull_name}:enable"
-			um_luci_login_enable_user "$_ull_name" "$_ull_scope" || {
+			um_luci_login_enable_user "$_ull_name" || {
 				um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
 				um_incomplete_clear
 				um_audit luci_login "$_ull_name" denied "mode=enable" "$(um_role_of "$_ull_name" 2>/dev/null || printf readonly)"
@@ -1057,8 +1057,8 @@ um_mut_set_luci_login() {
 }
 
 um_luci_login_migrate_observer() {
-	# luci-app uci-defaults: rewrite owned readonly logins to session+health.
-	# Preserve admin app matrix; never auto-grant *. Ownership gate only
+	# luci-app uci-defaults: rewrite owned logins to role-locked ACL matrices
+	# (readonly→diagnostic, admin→full). Ownership gate only
 	# (ours_index: marker + $p$user + managed). Never unmarked or root.
 	# Caller should hold um_with_lock. Uses um_tx_*.
 	um_rpcd_config_parsable || return 1
@@ -1080,9 +1080,12 @@ um_luci_login_migrate_observer() {
 		_expect_pass="\$p\$${_ru}"
 		[ "$_rp" = "$_expect_pass" ] || continue
 		_role=$(um_role_of "$_ru")
-		[ "$_role" = "readonly" ] || continue
-		_scope=$(um_luci_login_normalize_scope "$_rs") || _scope=app
-		if um_luci_login_acls_match_role readonly "$_rr" "$_rw" "$_scope"; then
+		case "$_role" in
+			admin|readonly) ;;
+			*) continue ;;
+		esac
+		_scope=$(um_luci_login_normalize_scope "$_rs") || _scope=
+		if [ -n "$_scope" ] && um_luci_login_acls_match_role "$_role" "$_rr" "$_rw" "$_scope"; then
 			continue
 		fi
 		_need_tx=1
@@ -1100,19 +1103,20 @@ um_luci_login_migrate_observer() {
 		[ "$_ru" = "root" ] && continue
 		_idxs=$(um_luci_login_ours_index "$_ru")
 		[ -n "$_idxs" ] || continue
+		_role=$(um_role_of "$_ru")
 		# Never rollback the whole snapshot on a single-user failure: that
-		# would restore leftover * / app-read ACLs (fail-open on upgrade).
-		if ! um_luci_login_sync_acls "$_ru" readonly app; then
+		# would restore leftover * / legacy app ACLs (fail-open on upgrade).
+		if ! um_luci_login_sync_acls "$_ru" "$_role"; then
 			um_luci_login_remove_owned_best_effort "$_ru" || true
 			um_session_revoke_user "$_ru" || true
-			um_audit fail "$_ru" fail luci_login_migrate_observer readonly
+			um_audit fail "$_ru" fail luci_login_migrate_observer "$_role"
 			_mig_fail=1
 			continue
 		fi
 		if ! um_session_revoke_user "$_ru"; then
 			um_luci_login_remove_owned_best_effort "$_ru" || true
 			um_session_revoke_user "$_ru" || true
-			um_audit fail "$_ru" fail luci_login_migrate_revoke readonly
+			um_audit fail "$_ru" fail luci_login_migrate_revoke "$_role"
 			_mig_fail=1
 			continue
 		fi
@@ -1120,4 +1124,3 @@ um_luci_login_migrate_observer() {
 	um_tx_commit
 	[ "$_mig_fail" = "0" ]
 }
-

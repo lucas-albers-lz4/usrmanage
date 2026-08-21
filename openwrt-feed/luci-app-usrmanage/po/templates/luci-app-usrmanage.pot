@@ -415,7 +415,7 @@ msgid "Error"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
-msgid "User Management only"
+msgid "View only — you can list users and audit events, but not add, change roles, passwords, policy, or LuCI login."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
@@ -423,7 +423,7 @@ msgid "Full LuCI (all menus)"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
-msgid "Readonly LuCI logins see Device health only — not user accounts, wireless keys, or configuration backups."
+msgid "Readonly LuCI is diagnostic scope: Status (Overview, Routing, Realtime Graphs), Network (Interfaces, Diagnostics), Device health, and view-only User Management. No configuration writes or Full LuCI menus."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
@@ -431,7 +431,7 @@ msgid "Readonly LuCI logins are for device health only (System → Device health
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
-msgid "LuCI web scope"
+msgid "Admin LuCI is Full LuCI (all menus), including configuration and wireless keys/backups. Prefer HTTPS and a management network."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js

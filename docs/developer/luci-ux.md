@@ -16,7 +16,7 @@ Menus:
 
 1. Banner: UNIX/SSH accounts; optional LuCI web login per user (`$p$`); readonly web = Device health; admin = wheel + sudo
 2. Doctor banner when self-check has **errors** (expanded `alert-message error`) or **warns** only (collapsed `alert-message warning`). No green “OK” strip. Raw JSON stays under Technical details for bug reports. Wheel missing with no live managed users is a warn (created on first add); BusyBox without `stat` uses `find -perm 440` for sudoers mode.
-3. Password policy strip (`Password policy: OpenWrt`) — Configure expands preset/toggles (write ACL); **Save** required; read ACL sees name only
+3. Password policy strip (`Password policy: OpenWrt`) — Configure expands preset/toggles (write ACL); **Save** required; read ACL sees name only. Add/Change password modals use a **quieter** live checklist (circular ✓/✗ via theme `--success-color-*` / `--error-color-*`; see `usrmanage.css`).
 4. User table: Username | UID | Role | Shell | Managed | LuCI | Actions
 5. Manage actions (write ACL only): Add (optional LuCI checkbox; admin scope **app** vs **full** when role=admin), Set role, Password, Enable/Disable LuCI, Remove
 6. Audit panel (read ACL): recent events + Refresh

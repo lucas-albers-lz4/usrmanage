@@ -1,0 +1,50 @@
+/* Password policy checklist — quieter variant (circular mark, no row fill).
+ * Colors from stock LuCI theme variables only (no hardcoded hex). */
+
+.usrmanage-pwcheck-list {
+	list-style: none;
+	margin: 0.35em 0 0;
+	padding: 0;
+}
+
+.usrmanage-pwcheck {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.45em;
+	margin: 0.28em 0;
+}
+
+.usrmanage-pwcheck-ok {
+	color: var(--success-color-high);
+}
+
+.usrmanage-pwcheck-bad {
+	color: var(--error-color-high);
+}
+
+.usrmanage-pwcheck-mark {
+	flex: 0 0 1.15em;
+	width: 1.15em;
+	height: 1.15em;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	border: 1.5px solid currentColor;
+	font-size: 0.7em;
+	font-weight: 700;
+	line-height: 1;
+	margin-top: 0.12em;
+}
+
+.usrmanage-pwcheck-ok .usrmanage-pwcheck-mark {
+	background: var(--success-color-high);
+	border-color: var(--success-color-high);
+	color: var(--on-success-color);
+}
+
+.usrmanage-pwcheck-bad .usrmanage-pwcheck-mark {
+	background: transparent;
+	border-color: var(--error-color-high);
+	color: var(--error-color-high);
+}

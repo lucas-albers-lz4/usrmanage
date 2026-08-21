@@ -7,7 +7,7 @@ How usrmanage is tested locally and in CI. Passwords never appear on argv, in au
 | Layer | What | Where | When |
 |-------|------|-------|------|
 | **Unit** | Validators, audit sanitize, theme (no hex), i18n POT coverage | `tests/test_validators.sh`, `tests/usrmanage-theme.test.js`, `tests/usrmanage-i18n.test.js` | PR via `./scripts/smoke-host.sh` |
-| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, rpcd argv (no password leak), multi-line/control-char password rejection over the real `--password-fd` path | `tests/test_mutators.sh`, `tests/test_mutators-busybox-fallback.sh`, `tests/test_password_control.sh` | PR via `./scripts/smoke-host.sh` |
+| **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, happy-path add→role→passwd→del, password **policy presets**, rpcd argv (no password leak), multi-line/control-char password rejection over the real `--password-fd` path | `tests/test_mutators.sh`, `tests/test_mutator_flows.sh`, `tests/test_policy.sh`, `tests/test_mutators-busybox-fallback.sh`, `tests/test_password_control.sh` | PR via `./scripts/smoke-host.sh` |
 | **Device integration** | Real `useradd`/wheel/ubus/HTTP page on guest; live LuCI session revoke | `scripts/qemu-smoke-usrmanage.sh` | Local (QEMU lab); not PR CI |
 | **Playwright MCP** | Agent navigate/snapshot/click against live LuCI | `.cursor/mcp.json` → `@playwright/mcp` | Local with lab up |
 | **E2E UI** | Committed LuCI user flows | `tests/e2e/` + `./scripts/playwright-luci.sh` | Local with lab up; not PR CI |
@@ -80,6 +80,32 @@ Environment:
 | `OPENWRT_SSH_PORT` | `2222` | Guest SSH port |
 
 Specs use unique usernames (`pwflow_*`) and clean up via SSH/`usrmanage del` when possible. English UI only for v1 e2e. Stable controls use `data-testid` (`usrmanage-add-user`, `usrmanage-add-username`, …) in the LuCI view.
+
+### LuCI login matrix (role × opt-in)
+
+Owned web login is **opt-in** (`--luci-login` / Add checkbox). Efficient coverage is a **2×2 allow/deny** plus one disable lifecycle — not every disable×role or `--scope full` cell (those stay in `qemu-smoke-usrmanage.sh` + `test_luci_login.sh`).
+
+| Role | LuCI | Expect (e2e) | Host state pin |
+|------|------|--------------|----------------|
+| readonly | on | login → Device health | `owned` + session/health, no app write |
+| admin | on | login → User Management | `owned` + app read/write, no health |
+| readonly | off (never enabled) | cannot web-login | `none`, no `$p$user` |
+| admin | off (never enabled) | cannot web-login | `none`, no `$p$user` |
+| readonly | disable after enable | cannot web-login | `none` (lifecycle) |
+
+Playwright: `tests/e2e/usrmanage-flows.spec.js` → `LuCI login matrix`. Host ACL/state: `tests/test_luci_login.sh` (login matrix section).
+
+### Password policy presets
+
+| Preset | min | lower/upper/digit | special | Tests |
+|--------|-----|-------------------|---------|-------|
+| OpenWrt (factory) | 8 | off | off | host + e2e cycle |
+| Standard | 10 | on | off | host + e2e cycle |
+| Strict | 12 | on | on | host + e2e cycle + Add UI blocks without special |
+
+Host: `tests/test_policy.sh`. E2E: `Password policy presets` in `tests/e2e/usrmanage-flows.spec.js`.
+
+Checklist **visual** redesign (quieter circular ✓/✗): shipped in `usrmanage.js` + `usrmanage.css` (theme CSS variables). Explore history in `prototypes/password-checklist.html` (variant C chosen).
 
 ## Related
 
