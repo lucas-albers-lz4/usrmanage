@@ -36,6 +36,8 @@ fi
 if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	"$ROOT/tests/test_validators.sh"
 	"$ROOT/tests/test_mutators.sh"
+	"$ROOT/tests/test_mutator_flows.sh"
+	"$ROOT/tests/test_policy.sh"
 	"$ROOT/tests/test_doctor.sh"
 	"$ROOT/tests/test_luci_login.sh"
 	"$ROOT/tests/test_health.sh"

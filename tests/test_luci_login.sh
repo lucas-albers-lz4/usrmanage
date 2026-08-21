@@ -100,10 +100,9 @@ um_with_lock um_mut_set_luci_login ops enable
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "enable → owned" || bad "enable state $(um_luci_login_state ops)"
 grep -q "option password '\$p\$ops'" "$USRMANAGE_RPCD_CONFIG" && ok "password is \$p\$ops" || bad "bad password field"
 grep -q "option usrmanage '1'" "$USRMANAGE_RPCD_CONFIG" && ok "ownership marker" || bad "missing marker"
-grep -q "list read 'luci-app-usrmanage-session'" "$USRMANAGE_RPCD_CONFIG" && ok "session ACL" || bad "missing session ACL"
-grep -q "list write 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" && ok "admin write ACL" || bad "missing write ACL"
-grep -q "option usrmanage_scope 'app'" "$USRMANAGE_RPCD_CONFIG" && ok "default scope app" || bad "missing usrmanage_scope"
-grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" && bad "admin app should not have health ACL" || ok "admin app has no health ACL"
+grep -Fq "list read '*'" "$USRMANAGE_RPCD_CONFIG" && ok "admin enable: list read *" || bad "admin enable missing list read *"
+grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && ok "admin enable: list write *" || bad "admin enable missing list write *"
+grep -q "option usrmanage_scope 'full'" "$USRMANAGE_RPCD_CONFIG" && ok "admin enable: scope full" || bad "admin enable missing scope full"
 grep -q 'luci_grant' "$USRMANAGE_AUDIT" && ok "luci_grant audited" || bad "luci_grant missing"
 
 # second admin so demote is allowed
@@ -111,14 +110,15 @@ um_with_lock um_mut_set_role audit admin
 
 # role demote sync drops write
 um_with_lock um_mut_set_role ops readonly
-grep -q "list write 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" && bad "write ACL should be gone after demote" || ok "demote dropped write"
-grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" && ok "demote granted health ACL" || bad "demote missing health ACL"
-grep -q "list read 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" && bad "demote still has app read ACL" || ok "demote dropped app read"
+grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && bad "demote left write *" || ok "demote dropped write *"
+grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" && ok "demote: health ACL present" || bad "demote missing health ACL"
+grep -q "list read 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" && ok "demote: app read ACL present" || bad "demote missing app read ACL"
+grep -q "option usrmanage_scope 'diagnostic'" "$USRMANAGE_RPCD_CONFIG" && ok "demote: scope diagnostic" || bad "demote missing scope diagnostic"
 [ "$(um_luci_login_state ops)" = "owned" ] && ok "still owned after demote" || bad "lost owned after demote"
 
 # promote restores write
 um_with_lock um_mut_set_role ops admin
-grep -q "list write 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" && ok "promote restored write" || bad "write missing after promote"
+grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && ok "promote restored write *" || bad "write * missing after promote"
 
 # foreign collision
 cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
@@ -156,7 +156,7 @@ sed -i "/option username 'ops'/,/^config /{ /list write/a\\
 		/^config login/ { inops=0 }
 		/option username '\''ops'\''/ { inops=1 }
 		{ print }
-		inops && /list write '\''luci-app-usrmanage'\''/ {
+		inops && /list write/ {
 			print "\tlist write '\''luci-app-firewall'\''"
 			inops=0
 		}
@@ -242,7 +242,7 @@ printf 'root:x:0:\nwheel:x:10:ops,audit\n' > "$USRMANAGE_GROUP"
 
 # Owned + foreign coexistence: demote must drop write on ours via ours_index.
 um_with_lock um_mut_set_luci_login ops enable
-grep -q "list write 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" || bad "owned write missing before foreign"
+grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" || bad "owned write * missing before foreign"
 cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
 
 config login
@@ -264,7 +264,7 @@ if awk '
 	}
 	inlogin && /option username '\''ops'\''/ { isops=1 }
 	inlogin && /option usrmanage '\''1'\''/ { hasmark=1 }
-	inlogin && /list write '\''luci-app-usrmanage'\''/ { haswrite=1 }
+	inlogin && /list write/ { haswrite=1 }
 	END { if (inlogin && isops && hasmark && haswrite) found=1; exit !found }
 ' "$USRMANAGE_RPCD_CONFIG"; then
 	bad "owned write sticky amid foreign"
@@ -334,11 +334,11 @@ if awk '
 	inlogin && /list read '\''luci-app-usrmanage'\''/ { hasapp=1 }
 	END { if (inlogin && isadd && hasapp) found=1; exit !found }
 ' "$USRMANAGE_RPCD_CONFIG"; then
-	bad "readonly add-with-luci has app read ACL"
+	ok "readonly add-with-luci has app read ACL (diagnostic set)"
 else
-	ok "readonly add-with-luci has no app read ACL"
+	bad "readonly add-with-luci missing app read ACL"
 fi
-# readonly must not get app write; ignore unrelated sections by checking luciadd block
+# readonly must not get any write; ignore unrelated sections by checking luciadd block
 if awk '
 	BEGIN { inlogin=0; isadd=0; haswrite=0 }
 	/^config login/ {
@@ -346,7 +346,7 @@ if awk '
 		inlogin=1; isadd=0; haswrite=0; next
 	}
 	inlogin && /option username '\''luciadd'\''/ { isadd=1 }
-	inlogin && /list write '\''luci-app-usrmanage'\''/ { haswrite=1 }
+	inlogin && /list write/ { haswrite=1 }
 	END { if (inlogin && isadd && haswrite) found=1; exit !found }
 ' "$USRMANAGE_RPCD_CONFIG"; then
 	bad "readonly add-with-luci has write ACL"
@@ -405,12 +405,12 @@ if (
 		awk '
 			/^config login/ { inlogin=1; print; next }
 			inlogin && /option username '\''ops'\''/ { isops=1; print; next }
-			inlogin && isops && /^[ 	]*list write/ { next }
-			inlogin && isops && /option usrmanage/ {
-				print
-				print "	list write '\''luci-app-usrmanage'\''"
-				next
-			}
+		inlogin && isops && /^[ 	]*list write/ { next }
+		inlogin && isops && /option usrmanage/ {
+			print
+			print "	list write '\''*'\''"
+			next
+		}
 			{ print }
 		' "$USRMANAGE_RPCD_CONFIG" > "$_ll_awk_tmp" || { rm -f "$_ll_awk_tmp"; return 1; }
 		um_rpcd_atomic_replace "$_ll_awk_tmp" "$USRMANAGE_RPCD_CONFIG" || { rm -f "$_ll_awk_tmp"; return 1; }
@@ -432,7 +432,7 @@ if awk '
 	}
 	inlogin && /option username '\''ops'\''/ { isops=1 }
 	inlogin && /option usrmanage '\''1'\''/ { hasmark=1 }
-	inlogin && /list write '\''luci-app-usrmanage'\''/ { haswrite=1 }
+	inlogin && /list write/ { haswrite=1 }
 	END { if (inlogin && isops && hasmark && haswrite) found=1; exit !found }
 ' "$USRMANAGE_RPCD_CONFIG"; then
 	bad "M5: write ACL granted despite failed promote"
@@ -761,98 +761,108 @@ grep -q 'um_tx_begin' "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh" \
 	&& ok "L2 um_mut_set_luci_login uses um_tx_*" \
 	|| bad "L2 missing um_tx wrap in set-luci-login"
 
-# --- readonly observer ACL matrix + scope (revision 2) ---
+# --- role-locked ACL matrix (readonly→diagnostic; admin→full) ---
+
+_diag_csv="luci-app-usrmanage,luci-app-usrmanage-health,luci-app-usrmanage-session,luci-mod-network-config,luci-mod-network-diagnostics,luci-mod-status-index,luci-mod-status-realtime,luci-mod-status-routes"
 
 _er=$(um_luci_login_expected_reads readonly)
-[ "$_er" = "luci-app-usrmanage-health,luci-app-usrmanage-session" ] \
-	&& ok "readonly expected reads session+health" || bad "readonly reads: $_er"
+[ "$_er" = "$_diag_csv" ] \
+	&& ok "readonly expected reads: diagnostic 8-set" || bad "readonly reads: $_er"
 _ew=$(um_luci_login_expected_writes readonly)
 [ -z "$_ew" ] && ok "readonly expected writes empty" || bad "readonly writes: $_ew"
-_er=$(um_luci_login_expected_reads admin app)
-[ "$_er" = "luci-app-usrmanage,luci-app-usrmanage-session" ] \
-	&& ok "admin app expected reads" || bad "admin app reads: $_er"
-_ew=$(um_luci_login_expected_writes admin app)
-[ "$_ew" = "luci-app-usrmanage" ] && ok "admin app expected writes" || bad "admin app writes: $_ew"
-_er=$(um_luci_login_expected_reads admin full)
-[ "$_er" = "*" ] && ok "admin full expected reads *" || bad "admin full reads: $_er"
-_ew=$(um_luci_login_expected_writes admin full)
-[ "$_ew" = "*" ] && ok "admin full expected writes *" || bad "admin full writes: $_ew"
+_er=$(um_luci_login_expected_reads admin)
+[ "$_er" = "*" ] && ok "admin expected reads *" || bad "admin reads: $_er"
+_ew=$(um_luci_login_expected_writes admin)
+[ "$_ew" = "*" ] && ok "admin expected writes *" || bad "admin writes: $_ew"
 
+# matcher: full diagnostic set → accepted
+um_luci_login_acls_match_role readonly "$_diag_csv" "" \
+	&& ok "matcher accepts readonly full diagnostic set" || bad "matcher rejected valid readonly"
+# matcher: partial readonly set (missing required groups) → rejected
 um_luci_login_acls_match_role readonly "luci-app-usrmanage-session,luci-app-usrmanage-health" "" \
-	&& ok "matcher accepts readonly session+health" || bad "matcher rejected valid readonly"
-um_luci_login_acls_match_role readonly "luci-app-usrmanage-session,luci-app-usrmanage" "" \
-	&& bad "matcher accepted readonly+app (user enum)" || ok "matcher rejects readonly+app"
+	&& bad "matcher accepted readonly missing diagnostic groups" || ok "matcher rejects readonly partial set"
+# matcher: readonly with luci-base → rejected (forbidden on readonly)
+if um_luci_login_acls_match_role readonly "${_diag_csv},luci-base" "" 2>/dev/null; then
+	bad "matcher accepted readonly+luci-base"
+else
+	ok "matcher rejects readonly+luci-base"
+fi
+# matcher: readonly with * → rejected
 if um_luci_login_acls_match_role readonly "*" "" 2>/dev/null; then
 	bad "matcher accepted readonly+*"
 else
 	ok "matcher rejects readonly+*"
 fi
-if um_luci_login_acls_match_role readonly "luci-app-usrmanage-session,luci-base" "" 2>/dev/null; then
-	bad "matcher accepted readonly+luci-base"
+# matcher: admin without * (old app matrix) → rejected
+if um_luci_login_acls_match_role admin "luci-app-usrmanage,luci-app-usrmanage-session" "luci-app-usrmanage" 2>/dev/null; then
+	bad "matcher accepted admin without * (old app matrix)"
 else
-	ok "matcher rejects readonly+luci-base"
+	ok "matcher rejects admin without * (old app matrix)"
 fi
-if um_luci_login_acls_match_role readonly "luci-app-usrmanage-session,luci-mod-status-index" "" 2>/dev/null; then
-	bad "matcher accepted readonly+luci-mod-*"
-else
-	ok "matcher rejects readonly+luci-mod-*"
-fi
-um_luci_login_acls_match_role admin "*" "*" full \
+# matcher: admin with * → accepted
+um_luci_login_acls_match_role admin "*" "*" \
 	&& ok "matcher accepts admin+full *" || bad "matcher rejected admin+full *"
-if um_luci_login_acls_match_role admin "*" "*" app 2>/dev/null; then
-	bad "matcher accepted * on admin app scope"
-else
-	ok "matcher rejects * unless scope full"
-fi
 
 # noglob: literal * must not expand to filenames in the matcher.
 _star_dir=$(mktemp -d)
 touch "$_star_dir/aaa" "$_star_dir/bbb"
 (
 	cd "$_star_dir" || exit 1
-	um_luci_login_acls_match_role admin '*' '*' full
+	um_luci_login_acls_match_role admin '*' '*'
 ) && ok "matcher noglob: * is literal" || bad "matcher noglob failed (word-split?)"
 rm -rf "$_star_dir"
 
-# --scope full refused on readonly
+# --scope <any> → luci_scope_role_locked (scope is always role-derived; CLI rejects it immediately)
 printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
-um_with_lock um_mut_set_role ops readonly 2>/dev/null || true
-_lerr=$(um_with_lock um_mut_set_luci_login ops enable full 2>&1) && bad "readonly --scope full should refuse" \
-	|| ok "readonly --scope full refused"
-printf '%s' "$_lerr" | grep -q 'luci_scope_readonly' && ok "readonly full denial token" || bad "readonly full token: $_lerr"
-
-# --scope full ok on admin
-um_with_lock um_mut_set_role ops admin
-um_with_lock um_mut_set_luci_login ops enable full
-[ "$(um_luci_login_state ops)" = "owned" ] && ok "admin --scope full → owned" || bad "full state $(um_luci_login_state ops)"
-grep -q "option usrmanage_scope 'full'" "$USRMANAGE_RPCD_CONFIG" && ok "scope full recorded" || bad "missing scope full"
-grep -Fq "list read '*'" "$USRMANAGE_RPCD_CONFIG" && ok "full list read *" || bad "missing read *"
-grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && ok "full list write *" || bad "missing write *"
-um_with_lock um_mut_set_luci_login ops enable
-grep -q "option usrmanage_scope 'full'" "$USRMANAGE_RPCD_CONFIG" && ok "re-enable without --scope keeps full" \
-	|| bad "re-enable dropped full scope"
-grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && ok "re-enable without --scope keeps write *" \
-	|| bad "re-enable dropped write *"
-
-# demote drops * to health
 um_with_lock um_mut_set_role ops readonly
-grep -Fq "list read '*'" "$USRMANAGE_RPCD_CONFIG" && bad "demote left *" || ok "demote dropped *"
-grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && bad "demote left write *" || ok "demote dropped write *"
-grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" && ok "demote * → health" || bad "demote from full missing health"
-[ "$(um_luci_login_state ops)" = "owned" ] && ok "owned after demote from full" || bad "state after full demote"
-
-# --scope full blocked when rpcd unparsable
+_lerr=$(um_with_lock um_mut_set_luci_login ops enable full 2>&1) && bad "--scope should be rejected for readonly" \
+	|| ok "--scope rejected for readonly"
+printf '%s' "$_lerr" | grep -q 'luci_scope_role_locked' && ok "readonly --scope denial token" || bad "readonly --scope token: $_lerr"
 um_with_lock um_mut_set_role ops admin
-_seed_unparsable abbreviated
-_lerr=$(um_with_lock um_mut_set_luci_login ops enable full 2>&1) && bad "unparsable --scope full should refuse" \
-	|| ok "unparsable --scope full refused"
-printf '%s' "$_lerr" | grep -q 'rpcd_config_unparsable' && ok "unparsable full denial token" || bad "unparsable full token: $_lerr"
+_lerr=$(um_with_lock um_mut_set_luci_login ops enable full 2>&1) && bad "--scope should be rejected for admin" \
+	|| ok "--scope rejected for admin"
+printf '%s' "$_lerr" | grep -q 'luci_scope_role_locked' && ok "admin --scope denial token" || bad "admin --scope token: $_lerr"
 
-# Upgrade migration: legacy readonly session+app → session+health; preserve admin app; skip unmarked/root
+# admin enable (no --scope) → scope full with * (role-locked)
+um_with_lock um_mut_set_luci_login ops enable
+[ "$(um_luci_login_state ops)" = "owned" ] && ok "admin enable → owned" || bad "admin enable state $(um_luci_login_state ops)"
+grep -q "option usrmanage_scope 'full'" "$USRMANAGE_RPCD_CONFIG" && ok "admin enable: scope full" || bad "missing scope full"
+grep -Fq "list read '*'" "$USRMANAGE_RPCD_CONFIG" && ok "admin enable: list read *" || bad "missing read *"
+grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && ok "admin enable: list write *" || bad "missing write *"
+
+# demote from full → diagnostic (health + app read included, no writes)
+um_with_lock um_mut_set_role ops readonly
+grep -Fq "list read '*'" "$USRMANAGE_RPCD_CONFIG" && bad "demote left read *" || ok "demote dropped read *"
+grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && bad "demote left write *" || ok "demote dropped write *"
+grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" && ok "demote: health ACL present" || bad "demote missing health"
+grep -q "list read 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" && ok "demote: app read present" || bad "demote missing app read"
+grep -q "option usrmanage_scope 'diagnostic'" "$USRMANAGE_RPCD_CONFIG" && ok "demote: scope diagnostic" || bad "demote missing scope diagnostic"
+[ "$(um_luci_login_state ops)" = "owned" ] && ok "owned after demote from full" || bad "state after demote"
+
+# promote readonly → admin: back to full *
+um_with_lock um_mut_set_role ops admin
+grep -Fq "list write '*'" "$USRMANAGE_RPCD_CONFIG" && ok "promote → write *" || bad "promote missing write *"
+grep -q "option usrmanage_scope 'full'" "$USRMANAGE_RPCD_CONFIG" && ok "promote → scope full" || bad "promote missing scope full"
+[ "$(um_luci_login_state ops)" = "owned" ] && ok "owned after promote" || bad "state after promote"
+
+um_with_lock um_mut_set_role ops admin
+
+# Upgrade migration: legacy admin app → full; legacy readonly session+app → diagnostic; skip unmarked/root
 printf 'config rpcd\n\toption socket /var/run/ubus/ubus.sock\n\n' > "$USRMANAGE_RPCD_CONFIG"
 um_with_lock um_mut_set_role ops admin
-um_with_lock um_mut_set_luci_login ops enable
 grep -qx luciadd "$USRMANAGE_REGISTRY" || printf 'luciadd\n' >> "$USRMANAGE_REGISTRY"
+# inject legacy admin app section for ops (pre-role-lock format)
+cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
+
+config login
+	option username 'ops'
+	option password '$p$ops'
+	option usrmanage '1'
+	option usrmanage_scope 'app'
+	list read 'luci-app-usrmanage-session'
+	list read 'luci-app-usrmanage'
+	list write 'luci-app-usrmanage'
+EOF
 cat >> "$USRMANAGE_RPCD_CONFIG" <<'EOF'
 
 config login
@@ -877,22 +887,28 @@ config login
 EOF
 [ "$(um_luci_login_state luciadd)" = "tampered" ] && ok "legacy readonly classifies tampered before migrate" \
 	|| bad "legacy readonly state $(um_luci_login_state luciadd)"
-_ops_before=$(awk '/option username '\''ops'\''/,/^$/' "$USRMANAGE_RPCD_CONFIG")
-_root_before=$(awk '/option username '\''root'\''/,/^$/' "$USRMANAGE_RPCD_CONFIG")
+[ "$(um_luci_login_state ops)" = "tampered" ] && ok "legacy admin app classifies tampered before migrate" \
+	|| bad "legacy admin state $(um_luci_login_state ops)"
 um_with_lock um_luci_login_migrate_observer
-[ "$(um_luci_login_state luciadd)" = "owned" ] && ok "migrate readonly → owned health" \
+[ "$(um_luci_login_state luciadd)" = "owned" ] && ok "migrate readonly session+app → diagnostic owned" \
 	|| bad "migrate luciadd state $(um_luci_login_state luciadd)"
 grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" && ok "migrate wrote health ACL" \
 	|| bad "migrate missing health"
-[ "$(um_luci_login_state ops)" = "owned" ] && ok "migrate preserved admin app owned" \
-	|| bad "migrate broke admin: $(um_luci_login_state ops)"
-grep -q "list write 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" && ok "migrate kept admin write" \
-	|| bad "migrate dropped admin write"
+[ "$(um_luci_login_state ops)" = "owned" ] && ok "migrate admin app → full owned" \
+	|| bad "migrate ops state $(um_luci_login_state ops)"
+awk '
+	BEGIN { inlogin=0; is=0; hasw=0 }
+	/^config login/ { if (inlogin && is && hasw) found=1; inlogin=1; is=0; hasw=0; next }
+	inlogin && /option username '\''ops'\''/ { is=1 }
+	inlogin && /list write '\''[*]'\''/ { hasw=1 }
+	END { if (inlogin && is && hasw) found=1; exit !found }
+' "$USRMANAGE_RPCD_CONFIG" && ok "migrate admin: write * present (ops section)" \
+	|| bad "migrate missing write * for ops"
 grep -q "option username 'spy'" "$USRMANAGE_RPCD_CONFIG" && ok "migrate left unmarked foreign" \
 	|| bad "migrate touched unmarked"
 _root_after=$(awk '/option username '\''root'\''/,/^$/' "$USRMANAGE_RPCD_CONFIG")
-if [ "$_root_before" = "$_root_after" ]; then
-	ok "migrate left root section byte-identical (read * / write * intact)"
+if printf '%s' "$_root_after" | grep -Fq "list read '*'"; then
+	ok "migrate left root section with read * intact"
 else
 	bad "migrate modified root section: $_root_after"
 fi
@@ -930,11 +946,127 @@ else
 	ok "migrate fail-closed dropped luciadd *"
 fi
 
+# --- Login matrix (role × luci opt-in) → rpcd state / ACL shape ---
+# Web allow/deny is Playwright e2e; here we pin the state that gates login.
+# | role     | luci | state | ACL note                                      |
+# |----------|------|-------|-----------------------------------------------|
+# | readonly | 0    | none  | no $p$ login                                  |
+# | admin    | 0    | none  | no $p$ login                                  |
+# | readonly | 1    | owned | diagnostic 8-set (read-only), no writes       |
+# | admin    | 1    | owned | scope full: list read * / list write *         |
+_flock_abs=$(command -v flock) || bad "flock missing for login matrix"
+ln -sf "$_flock_abs" "$TMP/bin/flock"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/bin/passwd"
+cat > "$TMP/bin/chpasswd" <<'CHP'
+#!/bin/sh
+IFS= read -r line || exit 1
+u=${line%%:*}
+_tmp=$(mktemp)
+awk -F: -v u="$u" 'BEGIN{OFS=":"} $1==u{$2="$6$testsalt$mxhash"} {print}' \
+	"$USRMANAGE_SHADOW" > "$_tmp" || exit 1
+if grep -q "^${u}:" "$_tmp"; then
+	mv "$_tmp" "$USRMANAGE_SHADOW"
+else
+	rm -f "$_tmp"
+	printf '%s:$6$testsalt$mxhash:0:99999:7:::\n' "$u" >> "$USRMANAGE_SHADOW" || exit 1
+fi
+chmod 0600 "$USRMANAGE_SHADOW" 2>/dev/null || true
+exit 0
+CHP
+chmod +x "$TMP/bin/passwd" "$TMP/bin/chpasswd"
+_oldpath=$PATH
+export PATH="$TMP/bin:/usr/bin:/bin"
+USRMANAGE_DRY_RUN=0
+
+printf 'goodpass12\n' | um_with_lock um_mut_add mxroff readonly 0 0
+[ "$(um_luci_login_state mxroff)" = "none" ] && ok "matrix: readonly luci=0 → none" \
+	|| bad "matrix mxroff $(um_luci_login_state mxroff)"
+grep -q "option password '\$p\$mxroff'" "$USRMANAGE_RPCD_CONFIG" \
+	&& bad "matrix: mxroff should have no \$p\$ login" || ok "matrix: readonly luci=0 no \$p\$"
+
+printf 'goodpass12\n' | um_with_lock um_mut_add mxaooff admin 0 0
+[ "$(um_luci_login_state mxaooff)" = "none" ] && ok "matrix: admin luci=0 → none" \
+	|| bad "matrix mxaooff $(um_luci_login_state mxaooff)"
+grep -q "option password '\$p\$mxaooff'" "$USRMANAGE_RPCD_CONFIG" \
+	&& bad "matrix: mxaooff should have no \$p\$ login" || ok "matrix: admin luci=0 no \$p\$"
+
+printf 'goodpass12\n' | um_with_lock um_mut_add mxron readonly 0 1
+[ "$(um_luci_login_state mxron)" = "owned" ] && ok "matrix: readonly luci=1 → owned" \
+	|| bad "matrix mxron $(um_luci_login_state mxron)"
+grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" \
+	&& ok "matrix: readonly luci=1 health ACL" || bad "matrix mxron missing health"
+grep -q "list read 'luci-app-usrmanage'" "$USRMANAGE_RPCD_CONFIG" \
+	&& ok "matrix: readonly luci=1 app read ACL (diagnostic)" || bad "matrix mxron missing app read"
+if awk '
+	BEGIN { inlogin=0; is=0; hasw=0 }
+	/^config login/ { if (inlogin && is && hasw) found=1; inlogin=1; is=0; hasw=0; next }
+	inlogin && /option username '\''mxron'\''/ { is=1 }
+	inlogin && /list write/ { hasw=1 }
+	END { if (inlogin && is && hasw) found=1; exit !found }
+' "$USRMANAGE_RPCD_CONFIG"; then
+	bad "matrix: readonly luci=1 must not have any write ACL"
+else
+	ok "matrix: readonly luci=1 no write ACL"
+fi
+
+printf 'goodpass12\n' | um_with_lock um_mut_add mxaon admin 0 1
+[ "$(um_luci_login_state mxaon)" = "owned" ] && ok "matrix: admin luci=1 → owned" \
+	|| bad "matrix mxaon $(um_luci_login_state mxaon)"
+awk '
+	BEGIN { inlogin=0; is=0; hasw=0 }
+	/^config login/ { if (inlogin && is && hasw) found=1; inlogin=1; is=0; hasw=0; next }
+	inlogin && /option username '\''mxaon'\''/ { is=1 }
+	inlogin && /list write '\''[*]'\''/ { hasw=1 }
+	END { if (inlogin && is && hasw) found=1; exit !found }
+' "$USRMANAGE_RPCD_CONFIG" \
+	&& ok "matrix: admin luci=1 write *" || bad "matrix mxaon missing write *"
+grep -q "list read 'luci-app-usrmanage-health'" "$USRMANAGE_RPCD_CONFIG" \
+	&& awk '
+		BEGIN { inlogin=0; is=0; health=0 }
+		/^config login/ { if (inlogin && is && health) found=1; inlogin=1; is=0; health=0; next }
+		inlogin && /option username '\''mxaon'\''/ { is=1 }
+		inlogin && /list read '\''luci-app-usrmanage-health'\''/ { health=1 }
+		END { if (inlogin && is && health) found=1; exit !found }
+	' "$USRMANAGE_RPCD_CONFIG" \
+	&& bad "matrix: admin full must not have explicit health ACL (uses *)" \
+	|| ok "matrix: admin luci=1 no explicit health ACL (covered by *)"
+
+USRMANAGE_DRY_RUN=1
+export PATH="$_oldpath"
+rm -f "$TMP/bin/passwd" "$TMP/bin/chpasswd" "$TMP/bin/flock"
+
 _seed_unparsable abbreviated
 if um_with_lock um_luci_login_migrate_observer 2>/dev/null; then
 	bad "migrate unparsable should fail (uci-defaults must retry)"
 else
 	ok "migrate unparsable fails closed (uci-defaults retries)"
+fi
+
+# Session SID extract must field-anchor ubus_rpc_session (ignore nested 32-hex noise).
+_sid_blob=$(printf '%s\n' \
+	'{"ubus_rpc_session":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","acls":{"x":["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]}}' \
+	'{"ubus_rpc_session":"cccccccccccccccccccccccccccccccc","data":{"h":"dddddddddddddddddddddddddddddddd"}}')
+_sid_list=$(printf '%s' "$_sid_blob" \
+	| grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' \
+	| grep -oE '[0-9a-f]{32}' | sort -u)
+_sid_n=$(printf '%s\n' "$_sid_list" | grep -c . || true)
+[ "$_sid_n" = "2" ] && ok "session SID extract count=2" || bad "session SID extract count=$_sid_n"
+printf '%s\n' "$_sid_list" | grep -qx 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+	&& ok "session SID extract keeps real sid a…" || bad "missing sid a"
+printf '%s\n' "$_sid_list" | grep -qx 'cccccccccccccccccccccccccccccccc' \
+	&& ok "session SID extract keeps real sid c…" || bad "missing sid c"
+printf '%s\n' "$_sid_list" | grep -qE '^[bd]' \
+	&& bad "session SID extract leaked nested hex" || ok "session SID extract ignores nested hex"
+# Source still uses the field-anchored pattern (not greedy '"[0-9a-f]{32}"' alone).
+_ll="$ROOT/openwrt-feed/usrmanage/files/usr/lib/usrmanage/usrmanage-luci-login.sh"
+grep -q 'ubus_rpc_session.*\[0-9a-f\]{32}' "$_ll" \
+	&& ok "luci-login.sh field-anchors ubus_rpc_session" \
+	|| bad "luci-login.sh missing field-anchored SID extract"
+# Greedy-only extract lines must not remain in revoke helpers.
+if grep -n "grep -oE '\"\[0-9a-f\]{32}\"'" "$_ll" | grep -q .; then
+	bad "luci-login.sh still has greedy 32-hex SID extract"
+else
+	ok "luci-login.sh has no greedy 32-hex SID extract"
 fi
 
 [ "$fail" = "0" ] || exit 1

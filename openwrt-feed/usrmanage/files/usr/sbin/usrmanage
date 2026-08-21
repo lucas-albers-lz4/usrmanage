@@ -49,12 +49,14 @@ View:
   health [--json]
 
 Manage (root):
-  add <user> --role readonly|admin [--luci-login] [--scope app|full] [--password-fd N] [--json]
+  add <user> --role readonly|admin [--luci-login] [--password-fd N] [--json]
   set-role <user> --role readonly|admin [--json]
-  set-luci-login <user> --enable|--disable|--reset [--scope app|full] [--json]
+  set-luci-login <user> --enable|--disable|--reset [--json]
   passwd <user> [--password-fd N] [--json]
   del <user> [--purge-home] [--json]
   set-policy --preset openwrt|standard|strict|custom [options] [--json]
+
+Note: LuCI web ACL is fixed by UNIX role (admin→full LuCI, readonly→diagnostic).
 
 Environment:
   USRMANAGE_ACTOR   Override audit actor (LuCI sets this)
@@ -69,7 +71,6 @@ ROLE=
 PURGE=0
 LUCI_LOGIN=0
 LUCI_LOGIN_MODE=
-LUCI_LOGIN_SCOPE=
 NAME=
 LAST=50
 ALL=0
@@ -134,9 +135,7 @@ while [ "$#" -gt 0 ]; do
 			shift
 			;;
 		--scope)
-			[ "$#" -ge 2 ] || um_die "error: --scope needs app|full"
-			LUCI_LOGIN_SCOPE=$2
-			shift 2
+			um_die "error: luci_scope_role_locked"
 			;;
 		--password-fd)
 			[ "$#" -ge 2 ] || um_die "error: --password-fd needs a number"
@@ -305,9 +304,9 @@ case "$CMD" in
 		;;
 	add)
 		um_require_root
-		[ -n "$NAME" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login] [--scope app|full]"
-		[ -n "$ROLE" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login] [--scope app|full]"
-		um_with_lock um_mut_add "$NAME" "$ROLE" "$PASS_FD" "$LUCI_LOGIN" "$LUCI_LOGIN_SCOPE"
+		[ -n "$NAME" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login]"
+		[ -n "$ROLE" ] || um_die "usage: usrmanage add <user> --role readonly|admin [--luci-login]"
+		um_with_lock um_mut_add "$NAME" "$ROLE" "$PASS_FD" "$LUCI_LOGIN"
 		;;
 	set-role)
 		um_require_root
@@ -317,9 +316,9 @@ case "$CMD" in
 		;;
 	set-luci-login)
 		um_require_root
-		[ -n "$NAME" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset [--scope app|full]"
-		[ -n "$LUCI_LOGIN_MODE" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset [--scope app|full]"
-		um_with_lock um_mut_set_luci_login "$NAME" "$LUCI_LOGIN_MODE" "$LUCI_LOGIN_SCOPE"
+		[ -n "$NAME" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset"
+		[ -n "$LUCI_LOGIN_MODE" ] || um_die "usage: usrmanage set-luci-login <user> --enable|--disable|--reset"
+		um_with_lock um_mut_set_luci_login "$NAME" "$LUCI_LOGIN_MODE"
 		;;
 	passwd)
 		um_require_root

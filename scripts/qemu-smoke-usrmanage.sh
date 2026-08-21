@@ -192,7 +192,7 @@ ssh_guest 'usrmanage set-luci-login umdemote --disable' || true
 ssh_guest 'usrmanage del umdemote' || die "del umdemote failed"
 ok "del umdemote"
 
-# Readonly observer + admin app/full ACL probes (revision 2). Fixture passwords
+# Readonly diagnostic observer + admin full ACL probes. Fixture passwords
 # travel over SSH stdin (--password-fd / $(cat)); ubus stderr (which echoes
 # argv on error) is suppressed so the JSON never reaches host argv or logs.
 _sid_access() {
@@ -234,18 +234,19 @@ _obs_login="$(printf '%s' '{"username":"umobs","password":"LabObs1!"}' | ssh_gue
 _obs_sid="$(printf '%s' "$_obs_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_obs_sid" ]] || die "no umobs session id"
 
-_assert_denied "$(_sid_access "$_obs_sid" ubus uci get)" "readonly ubus uci get"
-_assert_denied "$(_sid_access "$_obs_sid" uci wireless get)" "readonly uci wireless get"
-_assert_denied "$(_sid_access "$_obs_sid" uci network get)" "readonly uci network get"
-_assert_denied "$(_sid_access "$_obs_sid" uci openvpn get)" "readonly uci openvpn get"
-_assert_denied "$(_sid_access "$_obs_sid" uci firewall get)" "readonly uci firewall get"
 _assert_denied "$(_sid_access "$_obs_sid" file /etc/shadow read)" "readonly file.read /etc/shadow"
-_assert_denied "$(_sid_access "$_obs_sid" ubus usrmanage list)" "readonly usrmanage.list"
 _assert_denied "$(_sid_access "$_obs_sid" ubus usrmanage add)" "readonly usrmanage.add"
 _assert_denied "$(_sid_access "$_obs_sid" ubus log read)" "readonly log.read"
-_assert_denied "$(_sid_access "$_obs_sid" access-group luci-mod-status-index read)" "readonly luci-mod-status-index"
+_assert_denied "$(_sid_access "$_obs_sid" uci openvpn get)" "readonly uci openvpn get"
+# Diagnostic grants luci-mod-network-config on READ → uci get wireless/network allowed.
+_assert_allowed "$(_sid_access "$_obs_sid" uci wireless get)" "readonly diagnostic uci wireless get"
+_assert_allowed "$(_sid_access "$_obs_sid" uci network get)" "readonly diagnostic uci network get"
+_assert_denied "$(_sid_access "$_obs_sid" uci wireless set)" "readonly diagnostic uci wireless set"
+_assert_denied "$(_sid_access "$_obs_sid" uci network set)" "readonly diagnostic uci network set"
+_assert_allowed "$(_sid_access "$_obs_sid" access-group luci-mod-status-index read)" "readonly diagnostic luci-mod-status-index"
+_assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage list)" "readonly usrmanage.list (view-only)"
 _assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage health)" "readonly usrmanage.health"
-ok "readonly session denies secrets; allows health"
+ok "readonly diagnostic: view list/health/status; deny add/logs/shadow/openvpn"
 
 _h="$(ssh_guest "ubus call usrmanage health \"{\\\"ubus_rpc_session\\\":\\\"${_obs_sid}\\\"}\"")" \
 	|| die "readonly usrmanage.health call failed"
@@ -256,22 +257,30 @@ printf '%s' "$_h" | grep -qE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' \
 	&& die "health reply contains MAC"
 ok "readonly health reply has no ssid/key/MAC"
 
-# The rpcd ACL layer is enforced by uhttpd-mod-ubus on the HTTP /ubus path
-# (session.access, stock no_ubusauth=0), NOT on raw ubus: rpcd shell
-# plugins never validate the in-body ubus_rpc_session, so a root SSH
-# `ubus call usrmanage list` always succeeds regardless of ACLs. Prove the
-# deny on the real web path with the observer session instead.
-_obs_deny="$(curl -sS -H 'Content-Type: application/json' \
+# HTTP /ubus: view list allowed; mutator add denied.
+# Parse result[0] with guest-side jsonfilter (host may lack jsonfilter); a
+# malformed response yields empty rc and fails the assert.
+_ubus_rc() {
+	# _ubus_rc <json> → ubus return code, empty on parse failure
+	printf '%s' "$1" | ssh_guest 'jsonfilter -s "$(cat)" -e "@.result[0]"' 2>/dev/null || true
+}
+_obs_list="$(curl -sS -H 'Content-Type: application/json' \
 	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"list\",{}]}" \
 	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
-if ! printf '%s' "$_obs_deny" | grep -q '"Access denied"'; then
-	die "readonly usrmanage.list not denied over HTTP /ubus (got: ${_obs_deny})"
+if [ "$(_ubus_rc "$_obs_list")" != "0" ]; then
+	die "readonly usrmanage.list not allowed over HTTP /ubus (got: ${_obs_list})"
+fi
+_obs_add="$(curl -sS -H 'Content-Type: application/json' \
+	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"add\",{}]}" \
+	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
+if ! printf '%s' "$_obs_add" | grep -q '"Access denied"'; then
+	die "readonly usrmanage.add not denied over HTTP /ubus (got: ${_obs_add})"
 fi
 # Positive control on the same path: health must be allowed for the observer.
 _obs_allow="$(curl -sS -H 'Content-Type: application/json' \
 	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"health\",{}]}" \
 	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
-if ! printf '%s' "$_obs_allow" | grep -q '"result"'; then
+if [ "$(_ubus_rc "$_obs_allow")" != "0" ]; then
 	die "readonly usrmanage.health not allowed over HTTP /ubus (got: ${_obs_allow})"
 fi
 ok "readonly usrmanage.list denied + health allowed over HTTP /ubus"
@@ -280,31 +289,34 @@ ssh_guest 'usrmanage set-luci-login umobs --disable' || true
 ssh_guest 'usrmanage del umobs' || die "del umobs failed"
 ok "del umobs"
 
-# Admin app cannot uci get wireless; admin full can; demote then leftover SID dead.
-ssh_guest 'usrmanage del umapp >/dev/null 2>&1 || true'
-printf 'LabApp1!\n' | ssh_guest 'usrmanage add umapp --role admin --password-fd 0' \
-	|| die "add umapp failed"
-ssh_guest 'usrmanage set-luci-login umapp --enable' \
-	|| die "set-luci-login umapp --enable failed"
-_app_login="$(printf '%s' '{"username":"umapp","password":"LabApp1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
-	|| die "session login as umapp failed"
-_app_sid="$(printf '%s' "$_app_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
-[[ -n "$_app_sid" ]] || die "no umapp session id"
-_assert_denied "$(_sid_access "$_app_sid" ubus uci get)" "admin app ubus uci get (uci get wireless)"
-ok "admin app cannot uci get wireless"
+# Admin full (role-locked, no --scope): can uci get wireless; demote → diagnostic.
+# Second admin so last_admin does not abort the demote of umfull below.
+ssh_guest 'usrmanage del umkeep >/dev/null 2>&1 || true'
+printf 'LabKeep1!\n' | ssh_guest 'usrmanage add umkeep --role admin --password-fd 0' \
+	|| die "add umkeep failed"
+ok "add umkeep (second admin for umfull demote)"
 
 ssh_guest 'usrmanage del umfull >/dev/null 2>&1 || true'
 printf 'LabFull1!\n' | ssh_guest 'usrmanage add umfull --role admin --password-fd 0' \
 	|| die "add umfull failed"
-ssh_guest 'usrmanage set-luci-login umfull --enable --scope full' \
-	|| die "set-luci-login umfull --scope full failed"
+ssh_guest 'usrmanage set-luci-login umfull --enable' \
+	|| die "set-luci-login umfull --enable failed"
+ok "umfull admin luci login enabled (role-locked full)"
+
+# --scope is rejected with luci_scope_role_locked in role-locked model
+_scope_err="$(ssh_guest 'usrmanage set-luci-login umfull --enable --scope full 2>&1 || true')"
+printf '%s' "$_scope_err" | grep -q 'luci_scope_role_locked' \
+	|| die "--scope should be rejected with luci_scope_role_locked (got: ${_scope_err})"
+ok "--scope rejected: luci_scope_role_locked"
+
 _full_login="$(printf '%s' '{"username":"umfull","password":"LabFull1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
 	|| die "session login as umfull failed"
 _full_sid="$(printf '%s' "$_full_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_full_sid" ]] || die "no umfull session id"
-_assert_allowed "$(_sid_access "$_full_sid" ubus uci get)" "admin full ubus uci get (uci get wireless)"
-ok "admin full can uci get wireless"
+_assert_allowed "$(_sid_access "$_full_sid" ubus uci get)" "admin full ubus uci.get"
+ok "admin full can uci.get (role-locked full)"
 
+# Demote full → diagnostic: leftover SID dead; new session has diagnostic ACLs.
 ssh_guest 'usrmanage set-role umfull --role readonly' || die "demote umfull failed"
 ok "umfull demoted to readonly"
 if ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\"}\"" >/dev/null 2>&1; then
@@ -315,15 +327,17 @@ ok "umfull leftover SID dead after demote"
 _full_re="$(printf '%s' '{"username":"umfull","password":"LabFull1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
 	|| die "re-login as demoted umfull failed"
 _full_re_sid="$(printf '%s' "$_full_re" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
-_assert_denied "$(_sid_access "$_full_re_sid" ubus uci get)" "demoted full ubus uci get (uci get wireless)"
+# diagnostic: write paths denied; health still allowed; usrmanage add denied
+_assert_denied "$(_sid_access "$_full_re_sid" ubus usrmanage add)" "demoted full usrmanage.add"
 _assert_allowed "$(_sid_access "$_full_re_sid" ubus usrmanage health)" "demoted full usrmanage.health"
-ok "demote from full → health (no wireless)"
+ok "demote from full → diagnostic: add denied, health allowed"
 
-ssh_guest 'usrmanage set-luci-login umapp --disable' || true
-ssh_guest 'usrmanage del umapp' || die "del umapp failed"
 ssh_guest 'usrmanage set-luci-login umfull --disable' || true
 ssh_guest 'usrmanage del umfull' || die "del umfull failed"
-ok "del umapp + umfull"
+ok "del umfull"
+
+ssh_guest 'usrmanage del umkeep' || die "del umkeep failed"
+ok "del umkeep"
 
 # LuCI assets + ubus
 ssh_guest 'test -f /www/luci-static/resources/view/system/usrmanage.js' \

@@ -1797,7 +1797,6 @@ um_mut_add() {
 	_role=$2
 	_pfd=$3
 	_luci_login=${4:-0}
-	_luci_scope=${5:-}
 	um_mut_require_valid_username "$_name" "$_role"
 	um_validate_role "$_role" || {
 		um_audit denied "$_name" denied invalid_role
@@ -1848,7 +1847,7 @@ um_mut_add() {
 	um_set_password "$_name" "$_pfd" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 	um_registry_add "$_name" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" registry "error: registry_failed"
 	if [ "$_luci_login" = "1" ] && command -v um_luci_login_enable_user >/dev/null 2>&1; then
-		if ! um_luci_login_enable_user "$_name" "$_luci_scope"; then
+		if ! um_luci_login_enable_user "$_name"; then
 			um_luci_login_remove_owned_best_effort "$_name" 2>/dev/null || true
 			um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" luci_login \
 				"error: ${UM_LUCI_ERR:-luci_login_failed}"
@@ -1891,10 +1890,6 @@ um_mut_set_role() {
 	# Crash-atomic under the tx snapshot: a kill between the wheel change and
 	# the rpcd ACL rewrite restores both on any failure (issue #96 M5).
 	um_tx_begin
-	_prev_scope=app
-	if command -v um_luci_login_read_ours_scope >/dev/null 2>&1; then
-		_prev_scope=$(um_luci_login_read_ours_scope "$_name" 2>/dev/null || printf 'app')
-	fi
 	_um_set_role_rollback() {
 		if [ "$_cur" = "admin" ]; then
 			um_wheel_add_user "$_name" 2>/dev/null || true
@@ -1906,14 +1901,13 @@ um_mut_set_role() {
 			# After wheel rollback, re-sync owned ACLs to previous role if still owned/tampered-with-marker.
 			if [ "$_rb" = "owned" ] || [ "$_rb" = "tampered" ]; then
 				# m7: never swallow an ACL rollback-sync failure — record it.
-				if ! um_luci_login_sync_acls "$_name" "$_cur" "$_prev_scope" 2>/dev/null; then
+				if ! um_luci_login_sync_acls "$_name" "$_cur" 2>/dev/null; then
 					um_audit fail "$_name" fail luci_login_rollback "$_cur"
 				fi
 			fi
 		fi
 	}
 	_um_set_role_sync_acls() {
-		_sync_scope=$1
 		if command -v um_luci_login_sync_acls >/dev/null 2>&1; then
 			_lst=$(um_luci_login_state "$_name") || {
 				_um_set_role_rollback
@@ -1924,23 +1918,13 @@ um_mut_set_role() {
 			}
 			_ours=$(um_luci_login_ours_index "$_name" 2>/dev/null || true)
 			if [ -n "$_ours" ]; then
-				if [ -n "$_sync_scope" ]; then
-					um_luci_login_sync_acls "$_name" "$_role" "$_sync_scope" || {
-						_um_set_role_rollback
-						um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
-						um_incomplete_clear
-						um_audit fail "$_name" fail luci_login_sync "$_role"
-						um_die "error: luci_login_sync_failed"
-					}
-				else
-					um_luci_login_sync_acls "$_name" "$_role" || {
-						_um_set_role_rollback
-						um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
-						um_incomplete_clear
-						um_audit fail "$_name" fail luci_login_sync "$_role"
-						um_die "error: luci_login_sync_failed"
-					}
-				fi
+				um_luci_login_sync_acls "$_name" "$_role" || {
+					_um_set_role_rollback
+					um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
+					um_incomplete_clear
+					um_audit fail "$_name" fail luci_login_sync "$_role"
+					um_die "error: luci_login_sync_failed"
+				}
 			elif [ "$_lst" = "foreign" ] || [ "$_lst" = "tampered" ]; then
 				: # leave foreign/forged alone; UNIX role still changes
 			fi
@@ -1958,8 +1942,8 @@ um_mut_set_role() {
 		fi
 	}
 	if [ "$_cur" = "readonly" ] && [ "$_role" = "admin" ]; then
-		# Promote: wheel first, then web ACL grant, so a kill never grants the
-		# write ACL before wheel membership. App scope only (never auto-*).
+		# Promote: wheel first, then web ACL grant (role-locked full), so a kill
+		# never grants * before wheel membership.
 		um_wheel_add_user "$_name" || {
 			_um_set_role_rollback
 			um_tx_rollback || um_die "error: tx_restore_failed path=$UM_TX_SNAPDIR"
@@ -1967,14 +1951,14 @@ um_mut_set_role() {
 			um_audit fail "$_name" fail wheel_add "$_role"
 			um_die "error: wheel_add_failed"
 		}
-		_um_set_role_sync_acls app
+		_um_set_role_sync_acls
 		_um_set_role_revoke
 	elif [ "$_cur" = "admin" ] && [ "$_role" = "readonly" ]; then
-		# Demote: rewrite ACL first (drop * / app writes → health), then revoke,
+		# Demote: rewrite ACL first (drop * → diagnostic), then revoke,
 		# drop wheel, revoke again. Fail closed if a live SID remains when ubus
 		# is present. Commit the privilege drop before dying so leftover SIDs
 		# cannot keep * via tx rollback.
-		_um_set_role_sync_acls app
+		_um_set_role_sync_acls
 		_um_set_role_revoke
 		um_wheel_del_user "$_name" || {
 			_um_set_role_rollback
