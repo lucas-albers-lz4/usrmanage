@@ -285,7 +285,7 @@ ok "del umobs"
 # Admin full (role-locked, no --scope): can uci get wireless; demote → diagnostic.
 # Second admin so last_admin does not abort the demote of umfull below.
 ssh_guest 'usrmanage del umkeep >/dev/null 2>&1 || true'
-ssh_guest 'printf "LabKeep1!\n" | usrmanage add umkeep --role admin --password-fd 0' \
+printf 'LabKeep1!\n' | ssh_guest 'usrmanage add umkeep --role admin --password-fd 0' \
 	|| die "add umkeep failed"
 ok "add umkeep (second admin for umfull demote)"
 

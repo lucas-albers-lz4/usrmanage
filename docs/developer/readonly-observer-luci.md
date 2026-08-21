@@ -185,7 +185,7 @@ Existing invariants: marker `usrmanage=1`, `$p$user`, registry membership, refus
 | set-role readonly→admin | write **full** scope (`*`, role-locked); revoke | revoke |
 | disable / del / passwd | unchanged | revoke |
 | doctor | **read-only** forever; never rewrite ACL / never grant `*` | — |
-| package upgrade | rewrite readonly owned logins to diagnostic 8-set; **preserve** legacy admin app matrix; **never** auto-`*` | revoke only users whose lists actually changed |
+| package upgrade | rewrite readonly owned logins to diagnostic 8-set; migrate admin owned logins to role-derived full scope (`read *` / `write *`) | revoke only users whose lists actually changed |
 
 Upgrade **must not** widen admin web privilege. Admin is role-locked to full scope (`*`); `--scope` is rejected. Release notes are not a control. `doctor --fix` must not exist on the read `doctor` method.
 
@@ -207,10 +207,10 @@ Upgrade **must not** widen admin web privilege. Admin is role-locked to full sco
 
 **Lab (qemu-smoke, proof class `lab`)**
 
-- Readonly `session.access` **deny** `uci get` wireless/network/openvpn/firewall; `file.read` `/etc/shadow`; `usrmanage.add` (mutators); `log.read`. Allow: `usrmanage.list`, `health`.
+- Readonly `session.access` **deny** `uci get` openvpn (non-diagnostic); `file.read` `/etc/shadow`; `usrmanage.add` (mutators); `log.read`. **Allow** the diagnostic 8-set reads: `usrmanage.list` / `audit` / `doctor` / `policy` (view-only), `health`, `uci get` wireless/network (via `luci-mod-network-config` read), and `session.access` on the five Status/Network ACLs (`luci-mod-status-{index,routes,realtime}`, `luci-mod-network-{config,diagnostics}`). Keep mutators and sensitive reads denied.
 - Readonly `usrmanage.health` allow; schema match; no ssid/key/MAC.
 - Admin **full** can `uci get wireless`; demote then racing login cannot; leftover SID dead.
-- Menu: readonly does not receive luci-mod-status index / network views (probe `session.access` on those ACL names).
+- Menu: readonly receives the diagnostic Status/Network views (`luci-mod-status-index` probe allowed; `session.access` on those five ACL names), no Full LuCI menus.
 
 DRY_RUN stubs are **not** proof of lab denies ([security-review.md](../security-review.md)).
 
@@ -243,7 +243,7 @@ DRY_RUN stubs are **not** proof of lab denies ([security-review.md](../security-
 1. Exact ubus name: **`health`** (locked).
 2. Hostname on health (site identifier on CPE fleets). Default still **yes**; may omit later.
 3. `assoc_count` occupancy side channel. Default **yes** as integer; consider buckets later.
-4. Upgrade: auto-widen admin to `*` vs require explicit scope. **Locked: never auto-`*`** (§16).
+4. Upgrade: auto-widen admin to `*` vs require explicit scope. **Locked: admin is role-locked to full scope (`*`); upgrade migrate rewrites legacy admin `app` → full, readonly → diagnostic** (§16).
 5. Split ACL vs residual user enumeration. **Locked: split is mandatory** (§16).
 
 ## 15. Adversarial review

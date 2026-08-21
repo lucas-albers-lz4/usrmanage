@@ -317,7 +317,7 @@ msgid "Uses the same UNIX password. Off by default. Exposes this password to the
 msgstr "Verwendet dasselbe UNIX-Passwort. Standardmäßig aus. Macht dieses Passwort über den Web-Anmeldeweg erreichbar. LuCI-Menüs folgen der UNIX-Rolle (admin=Vollständig, readonly=Diagnose)."
 
 msgid "View only — you can list users and audit events, but not add, change roles, passwords, policy, or LuCI login."
-msgstr "Nur Ansicht — Benutzer und Audit können gelesen werden, aber nicht hinzufügen, Rollen, Passwörter, Richtlinie oder LuCI-Login ändern."
+msgstr "Nur Ansicht — Benutzer und Audit-Ereignisse können aufgelistet werden; Benutzer können nicht hinzugefügt, Rollen und Passwörter nicht geändert, Richtlinien nicht bearbeitet und LuCI-Anmeldungen nicht geändert werden."
 
 msgid "Full LuCI (all menus)"
 msgstr "Vollständiges LuCI (alle Menüs)"
