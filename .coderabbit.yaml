@@ -13,7 +13,7 @@ reviews:
   collapse_walkthrough: true
   auto_review:
     enabled: true
-    drafts: false  # review only when the PR is marked ready; draft PRs are a moving target
+    drafts: false  # automatic reviews skip drafts; manual @coderabbitai review still works
     base: auto
   tools:
     ast_grep: true
