@@ -1593,6 +1593,28 @@ ${_sev} ${_id}: ${_msg}"
 		fi
 	fi
 
+	# Tampered owned LuCI logins (#150): surface as ERROR. Live sessions are
+	# auto-revoked inside um_luci_login_state; doctor only reports. The health
+	# JSON schema is frozen — no fields are added there.
+	_tam_users=
+	if [ -f "$USRMANAGE_REGISTRY" ] && command -v um_luci_login_state >/dev/null 2>&1; then
+		while IFS= read -r _tam_u || [ -n "$_tam_u" ]; do
+			[ -n "$_tam_u" ] || continue
+			_tam_st=$(um_luci_login_state "$_tam_u" 2>/dev/null) || _tam_st=
+			[ "$_tam_st" = "tampered" ] || continue
+			if [ -n "$_tam_users" ]; then
+				_tam_users="$_tam_users $_tam_u"
+			else
+				_tam_users=$_tam_u
+			fi
+		done < "$USRMANAGE_REGISTRY"
+	fi
+	if [ -n "$_tam_users" ]; then
+		_add_check luci_tampered false "tampered owned logins (live sessions revoked): ${_tam_users}"
+	else
+		_add_check luci_tampered true "no tampered owned logins"
+	fi
+
 	_incomplete=
 	if [ -f "$USRMANAGE_INCOMPLETE" ]; then
 		_inc=$(cat "$USRMANAGE_INCOMPLETE" 2>/dev/null)
