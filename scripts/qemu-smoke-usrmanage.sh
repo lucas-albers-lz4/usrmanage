@@ -233,18 +233,17 @@ _obs_login="$(ssh_guest 'ubus call session login "{\"username\":\"umobs\",\"pass
 _obs_sid="$(printf '%s' "$_obs_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
 [[ -n "$_obs_sid" ]] || die "no umobs session id"
 
-_assert_denied "$(_sid_access "$_obs_sid" ubus uci get)" "readonly ubus uci get"
-_assert_denied "$(_sid_access "$_obs_sid" uci wireless get)" "readonly uci wireless get"
-_assert_denied "$(_sid_access "$_obs_sid" uci network get)" "readonly uci network get"
-_assert_denied "$(_sid_access "$_obs_sid" uci openvpn get)" "readonly uci openvpn get"
-_assert_denied "$(_sid_access "$_obs_sid" uci firewall get)" "readonly uci firewall get"
 _assert_denied "$(_sid_access "$_obs_sid" file /etc/shadow read)" "readonly file.read /etc/shadow"
-_assert_denied "$(_sid_access "$_obs_sid" ubus usrmanage list)" "readonly usrmanage.list"
 _assert_denied "$(_sid_access "$_obs_sid" ubus usrmanage add)" "readonly usrmanage.add"
 _assert_denied "$(_sid_access "$_obs_sid" ubus log read)" "readonly log.read"
+_assert_denied "$(_sid_access "$_obs_sid" uci openvpn get)" "readonly uci openvpn get"
+# Diagnostic grants luci-mod-network-config on READ → uci get wireless/network/firewall allowed.
+_assert_allowed "$(_sid_access "$_obs_sid" uci wireless get)" "readonly diagnostic uci wireless get"
+_assert_allowed "$(_sid_access "$_obs_sid" uci network get)" "readonly diagnostic uci network get"
 _assert_allowed "$(_sid_access "$_obs_sid" access-group luci-mod-status-index read)" "readonly diagnostic luci-mod-status-index"
+_assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage list)" "readonly usrmanage.list (view-only)"
 _assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage health)" "readonly usrmanage.health"
-ok "readonly diagnostic denies secrets; allows health + status"
+ok "readonly diagnostic: view list/health/status; deny add/logs/shadow/openvpn"
 
 _h="$(ssh_guest "ubus call usrmanage health \"{\\\"ubus_rpc_session\\\":\\\"${_obs_sid}\\\"}\"")" \
 	|| die "readonly usrmanage.health call failed"
@@ -255,16 +254,18 @@ printf '%s' "$_h" | grep -qE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' \
 	&& die "health reply contains MAC"
 ok "readonly health reply has no ssid/key/MAC"
 
-# The rpcd ACL layer is enforced by uhttpd-mod-ubus on the HTTP /ubus path
-# (session.access, stock no_ubusauth=0), NOT on raw ubus: rpcd shell
-# plugins never validate the in-body ubus_rpc_session, so a root SSH
-# `ubus call usrmanage list` always succeeds regardless of ACLs. Prove the
-# deny on the real web path with the observer session instead.
-_obs_deny="$(curl -sS -H 'Content-Type: application/json' \
+# HTTP /ubus: view list allowed; mutator add denied.
+_obs_list="$(curl -sS -H 'Content-Type: application/json' \
 	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"list\",{}]}" \
 	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
-if ! printf '%s' "$_obs_deny" | grep -q '"Access denied"'; then
-	die "readonly usrmanage.list not denied over HTTP /ubus (got: ${_obs_deny})"
+if ! printf '%s' "$_obs_list" | grep -q '"result"'; then
+	die "readonly usrmanage.list not allowed over HTTP /ubus (got: ${_obs_list})"
+fi
+_obs_add="$(curl -sS -H 'Content-Type: application/json' \
+	-d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"call\",\"params\":[\"${_obs_sid}\",\"usrmanage\",\"add\",{}]}" \
+	"http://${HOST}:${HTTP_PORT}/ubus" 2>/dev/null || true)"
+if ! printf '%s' "$_obs_add" | grep -q '"Access denied"'; then
+	die "readonly usrmanage.add not denied over HTTP /ubus (got: ${_obs_add})"
 fi
 # Positive control on the same path: health must be allowed for the observer.
 _obs_allow="$(curl -sS -H 'Content-Type: application/json' \
