@@ -20,12 +20,20 @@ bad() { echo "BAD: $1"; fail=1; }
 
 mkdir -p "$TMP/bin" "$TMP/jbin"
 
-# Fake ubus: answers `session access`/`session get` per FAKE_ACCESS.
+# Fake ubus: answers `session access` for the usrmanage.add request per
+# FAKE_ACCESS. Requires the EXACT probe shape — `call session access` on the
+# usrmanage.add method — so a regression in the plugin's probe (wrong method,
+# wrong object/function) is caught by these tests instead of silently
+# answered.
 cat > "$TMP/bin/ubus" <<'STUB'
 #!/bin/sh
-case "$1 $2" in
-	"call session") ;;
+case "$1 $2 $3" in
+	"call session access") ;;
 	*) echo "unexpected ubus args: $*" >&2; exit 1 ;;
+esac
+case "$4" in
+	*'"object":"usrmanage"'*'"function":"add"'*) ;;
+	*) echo "unexpected session access payload: $4" >&2; exit 1 ;;
 esac
 case "$FAKE_ACCESS" in
 	true) printf '%s\n' '{"access":true}' ;;
@@ -70,24 +78,28 @@ grep -q -- '--all' "$FAKE_CLI_LOG" && ok "write ACL: --all honored" || bad "writ
 : > "$FAKE_CLI_LOG"
 FAKE_ACCESS=false RPC_SESSION=$SID PATH="$FULLPATH" \
 	sh "$RPCD" call list '{"all":true}' >/dev/null || true
+[ -s "$FAKE_CLI_LOG" ] && ok "readonly: plain-list CLI path ran" || bad "readonly: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "readonly: --all still passed" || ok "readonly: --all stripped"
 
 # 3. No ubus on PATH -> fail closed (no --all).
 : > "$FAKE_CLI_LOG"
 RPC_SESSION=$SID PATH="$NOUBUSPATH" \
 	sh "$RPCD" call list '{"all":true}' >/dev/null || true
+[ -s "$FAKE_CLI_LOG" ] && ok "no-ubus: plain-list CLI path ran" || bad "no-ubus: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "no-ubus: --all passed" || ok "no-ubus: fail closed"
 
 # 4. Malformed RPC_SESSION -> fail closed (no --all).
 : > "$FAKE_CLI_LOG"
 FAKE_ACCESS=true RPC_SESSION=';reboot' PATH="$FULLPATH" \
 	sh "$RPCD" call list '{"all":true}' >/dev/null || true
+[ -s "$FAKE_CLI_LOG" ] && ok "bad sid: plain-list CLI path ran" || bad "bad sid: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "bad sid: --all passed" || ok "bad sid: fail closed"
 
 # 5. Plain list (all:false) unchanged -> no --all.
 : > "$FAKE_CLI_LOG"
 FAKE_ACCESS=true RPC_SESSION=$SID PATH="$FULLPATH" \
 	sh "$RPCD" call list '{"all":false}' >/dev/null || true
+[ -s "$FAKE_CLI_LOG" ] && ok "all:false: plain-list CLI path ran" || bad "all:false: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "all:false: --all passed" || ok "all:false: plain list"
 
 [ "$fail" = "0" ] || exit 1

@@ -119,7 +119,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 ## Open findings
 
-No open security findings. #125 (L12/R7) and #126 (CodeQL alert-2 record + pin checklist) closed in the 2026-08-15 closeout. I3 remains an accepted residual.
+One open security finding ([#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149), tracked below). #125 (L12/R7) and #126 (CodeQL alert-2 record + pin checklist) closed in the 2026-08-15 closeout. I3 remains an accepted residual.
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
