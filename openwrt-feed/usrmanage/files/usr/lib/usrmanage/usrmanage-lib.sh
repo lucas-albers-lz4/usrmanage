@@ -979,22 +979,52 @@ um_wheel_del_user() {
 	return 1
 }
 
+um_user_hash_is_sha512() {
+	# um_user_hash_is_sha512 <user> — true iff the stored shadow hash is
+	# sha512 crypt ($6$). Field-anchored lookup, same idiom as um_user_locked.
+	_sh=$(awk -F: -v u="$1" '$1 == u { print $2; found=1; exit } END { exit !found }' "$USRMANAGE_SHADOW" 2>/dev/null) || return 1
+	# shellcheck disable=SC2016
+	case "$_sh" in
+		'$6$'*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
 um_password_write() {
-	# um_password_write <user> <password> — chpasswd preferred; busybox passwd -a sha512
+	# um_password_write <user> <password> — chpasswd preferred; busybox passwd -a sha512.
+	# Fail closed (#148): BusyBox chpasswd hashes with the build-time
+	# CONFIG_FEATURE_DEFAULT_PASSWD_ALGO, which may be md5/des on some images.
+	# After every write the stored shadow hash must be $6$; otherwise retry via
+	# the pinned busybox path and fail loudly rather than leave a weak hash.
 	_u=$1
 	_pw=$2
 	# Prefer chpasswd (stdin: user:pass) — avoids shell echo | passwd
 	if command -v chpasswd >/dev/null 2>&1; then
 		printf '%s:%s\n' "$_u" "$_pw" | chpasswd
 		_rc=$?
-		_pw=
-		return $_rc
+		if [ "$_rc" = "0" ] && um_user_hash_is_sha512 "$_u"; then
+			_pw=
+			return 0
+		fi
 	fi
-	# BusyBox: pipe new+retype; pin sha512 crypt ($6$) via -a (D6).
+	# Weak or unverified write (or no chpasswd): pipe new+retype; pin sha512
+	# crypt ($6$) via -a (D6), then re-verify before accepting the result.
 	printf '%s\n%s\n' "$_pw" "$_pw" | passwd -a sha512 "$_u" >/dev/null 2>&1
 	_rc=$?
 	_pw=
-	return $_rc
+	if [ "$_rc" != "0" ]; then
+		# Tool failure (missing/broken passwd): NOT an unverified-hash
+		# condition — rc=1 so um_mut_passwd keeps the legacy fail audit
+		# instead of mislabeling it password_hash_unverified (CodeRabbit r4).
+		return 1
+	fi
+	if um_user_hash_is_sha512 "$_u"; then
+		return 0
+	fi
+	um_err "error: password_hash_unverified"
+	# rc=2 signals "unverifiable hash" distinctly from a tool failure (rc=1),
+	# so um_mut_passwd can audit/report the real reason (CodeRabbit r2 fold).
+	return 2
 }
 
 um_password_capture_fd() {
@@ -2021,11 +2051,25 @@ um_mut_passwd() {
 	if command -v um_session_revoke_required >/dev/null 2>&1; then
 		um_session_revoke_required "$_name"
 	fi
+	# Transaction wrap (#152 fold): a failed or unverified hash write must
+	# roll the shadow back to the pre-change state — the um_tx EXIT hook
+	# restores the snapshotted files unless um_tx_commit runs, so a reported
+	# failure never leaves a half-applied (e.g. weak-hash) password.
+	um_tx_begin
 	um_password_commit "$_name" || {
+		_rc=$?
 		um_incomplete_clear
+		# rc=2 = unverifiable hash (weak hash survived the pinned fallback):
+		# report the real reason — policy already passed before the write
+		# (CodeRabbit r2 fold). Any other failure keeps the legacy label.
+		if [ "$_rc" = "2" ]; then
+			um_audit denied "$_name" denied password_hash_unverified "$_role"
+			um_die "error: password_hash_unverified"
+		fi
 		um_audit fail "$_name" fail password
 		um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 	}
+	um_tx_commit
 	um_incomplete_clear
 	um_audit passwd "$_name" ok "" "$(um_role_of "$_name")"
 	if [ "${JSON_OUT:-0}" = "1" ]; then
