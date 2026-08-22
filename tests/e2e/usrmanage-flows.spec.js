@@ -424,8 +424,7 @@ test.describe('LuCI login matrix (role × luci opt-in)', () => {
 		await expectLuciLoginDenied(page, username);
 	});
 
-	// https://github.com/lucas-albers-lz4/usrmanage/issues/142 — un-skip when Log out lands.
-	test.skip('readonly observer has a Log out control (#142)', async ({ page }) => {
+	test('readonly observer has a Log out control (#142)', async ({ page }) => {
 		const username = uniqueUsername('pwout');
 		created.push(username);
 
@@ -434,9 +433,7 @@ test.describe('LuCI login matrix (role × luci opt-in)', () => {
 		await luciLogin(page, username, E2E_USER_PASSWORD);
 		await openDeviceHealth(page);
 
-		const logout = page.getByRole('link', { name: /log\s*out/i })
-			.or(page.getByRole('button', { name: /log\s*out/i }))
-			.or(page.getByTestId('usrmanage-health-logout'));
+		const logout = page.getByRole('link', { name: /log\s*out/i });
 		await expect(logout).toBeVisible({ timeout: 10_000 });
 		await logout.click();
 		await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible({ timeout: 30_000 });

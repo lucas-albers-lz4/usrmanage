@@ -5,7 +5,7 @@
 'require ui';
 
 /* Keep in sync with openwrt-feed/luci-app-usrmanage/Makefile PKG_VERSION */
-const APP_VERSION = '0.1.7';
+const APP_VERSION = '0.1.12';
 
 const callHealth = rpc.declare({
 	object: 'usrmanage',
