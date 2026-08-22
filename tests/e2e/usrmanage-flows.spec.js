@@ -456,7 +456,10 @@ test.describe('LuCI login matrix (role × luci opt-in)', () => {
 			await sshAddUser(username, 'readonly', { luci: true });
 			await luciLogoutClear(page);
 			await luciLogin(page, username, E2E_USER_PASSWORD);
-			await openLuciAdminView(page, p.path, { heading: p.heading });
+			await openLuciAdminView(page, p.path, {
+				heading: p.heading,
+				headingExact: p.headingExact,
+			});
 		});
 	}
 });
