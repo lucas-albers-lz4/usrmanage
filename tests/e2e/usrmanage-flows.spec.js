@@ -442,10 +442,10 @@ test.describe('LuCI login matrix (role × luci opt-in)', () => {
 
 	// Advertised diagnostic stock pages must not RPC-deny (#156).
 	const diagnosticPages = [
-		{ id: 'status/routes', path: 'admin/status/routes', heading: /Routing/i },
-		{ id: 'network/interfaces', path: 'admin/network/network', heading: /Interfaces/i },
-		{ id: 'network/routes', path: 'admin/network/routes', heading: /Routing/i },
-		{ id: 'network/diagnostics', path: 'admin/network/diagnostics', heading: /Diagnostics/i },
+		{ id: 'status/routes', path: 'admin/status/routes', heading: 'Routing', headingExact: true },
+		{ id: 'network/interfaces', path: 'admin/network/network', heading: 'Interfaces', headingExact: true },
+		{ id: 'network/routes', path: 'admin/network/routes', heading: 'Static IPv4 Routes' },
+		{ id: 'network/diagnostics', path: 'admin/network/diagnostics', heading: 'Diagnostics', headingExact: true },
 	];
 
 	for (const p of diagnosticPages) {

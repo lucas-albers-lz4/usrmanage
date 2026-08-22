@@ -83,9 +83,17 @@ ssh_guest '! id umsmoke >/dev/null 2>&1' || die "user still present after del"
 ok "del umsmoke"
 
 # last-admin must refuse deleting the sole remaining managed admin.
-# Skip when the shared lab already has another managed admin (not a product fail).
-_admin_count="$(ssh_guest "usrmanage list 2>/dev/null | awk '/role=admin/ {c++} END {print c+0}'")"
-if [ "${_admin_count:-0}" -eq 1 ]; then
+# Skip only when the shared lab already has another managed admin (not a product fail).
+_admin_count="$(ssh_guest "usrmanage list 2>/dev/null | awk '/role=admin/ {c++} END {print c+0}'")" \
+	|| die "last-admin count probe failed (ssh/awk)"
+case "$_admin_count" in
+	''|*[!0-9]*)
+		die "last-admin count probe returned non-numeric value: ${_admin_count}"
+		;;
+esac
+if [ "$_admin_count" -eq 0 ]; then
+	die "last-admin count is zero (unexpected lab state)"
+elif [ "$_admin_count" -eq 1 ]; then
 	if ssh_guest 'usrmanage del umadmin' 2>/dev/null; then
 		die "del umadmin should have failed (last_admin)"
 	fi

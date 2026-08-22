@@ -78,10 +78,10 @@ assert "file" not in (diag.get("read") or {}), "diagnostic-rpc must not grant fi
 ub = diag["read"]["ubus"]
 # Exact allowlist — extra methods (esp. getWirelessDevices) must fail CI.
 assert set(ub) == {"network.interface", "network", "uci", "luci-rpc"}, ub
-assert ub["network.interface"] == ["dump"], ub
-assert ub["network"] == ["get_proto_handlers"], ub
-assert ub["uci"] == ["get", "changes"], ub
-assert ub["luci-rpc"] == ["getBoardJSON", "getHostHints", "getNetworkDevices"], ub
+assert set(ub["network.interface"]) == {"dump"}, ub
+assert set(ub["network"]) == {"get_proto_handlers"}, ub
+assert set(ub["uci"]) == {"get", "changes"}, ub
+assert set(ub["luci-rpc"]) == {"getBoardJSON", "getHostHints", "getNetworkDevices"}, ub
 print("acl diagnostic-rpc: ok")
 
 PY

@@ -131,23 +131,26 @@ async function openDeviceHealth(page) {
  * Navigate to a LuCI admin path and fail if an RPC Access denied banner appears.
  * @param {import('@playwright/test').Page} page
  * @param {string} adminPath e.g. admin/status/routes
- * @param {{ heading?: RegExp|string, timeout?: number }} [opts]
+ * @param {{ heading?: RegExp|string, headingExact?: boolean, timeout?: number }} [opts]
  */
 async function openLuciAdminView(page, adminPath, opts = {}) {
 	const timeout = opts.timeout ?? 30_000;
 	const path = adminPath.replace(/^\/+/, '');
 	await page.goto(`/cgi-bin/luci/${path}`, { waitUntil: 'domcontentloaded' });
 	if (opts.heading) {
-		await page.getByRole('heading', { name: opts.heading }).waitFor({
+		await page.getByRole('heading', {
+			name: opts.heading,
+			exact: opts.headingExact ?? false,
+		}).waitFor({
 			state: 'visible',
 			timeout,
 		});
 	}
-	// Stock LuCI paints the shell first, then fires ubus; wait past first paint
+	// Stock LuCI paints the shell first, then fires ubus; wait for network settle
 	// so a late Access denied cannot slip past an instant zero-count assert.
-	await page.waitForTimeout(2_000);
-	await expect(page.getByText(/RPCError|Access denied|Access Denied|-32002/i)).toHaveCount(0, {
-		timeout: 15_000,
+	await page.waitForLoadState('networkidle', { timeout });
+	await expect(page.getByText(/RPCError|Access denied|-32002/i)).toHaveCount(0, {
+		timeout,
 	});
 }
 
