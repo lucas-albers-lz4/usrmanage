@@ -22,6 +22,7 @@ need "$FEED/luci-app-usrmanage/Makefile"
 need "$FEED/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js"
 need "$FEED/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage"
 need "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/luci-app-usrmanage.json"
+need "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/z-luci-app-usrmanage-logout.json"
 need "$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json"
 need "$FEED/luci-app-usrmanage/root/etc/uci-defaults/91-usrmanage-readonly-observer"
 
@@ -41,6 +42,17 @@ grep -q 'chmod 0440 /etc/sudoers.d/usrmanage' \
 # JSON ACLs parse
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json'))"
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/luci-app-usrmanage.json'))"
+python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/z-luci-app-usrmanage-logout.json'))"
+
+# Logout menu: readonly session ACL may end LuCI without luci-base (issue #142).
+python3 - "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/z-luci-app-usrmanage-logout.json" <<'PY'
+import json, sys
+menu = json.load(open(sys.argv[1]))
+logout = menu["admin/logout"]["depends"]["acl"]
+assert "luci-app-usrmanage-session" in logout, logout
+assert "luci-base" in logout, logout
+print("menu logout depends: ok")
+PY
 
 # Health ACL: read usrmanage.health only; no write object; no globs. Session: no uci.
 python3 - "$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json" <<'PY'
