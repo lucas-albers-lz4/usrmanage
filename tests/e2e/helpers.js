@@ -143,9 +143,11 @@ async function openLuciAdminView(page, adminPath, opts = {}) {
 			timeout,
 		});
 	}
-	// Stock LuCI surfaces RPCError / Access denied in the view when ACL is short.
+	// Stock LuCI paints the shell first, then fires ubus; wait past first paint
+	// so a late Access denied cannot slip past an instant zero-count assert.
+	await page.waitForTimeout(2_000);
 	await expect(page.getByText(/RPCError|Access denied|Access Denied|-32002/i)).toHaveCount(0, {
-		timeout: 5_000,
+		timeout: 15_000,
 	});
 }
 

@@ -218,7 +218,7 @@ DRY_RUN stubs are **not** proof of lab denies ([security-review.md](../security-
 
 | Abuse | Disposition |
 |-------|-------------|
-| Readonly crafts ubus to `uci get wireless` | Accept residual for diagnostic stock pages (#156): `uci get` via diagnostic-rpc + network-config package scope; still no `luci-base` file list / getWirelessDevices |
+| Readonly crafts ubus to `uci get wireless` / `getHostHints` | Accept residual for diagnostic stock pages (#156): `uci get`/`changes` via diagnostic-rpc over network-config packages (`network`/`wireless`/`dhcp`/`firewall`/`system`) plus `getHostHints` lease/neighbor hints; still no `luci-base` file list / getWirelessDevices |
 | Readonly uses stock Overview JS (SSID in DOM) | Reject: do not grant those menu ACLs; health is our view only |
 | Plugin copies `iwinfo info` into health | Reject: frozen schema; unknown fields dropped |
 | Admin `--scope full` `*` reads keys | Accept: explicit web-root opt-in (stronger than sudo: no per-op password) |

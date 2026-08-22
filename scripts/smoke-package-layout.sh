@@ -17,6 +17,7 @@ need "$FEED/usrmanage/files/usr/lib/usrmanage/usrmanage-health.sh"
 need "$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
 need "$FEED/usrmanage/files/etc/usrmanage/users"
 need "$FEED/usrmanage/files/etc/uci-defaults/90-usrmanage"
+need "$FEED/usrmanage/files/etc/uci-defaults/91-usrmanage-diagnostic-rpc"
 
 need "$FEED/luci-app-usrmanage/Makefile"
 need "$FEED/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js"
@@ -73,10 +74,14 @@ print("acl health/session: ok")
 diag = acl.get("luci-app-usrmanage-diagnostic-rpc")
 assert diag is not None, "missing luci-app-usrmanage-diagnostic-rpc"
 assert "write" not in diag, "diagnostic-rpc ACL must not have write"
+assert "file" not in (diag.get("read") or {}), "diagnostic-rpc must not grant file"
 ub = diag["read"]["ubus"]
-assert ub.get("network.interface") == ["dump"], ub
-assert "get" in ub.get("uci", []) and "changes" in ub.get("uci", []), ub
-assert "getWirelessDevices" not in ub.get("luci-rpc", []), ub
+# Exact allowlist — extra methods (esp. getWirelessDevices) must fail CI.
+assert set(ub) == {"network.interface", "network", "uci", "luci-rpc"}, ub
+assert ub["network.interface"] == ["dump"], ub
+assert ub["network"] == ["get_proto_handlers"], ub
+assert ub["uci"] == ["get", "changes"], ub
+assert ub["luci-rpc"] == ["getBoardJSON", "getHostHints", "getNetworkDevices"], ub
 print("acl diagnostic-rpc: ok")
 
 PY
