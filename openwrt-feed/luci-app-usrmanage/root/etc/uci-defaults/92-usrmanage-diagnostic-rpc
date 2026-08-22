@@ -1,0 +1,12 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Rewrite owned LuCI logins after diagnostic-rpc ACL addition (#156).
+# New uci-defaults name so upgrades re-run migrate once.
+
+[ -f /usr/lib/usrmanage/usrmanage-lib.sh ] || exit 0
+# shellcheck disable=SC1091
+. /usr/lib/usrmanage/usrmanage-lib.sh
+
+command -v um_luci_login_migrate_observer >/dev/null 2>&1 || exit 0
+um_with_lock um_luci_login_migrate_observer || exit 1
+exit 0

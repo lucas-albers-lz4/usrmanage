@@ -128,6 +128,28 @@ async function openDeviceHealth(page) {
 }
 
 /**
+ * Navigate to a LuCI admin path and fail if an RPC Access denied banner appears.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} adminPath e.g. admin/status/routes
+ * @param {{ heading?: RegExp|string, timeout?: number }} [opts]
+ */
+async function openLuciAdminView(page, adminPath, opts = {}) {
+	const timeout = opts.timeout ?? 30_000;
+	const path = adminPath.replace(/^\/+/, '');
+	await page.goto(`/cgi-bin/luci/${path}`, { waitUntil: 'domcontentloaded' });
+	if (opts.heading) {
+		await page.getByRole('heading', { name: opts.heading }).waitFor({
+			state: 'visible',
+			timeout,
+		});
+	}
+	// Stock LuCI surfaces RPCError / Access denied in the view when ACL is short.
+	await expect(page.getByText(/RPCError|Access denied|Access Denied|-32002/i)).toHaveCount(0, {
+		timeout: 5_000,
+	});
+}
+
+/**
  * Unique managed username for a run (OpenWrt username rules: [a-z_][a-z0-9_-]*).
  * @param {string} [prefix]
  */
@@ -261,6 +283,7 @@ module.exports = {
 	luciLogoutClear,
 	openUserManagement,
 	openDeviceHealth,
+	openLuciAdminView,
 	uniqueUsername,
 	sshDelUser,
 	sshAddUser,

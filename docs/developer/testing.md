@@ -6,7 +6,7 @@ How usrmanage is tested locally and in CI. Passwords never appear on argv, in au
 
 | Layer | What | Where | When |
 |-------|------|-------|------|
-| **Unit** | Validators, audit sanitize, theme (no hex), i18n POT coverage | `tests/test_validators.sh`, `tests/usrmanage-theme.test.js`, `tests/usrmanage-i18n.test.js` | PR via `./scripts/smoke-host.sh` |
+| **Unit** | Validators, audit sanitize, theme (no hex), i18n POT coverage, **diagnostic page RPC contract** (#156) | `tests/test_validators.sh`, `tests/usrmanage-theme.test.js`, `tests/usrmanage-i18n.test.js`, `tests/test_diagnostic_page_rpc_contract.py` | PR via `./scripts/smoke-host.sh` |
 | **Host integration** | Lock/flock, mutator denials under `USRMANAGE_DRY_RUN`, happy-path add→role→passwd→del, password **policy presets**, rpcd argv (no password leak), multi-line/control-char password rejection over the real `--password-fd` path | `tests/test_mutators.sh`, `tests/test_mutator_flows.sh`, `tests/test_policy.sh`, `tests/test_mutators-busybox-fallback.sh`, `tests/test_password_control.sh` | PR via `./scripts/smoke-host.sh` |
 | **Device integration** | Real `useradd`/wheel/ubus/HTTP page on guest; live LuCI session revoke | `scripts/qemu-smoke-usrmanage.sh` | Local (QEMU lab); not PR CI |
 | **Playwright MCP** | Agent navigate/snapshot/click against live LuCI | `.cursor/mcp.json` → `@playwright/mcp` | Local with lab up |
@@ -87,13 +87,25 @@ Owned web login is **opt-in** (`--luci-login` / Add checkbox). Scope is **role-l
 
 | Role | LuCI | Expect (e2e) | Host state pin |
 |------|------|--------------|----------------|
-| readonly | on | login → Device health | `owned` + diagnostic 8-set reads (session, health, app, status-{index,routes,realtime}, network-{config,diagnostics}), no writes |
+| readonly | on | login → Device health | `owned` + diagnostic 9-set reads (session, health, app, diagnostic-rpc, status-{index,routes,realtime}, network-{config,diagnostics}), no writes |
 | admin | on | login → Full LuCI (User Management + all menus) | `owned` + scope=full: `read *` / `write *` |
 | readonly | off (never enabled) | cannot web-login | `none`, no `$p$user` |
 | admin | off (never enabled) | cannot web-login | `none`, no `$p$user` |
 | readonly | disable after enable | cannot web-login | `none` (lifecycle) |
 
 Playwright: `tests/e2e/usrmanage-flows.spec.js` → `LuCI login matrix`. Host ACL/state: `tests/test_luci_login.sh` (login matrix section).
+
+### Diagnostic stock pages (#156)
+
+Owned readonly advertises Status/Network diagnostic menus, but stock LuCI JS needs ubus methods that live under `luci-base` / `luci-base-network-status` (withheld on purpose).
+
+| Layer | What |
+|-------|------|
+| Host CI | `tests/test_diagnostic_page_rpc_contract.py` — unions fixtures in `tests/fixtures/luci-acl/` + our ACL; required RPCs in `diagnostic-page-rpc-required.tsv` must match `diagnostic-page-rpc-known-gaps.tsv` exactly (new gaps or stale allowlist → fail) |
+| Playwright | readonly navigates Status→Routing, Network→Interfaces/Routing/Diagnostics without RPCError |
+| QEMU smoke | `session access` must **allow** `network.interface` `dump` and `uci` `get`/`changes`; still **deny** `luci-base` and `luci-rpc.getWirelessDevices` |
+
+After #156: known-gap TSV empty; Playwright asserts pages load; qemu allows page RPCs; still no full `luci-base`.
 
 ### Password policy presets
 

@@ -25,6 +25,7 @@ need "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/luci-app-usrmanage.jso
 need "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/z-luci-app-usrmanage-logout.json"
 need "$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json"
 need "$FEED/luci-app-usrmanage/root/etc/uci-defaults/91-usrmanage-readonly-observer"
+need "$FEED/luci-app-usrmanage/root/etc/uci-defaults/92-usrmanage-diagnostic-rpc"
 
 grep -q 'PKGARCH:=all' "$FEED/usrmanage/Makefile"
 grep -q 'LUCI_PKGARCH:=all' "$FEED/luci-app-usrmanage/Makefile"
@@ -68,6 +69,16 @@ sess = acl["luci-app-usrmanage-session"]["read"]
 assert "uci" not in sess and "uci" not in sess.get("ubus", {}), sess
 assert "luci-app-usrmanage" in acl
 print("acl health/session: ok")
+
+diag = acl.get("luci-app-usrmanage-diagnostic-rpc")
+assert diag is not None, "missing luci-app-usrmanage-diagnostic-rpc"
+assert "write" not in diag, "diagnostic-rpc ACL must not have write"
+ub = diag["read"]["ubus"]
+assert ub.get("network.interface") == ["dump"], ub
+assert "get" in ub.get("uci", []) and "changes" in ub.get("uci", []), ub
+assert "getWirelessDevices" not in ub.get("luci-rpc", []), ub
+print("acl diagnostic-rpc: ok")
+
 PY
 
 # LuCI APP_VERSION must match luci-app Makefile PKG_VERSION (fwlive-style)

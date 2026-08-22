@@ -5,6 +5,7 @@ const {
 	luciLogoutClear,
 	openUserManagement,
 	openDeviceHealth,
+	openLuciAdminView,
 	uniqueUsername,
 	sshDelUser,
 	sshAddUser,
@@ -438,4 +439,24 @@ test.describe('LuCI login matrix (role × luci opt-in)', () => {
 		await logout.click();
 		await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible({ timeout: 30_000 });
 	});
+
+	// Advertised diagnostic stock pages must not RPC-deny (#156).
+	const diagnosticPages = [
+		{ id: 'status/routes', path: 'admin/status/routes', heading: /Routing/i },
+		{ id: 'network/interfaces', path: 'admin/network/network', heading: /Interfaces/i },
+		{ id: 'network/routes', path: 'admin/network/routes', heading: /Routing/i },
+		{ id: 'network/diagnostics', path: 'admin/network/diagnostics', heading: /Diagnostics/i },
+	];
+
+	for (const p of diagnosticPages) {
+		test(`readonly diagnostic ${p.id} loads without Access denied (#156)`, async ({ page }) => {
+			const username = uniqueUsername('diagpg');
+			created.push(username);
+
+			await sshAddUser(username, 'readonly', { luci: true });
+			await luciLogoutClear(page);
+			await luciLogin(page, username, E2E_USER_PASSWORD);
+			await openLuciAdminView(page, p.path, { heading: p.heading });
+		});
+	}
 });

@@ -16,6 +16,17 @@
 			}
 		}
 	},
+	"luci-app-usrmanage-diagnostic-rpc": {
+		"description": "Minimum ubus methods for stock diagnostic Status/Network pages (issue #156). No luci-base file list, no getWirelessDevices, no write.",
+		"read": {
+			"ubus": {
+				"network.interface": [ "dump" ],
+				"network": [ "get_proto_handlers" ],
+				"uci": [ "get", "changes" ],
+				"luci-rpc": [ "getBoardJSON", "getHostHints", "getNetworkDevices" ]
+			}
+		}
+	},
 	"luci-app-usrmanage": {
 		"description": "Grant access to local UNIX user management",
 		"read": {

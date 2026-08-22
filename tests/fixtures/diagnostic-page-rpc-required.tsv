@@ -1,0 +1,17 @@
+# Diagnostic LuCI pages we advertise for owned readonly sessions, and the
+# ubus methods their stock JS requires on first paint.
+#
+# Format (tab-separated): page_id <tab> ubus_object <tab> method
+# page_id is stable for the known-gap allowlist (issue #156).
+#
+# Coverage is computed from tests/fixtures/luci-acl/*.json (stock OpenWrt
+# ACL groups on the diagnostic read list) plus our luci-app-usrmanage ACL.
+# Methods not granted by that union are gaps — CI fails unless listed in
+# diagnostic-page-rpc-known-gaps.tsv (exact match).
+
+status/routes	network.interface	dump
+network/interfaces	uci	changes
+network/routes	uci	changes
+network/routes	uci	get
+network/diagnostics	uci	get
+network/diagnostics	network.interface	dump

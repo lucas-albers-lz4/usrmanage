@@ -27,7 +27,7 @@ Owned logins always use **`$p$username`**. ACL matrix is **fixed by UNIX role** 
 
 | UNIX role | Web scope | rpcd grants |
 |-----------|-----------|-------------|
-| readonly | **diagnostic** | `read`: session, health, `luci-app-usrmanage` (view methods), `luci-mod-status-index`, `luci-mod-status-routes`, `luci-mod-status-realtime`, `luci-mod-network-config`, `luci-mod-network-diagnostics`. **Empty write list** (stock group write blocks stay denied). |
+| readonly | **diagnostic** | `read`: session, health, `luci-app-usrmanage` (view methods), `luci-app-usrmanage-diagnostic-rpc` (page RPCs), `luci-mod-status-index`, `luci-mod-status-routes`, `luci-mod-status-realtime`, `luci-mod-network-config`, `luci-mod-network-diagnostics`. **Empty write list** (stock group write blocks stay denied). |
 | admin | **full** | `read`: `*`; `write`: `*` |
 
 Legacy `usrmanage_scope 'app'` normalizes to **diagnostic** and is rewritten on sync/upgrade. Enabling LuCI for admin grants Full LuCI by design.

@@ -42,6 +42,8 @@ if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	"$ROOT/tests/test_luci_login.sh"
 	"$ROOT/tests/test_health.sh"
 	"$ROOT/tests/test_rpcd_list_acl.sh"
+	# Diagnostic page RPC coverage vs stock LuCI ACL fixtures (#156).
+	python3 "$ROOT/tests/test_diagnostic_page_rpc_contract.py"
 	"$ROOT/tests/test_phase1_foundation.sh"
 	"$ROOT/tests/test_mutators-busybox-fallback.sh"
 	"$ROOT/tests/test_password_control.sh"
