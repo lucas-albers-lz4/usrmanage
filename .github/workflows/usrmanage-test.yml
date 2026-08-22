@@ -45,3 +45,34 @@ jobs:
 
       - name: Run actionlint on workflows
         run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 -color
+
+  zizmor:
+    runs-on: ubuntu-latest
+    env:
+      # Digest pins ghcr.io/zizmorcore/zizmor:1.29.0 (multi-arch index).
+      ZIZMOR_IMAGE: ghcr.io/zizmorcore/zizmor@sha256:863026d54f91271b10b60b67ad8054cb37120167e162482597db102b3026a284
+      ZIZMOR_VERSION: "1.29.0"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      # Static-analysis for Actions (pinned image via docker run, not a
+      # job-level container — same EACCES rationale as actionlint above).
+      - name: Verify zizmor version (pinned image)
+        run: |
+          out="$(docker run --rm "$ZIZMOR_IMAGE" --version)"
+          printf '%s\n' "$out"
+          expected="zizmor ${ZIZMOR_VERSION}"
+          if [[ "$out" != "$expected" ]]; then
+            echo "expected '${expected}', got '${out}'" >&2
+            exit 1
+          fi
+
+      - name: Run zizmor on workflows
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo:ro" \
+            -w /repo \
+            "$ZIZMOR_IMAGE" \
+            --offline --persona=regular --min-severity=high .
