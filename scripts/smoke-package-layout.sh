@@ -50,7 +50,8 @@ python3 - "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/z-luci-app-usrman
 import json, sys
 menu = json.load(open(sys.argv[1]))
 logout = menu["admin/logout"]["depends"]["acl"]
-assert logout == ["luci-app-usrmanage-session"], logout
+if logout != ["luci-app-usrmanage-session"]:
+	raise SystemExit(f"menu logout depends: {logout!r}")
 print("menu logout depends: ok")
 PY
 
