@@ -19,15 +19,15 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-08-20 (role-locked diagnostic/full) | none |
-| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-20 (drop scope param; diagnostic/full) | none |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-08-22 (#156 diagnostic-rpc 9-set) | none |
+| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-22 (`luci-app-usrmanage-diagnostic-rpc`) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
-| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry), luci-app `91-usrmanage-readonly-observer` | 2026-08-20 (migrate → diagnostic/full) | none |
+| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
 | CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-15 (#126 peaceiris pin checklist) | none |
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-18 (R7 layout: sdk-export + sibling mounts) | none |
 | Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-18 (R7 layout: `sdk-export` service, no workspace mount) | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
-| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-20 (diagnostic/full deny/allow + demote) — **lab run pending** (dated run required before merge; see 2026-08-20 entry) | none open (I3 accepted residual) — fixtures remain lab-only by design |
+| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-22 (#156 page RPC allow + deny luci-base/getWirelessDevices; Playwright 4/4) | none open (I3 accepted residual) — fixtures remain lab-only by design |
 
 ## How to re-verify (current gates)
 
@@ -35,7 +35,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 |---------|----------------|
 | `./scripts/smoke-host.sh` | shellcheck, package layout, link check, validators, mutators-under-lock, rpcd argv (password-safe stub), busybox fallback, luci-login + health schema, theme/i18n/parity |
 | `python3 scripts/z3-verify.py --full` | Formal proof of username / actor grammars (empty, length, deny-list, injection alphabet) |
-| `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → mutators → session revoke → **readonly diagnostic** (config-level uci read wireless/network allow; uci write / add / shadow / logs deny; `ubus uci get` denied — no luci-base; list+health allow) → **admin full** wireless get → `--scope` rejected → demote leftover SID dead → LuCI/ubus |
+| `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → mutators → session revoke → **readonly diagnostic** (page RPCs `network.interface dump` / `uci get`/`changes` allow via diagnostic-rpc; still deny `luci-base` + `getWirelessDevices`; uci write / add / shadow / logs deny; list+health allow) → **admin full** wireless get → `--scope` rejected → demote leftover SID dead → LuCI/ubus |
 | `gh api repos/:owner/:repo/code-scanning/alerts` | CodeQL findings, **including dismissed ones** — check before filing, a finding may already have a decision |
 
 Notes:
@@ -96,7 +96,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Same-role / ACL-repair `set-role` leaves elevated live sessions | After `um_luci_login_sync_acls` in set-role (including same-role), `_um_set_role_revoke` runs fail-closed | host | `tests/test_luci_login.sh` (behavioral same-role mock) |
 | `set-luci-login` multi-index rewrite crash window | Resolved — `um_mut_set_luci_login` uses `um_tx_*` for enable/disable/reset ([#106](https://github.com/lucas-albers-lz4/usrmanage/issues/106) / [PR #114](https://github.com/lucas-albers-lz4/usrmanage/pull/114)) | host | `tests/test_luci_login.sh` (L2 tx asserts) |
 | New `session.login` denied after disable; demote drops write on re-login | lab for **canonical** owned login sections (P1/P2) | lab | `scripts/qemu-smoke-usrmanage.sh` (#107 / [PR #116](https://github.com/lucas-albers-lz4/usrmanage/pull/116)) |
-| Readonly diagnostic LuCI obtains forbidden ACL / write paths | Session ACL has no uci. Health is `usrmanage.health` only. Diagnostic grants selected stock status/network ACL **names on `list read` only** (empty write list — Interfaces/Overview write blocks stay denied). Exact set match; `*` / `luci-base` → tampered. View-only UM (app ACL read, no write). **By design:** config-level `uci read` of wireless/network granted via network-config read; web-path `ubus uci get` stays denied (luci-base withheld — K1 PSK protection). | host + lab (lab **pending**: dated qemu-smoke run required before merge) | `tests/test_health.sh` · `tests/test_luci_login.sh` · `scripts/qemu-smoke-usrmanage.sh` |
+| Readonly diagnostic LuCI obtains forbidden ACL / write paths | Session ACL has no uci. Health is `usrmanage.health` only. Diagnostic grants selected stock status/network ACL **names on `list read` only** plus narrow `luci-app-usrmanage-diagnostic-rpc` (dump / uci get+changes / board+host+netdev hints — **not** getWirelessDevices, no luci-base, no write). Exact set match; `*` / `luci-base` → tampered. View-only UM (app ACL read, no write). **Accepted residual (#156):** web-path `uci get`/`changes` over network-config packages (`network`/`wireless`/`dhcp`/`firewall`/`system`) plus `luci-rpc.getHostHints` (lease/neighbor MAC↔IP/hostname hints needed by stock Interfaces). Still no Overview SSID DOM path / getWirelessDevices / luci-base file list. | host + lab | `tests/test_health.sh` · `tests/test_luci_login.sh` · `tests/test_diagnostic_page_rpc_contract.py` · `scripts/qemu-smoke-usrmanage.sh` · Playwright `#156` · lab 2026-08-22 ACL probes on 0.1.13 |
 | Health RPC grows secret fields / pass-through blobs | Frozen schema projector (`um_health_json_emit`); `health` takes no params; hostile body ignored (no `read_input`); DRY_RUN fixture equality | host | `tests/test_health.sh` (schema equality, not deny-list grep as sole proof) |
 | Admin owned LuCI / upgrade widen | Admin+LuCI is always `usrmanage_scope=full` (`*`). `--scope` rejected (`luci_scope_role_locked`). Upgrade migrate rewrites legacy `app` → full and readonly → diagnostic; refuse `*` when rpcd unparsable | host | `tests/test_luci_login.sh` · `91-usrmanage-readonly-observer` |
 | Demote admin (`*`) leaves live SID with old ACLs | Rewrite ACL first (drop `*` → diagnostic), revoke, drop wheel, revoke again; fail closed if SID remains when ubus present | lab | `scripts/qemu-smoke-usrmanage.sh` (demote leftover SID dead). Host order mock in `tests/test_luci_login.sh` is **not** lab proof |
@@ -362,6 +362,16 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Fix.** `um_luci_login_state` now revokes the tampered user's live ubus SIDs on detection (best-effort, idempotent; no ACL rewrite — forensics preserved; no login deletion). Doctor gained a `luci_tampered` check reporting tampered owned logins at **error** severity (JSON + human output).
 
 **Proof.** host: `tests/test_luci_login.sh` (#150 block — tampered fixture classified tampered; revoke observed via function override; clean owned state performs no revoke; doctor JSON/human error surfacing; clean config ok:true). Red on revert (revoke assertion fails). Full `./scripts/smoke-host.sh` green. lab: none — no new lab surface.
+
+### 2026-08-22 — Diagnostic page RPCs for stock Status/Network (#156)
+
+**Scope.** Readonly diagnostic menus advertised Status → Routing and Network → Interfaces/Routing/Diagnostics, but stock page JS needs methods that lived only under `luci-base` / `luci-base-network-status` (withheld on purpose). Menus showed; pages RPC-denied.
+
+**Fix.** New read-only ACL group `luci-app-usrmanage-diagnostic-rpc`: `network.interface` `dump`, `network` `get_proto_handlers`, `uci` `get`/`changes`, `luci-rpc` `getBoardJSON`/`getHostHints`/`getNetworkDevices` — **not** `getWirelessDevices`, no `luci-base` file list, no write. Wired into readonly expected reads (diagnostic **9-set**). Upgrade migrate via luci-app `92-usrmanage-diagnostic-rpc` **and** usrmanage `91-usrmanage-diagnostic-rpc` (avoids luci-app/CLI package skew). `LUCI_DEPENDS` pins `usrmanage (>=0.1.13)`. Host contract pins all seven diagnostic-rpc methods; package-layout exact-allowlists the ACL object. QEMU asserts allow dump/uci get+changes and deny luci-base + getWirelessDevices. Playwright navigates the four pages with a post-paint settle before Access-denied asserts.
+
+**Accepted residual.** Web-path `uci get`/`changes` over `luci-mod-network-config` packages (`network`, `wireless`, `dhcp`, `firewall`, `system`) — includes wireless PSK and network PPPoE secrets if present — plus `getHostHints` lease/neighbor hints required by stock Interfaces. Still no Overview SSID DOM path / `getWirelessDevices` / full `luci-base`.
+
+**Proof.** `host`: contract (0 gaps) + luci-login 9-set + package-layout + `./scripts/smoke-host.sh` green. `lab` (2026-08-22, guest 24.10.8 + packages 0.1.13): `./scripts/qemu-smoke-usrmanage.sh` PASSED (dump/uci get+changes allow; luci-base + getWirelessDevices deny); Playwright `#156` 4/4.
 
 ## Review procedure
 

@@ -12,6 +12,7 @@
 : "${USRMANAGE_SESSION_ACL:=luci-app-usrmanage-session}"
 : "${USRMANAGE_HEALTH_ACL:=luci-app-usrmanage-health}"
 : "${USRMANAGE_APP_ACL:=luci-app-usrmanage}"
+: "${USRMANAGE_DIAG_RPC_ACL:=luci-app-usrmanage-diagnostic-rpc}"
 # Readonly diagnostic LuCI (read list only — stock group write blocks stay denied).
 : "${USRMANAGE_DIAG_STATUS_INDEX:=luci-mod-status-index}"
 : "${USRMANAGE_DIAG_STATUS_ROUTES:=luci-mod-status-routes}"
@@ -283,11 +284,13 @@ um_luci_login_expected_reads() {
 		printf '*'
 		return 0
 	fi
-	# diagnostic (readonly): session + health + view-only UM + status/network.
-	printf '%s,%s,%s,%s,%s,%s,%s,%s' \
+	# diagnostic (readonly): session + health + view-only UM + status/network
+	# + narrow page RPCs (#156). Sorted CSV for exact-set match.
+	printf '%s,%s,%s,%s,%s,%s,%s,%s,%s' \
 		"$USRMANAGE_SESSION_ACL" \
 		"$USRMANAGE_HEALTH_ACL" \
 		"$USRMANAGE_APP_ACL" \
+		"$USRMANAGE_DIAG_RPC_ACL" \
 		"$USRMANAGE_DIAG_STATUS_INDEX" \
 		"$USRMANAGE_DIAG_STATUS_ROUTES" \
 		"$USRMANAGE_DIAG_STATUS_REALTIME" \
@@ -540,6 +543,7 @@ um_rpcd_append_owned_login() {
 			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_SESSION_ACL"
 			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_HEALTH_ACL"
 			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_APP_ACL"
+			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_DIAG_RPC_ACL"
 			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_DIAG_STATUS_INDEX"
 			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_DIAG_STATUS_ROUTES"
 			printf '\tlist read '\''%s'\''\n' "$USRMANAGE_DIAG_STATUS_REALTIME"

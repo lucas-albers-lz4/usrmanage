@@ -8,10 +8,11 @@ include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=User Management
 LUCI_DESCRIPTION:=Manage local UNIX users (readonly vs admin/wheel) with operational audit log
-LUCI_DEPENDS:=+luci-base +usrmanage +sudo
+# Pin usrmanage so expected-reads 9-set lands with luci-app migrate (#156 skew).
+LUCI_DEPENDS:=+luci-base +usrmanage (>=0.1.13) +sudo
 LUCI_PKGARCH:=all
 
-PKG_VERSION:=0.1.12
+PKG_VERSION:=0.1.13
 PKG_RELEASE:=1
 
 ifdef SOURCE_DATE_EPOCH

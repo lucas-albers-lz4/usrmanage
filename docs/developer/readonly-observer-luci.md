@@ -104,7 +104,7 @@ Constants (names are normative for tests):
 
 | UNIX role | scope | `list read` | `list write` |
 |-----------|-------|-------------|--------------|
-| readonly | diagnostic | session, health, app, status-index, status-routes, status-realtime, network-config, network-diagnostics | *(empty)* |
+| readonly | diagnostic | session, health, app, diagnostic-rpc, status-index, status-routes, status-realtime, network-config, network-diagnostics | *(empty)* |
 | admin | full | `*` | `*` |
 
 `um_luci_login_expected_reads` / `expected_writes` are **role-derived**. Tamper detection: exact set mismatch, `*`, or `luci-base` on readonly → `tampered`.
@@ -114,7 +114,7 @@ Constants (names are normative for tests):
 Keep `luci-app-usrmanage-session` **narrower** than today:
 
 - ubus: `session.access`, `luci.getFeatures` only.
-- **No** `uci get/changes` on the session group. Hostname comes from `health`. Lab: plant pending `uci set wireless.…` and assert readonly `uci changes` / `uci get wireless` denied.
+- **No** `uci get/changes` on the **session** group (hostname from `health`). Page RPCs live on `luci-app-usrmanage-diagnostic-rpc`. Lab: still deny `luci-base` and `getWirelessDevices`; `uci get`/`changes` are allowed for diagnostic.
 
 ### 7.2 App ACL — new `health` method
 
@@ -179,13 +179,13 @@ Existing invariants: marker `usrmanage=1`, `$p$user`, registry membership, refus
 
 | Event | ACL action | Sessions |
 |-------|------------|----------|
-| enable readonly | write diagnostic 8-set reads (session, health, app, status-{index,routes,realtime}, network-{config,diagnostics}), no writes | n/a |
+| enable readonly | write diagnostic 9-set reads (session, health, app, diagnostic-rpc, status-{index,routes,realtime}, network-{config,diagnostics}), no writes | n/a |
 | enable admin | write **full** scope (`read *` / `write *`, role-locked) | n/a |
 | set-role admin→readonly | **rewrite ACL first** (drop `*` / app writes → health), then revoke, drop wheel, **revoke again**; fail closed if a live SID remains | **lab-class**, including racing `session.login` |
 | set-role readonly→admin | write **full** scope (`*`, role-locked); revoke | revoke |
 | disable / del / passwd | unchanged | revoke |
 | doctor | **read-only** forever; never rewrite ACL / never grant `*` | — |
-| package upgrade | rewrite readonly owned logins to diagnostic 8-set; migrate admin owned logins to role-derived full scope (`read *` / `write *`) | revoke only users whose lists actually changed |
+| package upgrade | rewrite readonly owned logins to diagnostic 9-set; migrate admin owned logins to role-derived full scope (`read *` / `write *`) | revoke only users whose lists actually changed |
 
 Upgrade **must not** widen admin web privilege. Admin is role-locked to full scope (`*`); `--scope` is rejected. Release notes are not a control. `doctor --fix` must not exist on the read `doctor` method.
 
@@ -203,11 +203,11 @@ Upgrade **must not** widen admin web privilege. Admin is role-locked to full sco
 - Expected reads/writes per role; readonly rejects `*` and `luci-base`.
 - Health JSON **schema equality** (exact keys/types), plus MAC/IPv4/IPv6/hash regex over the whole reply. Fixture dumps include PSK/SSID. Deny-list grep is **not** proof.
 - `health` takes no params; hostile JSON body is byte-identical. Declared **read**; health group has no `write` key; no `*`/`?` in method names.
-- Readonly expected reads = diagnostic 8-set (session, health, app, status-{index,routes,realtime}, network-{config,diagnostics}).
+- Readonly expected reads = diagnostic 9-set (session, health, app, diagnostic-rpc, status-{index,routes,realtime}, network-{config,diagnostics}).
 
 **Lab (qemu-smoke, proof class `lab`)**
 
-- Readonly `session.access` **deny** config-level `uci read` openvpn (non-diagnostic), `uci write` wireless/network, `ubus uci get` (web-path method — no luci-base, K1); `file.read` `/etc/shadow`; `usrmanage.add` (mutators); `log.read`. **Allow** the diagnostic 8-set reads: `usrmanage.list` / `audit` / `doctor` / `policy` (view-only), `health`, config-level `uci read` wireless/network (via `luci-mod-network-config` read), and `session.access` on the five Status/Network ACLs (`luci-mod-status-{index,routes,realtime}`, `luci-mod-network-{config,diagnostics}`). Keep mutators and sensitive reads denied.
+- Readonly `session.access` **deny** config-level `uci read` openvpn (non-diagnostic), `uci write` wireless/network, `luci-rpc.getWirelessDevices`, `luci-base` (file list of `/`); `file.read` `/etc/shadow`; `usrmanage.add` (mutators); `log.read`. **Allow** the diagnostic 9-set reads including `luci-app-usrmanage-diagnostic-rpc` (`network.interface` `dump`, `uci` `get`/`changes`, `luci-rpc` getBoardJSON/getHostHints/getNetworkDevices — **not** getWirelessDevices). Package-scoped wireless UCI read via network-config remains a documented residual for stock Network pages (#156).
 - Readonly `usrmanage.health` allow; schema match; no ssid/key/MAC.
 - Admin **full** can `uci get wireless`; demote then racing login cannot; leftover SID dead.
 - Menu: readonly receives the diagnostic Status/Network views (`luci-mod-status-index` probe allowed; `session.access` on those five ACL names), no Full LuCI menus.
@@ -218,7 +218,7 @@ DRY_RUN stubs are **not** proof of lab denies ([security-review.md](../security-
 
 | Abuse | Disposition |
 |-------|-------------|
-| Readonly crafts ubus to `uci get wireless` | Reject: no `luci-base` / wireless uci ACL; lab deny |
+| Readonly crafts ubus to `uci get wireless` / `getHostHints` | Accept residual for diagnostic stock pages (#156): `uci get`/`changes` via diagnostic-rpc over network-config packages (`network`/`wireless`/`dhcp`/`firewall`/`system`) plus `getHostHints` lease/neighbor hints; still no `luci-base` file list / getWirelessDevices |
 | Readonly uses stock Overview JS (SSID in DOM) | Reject: do not grant those menu ACLs; health is our view only |
 | Plugin copies `iwinfo info` into health | Reject: frozen schema; unknown fields dropped |
 | Admin `--scope full` `*` reads keys | Accept: explicit web-root opt-in (stronger than sudo: no per-op password) |
@@ -257,7 +257,7 @@ Models: grok, luna, opus (2026-08-19). All three: **do not ship revision 1**. Sh
 | Consensus | Lock in this spec |
 |-----------|-------------------|
 | Auto-`*` on upgrade / `doctor --fix` is a silent privilege widen | Admin role-locked to **full** scope (`*`); `--scope` picker removed; doctor stays read-only |
-| §7 table vs “split ACL” contradiction ships user enum | Readonly reads = diagnostic 8-set (session, health, app read, status-*, network-*); view-only UM included |
+| §7 table vs “split ACL” contradiction ships user enum | Readonly reads = diagnostic 9-set (session, health, app read, diagnostic-rpc, status-*, network-*); view-only UM included |
 | Health deny-list grep is not a schema | Frozen key set, primitive types, no pass-through, `health` takes **no** params |
 | Demote + I3 + `*` is full-root TOCTOU | Rewrite ACL **before** revoke; revoke twice; lab race |
 | “No secrets” is false if the same account has a shell | Guarantee is **LuCI/ubus only** unless we later add nologin; document SSH residual |

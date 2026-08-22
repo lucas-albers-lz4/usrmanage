@@ -5,7 +5,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=usrmanage
-PKG_VERSION:=0.1.12
+PKG_VERSION:=0.1.13
 PKG_RELEASE:=1
 
 PKG_LICENSE:=Apache-2.0
@@ -61,6 +61,7 @@ define Package/usrmanage/install
 
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 	$(INSTALL_BIN) ./files/etc/uci-defaults/90-usrmanage $(1)/etc/uci-defaults/90-usrmanage
+	$(INSTALL_BIN) ./files/etc/uci-defaults/91-usrmanage-diagnostic-rpc $(1)/etc/uci-defaults/91-usrmanage-diagnostic-rpc
 
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_DATA) ./files/etc/config/usrmanage $(1)/etc/config/usrmanage

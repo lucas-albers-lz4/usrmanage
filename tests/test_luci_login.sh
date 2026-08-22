@@ -763,11 +763,11 @@ grep -q 'um_tx_begin' "$USRMANAGE_LIB_DIR/usrmanage-luci-login.sh" \
 
 # --- role-locked ACL matrix (readonly→diagnostic; admin→full) ---
 
-_diag_csv="luci-app-usrmanage,luci-app-usrmanage-health,luci-app-usrmanage-session,luci-mod-network-config,luci-mod-network-diagnostics,luci-mod-status-index,luci-mod-status-realtime,luci-mod-status-routes"
+_diag_csv="luci-app-usrmanage,luci-app-usrmanage-diagnostic-rpc,luci-app-usrmanage-health,luci-app-usrmanage-session,luci-mod-network-config,luci-mod-network-diagnostics,luci-mod-status-index,luci-mod-status-realtime,luci-mod-status-routes"
 
 _er=$(um_luci_login_expected_reads readonly)
 [ "$_er" = "$_diag_csv" ] \
-	&& ok "readonly expected reads: diagnostic 8-set" || bad "readonly reads: $_er"
+	&& ok "readonly expected reads: diagnostic 9-set" || bad "readonly reads: $_er"
 _ew=$(um_luci_login_expected_writes readonly)
 [ -z "$_ew" ] && ok "readonly expected writes empty" || bad "readonly writes: $_ew"
 _er=$(um_luci_login_expected_reads admin)
@@ -952,7 +952,7 @@ fi
 # |----------|------|-------|-----------------------------------------------|
 # | readonly | 0    | none  | no $p$ login                                  |
 # | admin    | 0    | none  | no $p$ login                                  |
-# | readonly | 1    | owned | diagnostic 8-set (read-only), no writes       |
+# | readonly | 1    | owned | diagnostic 9-set (read-only), no writes       |
 # | admin    | 1    | owned | scope full: list read * / list write *         |
 _flock_abs=$(command -v flock) || bad "flock missing for login matrix"
 ln -sf "$_flock_abs" "$TMP/bin/flock"

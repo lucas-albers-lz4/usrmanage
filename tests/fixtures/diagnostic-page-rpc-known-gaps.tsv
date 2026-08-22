@@ -1,0 +1,5 @@
+# Exact allowlist of diagnostic page RPC gaps (issue #156).
+# Same TSV columns as diagnostic-page-rpc-required.tsv.
+# Empty when luci-app-usrmanage-diagnostic-rpc covers required methods.
+# CI fails if a new unlisted gap appears or a listed gap is stale.
+

@@ -82,11 +82,25 @@ ssh_guest 'usrmanage del umsmoke' || die "del umsmoke failed"
 ssh_guest '! id umsmoke >/dev/null 2>&1' || die "user still present after del"
 ok "del umsmoke"
 
-# last-admin must refuse deleting the sole remaining managed admin
-if ssh_guest 'usrmanage del umadmin' 2>/dev/null; then
-	die "del umadmin should have failed (last_admin)"
+# last-admin must refuse deleting the sole remaining managed admin.
+# Skip only when the shared lab already has another managed admin (not a product fail).
+_admin_count="$(ssh_guest "usrmanage list 2>/dev/null | awk '/role=admin/ {c++} END {print c+0}'")" \
+	|| die "last-admin count probe failed (ssh/awk)"
+case "$_admin_count" in
+	''|*[!0-9]*)
+		die "last-admin count probe returned non-numeric value: ${_admin_count}"
+		;;
+esac
+if [ "$_admin_count" -eq 0 ]; then
+	die "last-admin count is zero (unexpected lab state)"
+elif [ "$_admin_count" -eq 1 ]; then
+	if ssh_guest 'usrmanage del umadmin' 2>/dev/null; then
+		die "del umadmin should have failed (last_admin)"
+	fi
+	ok "last-admin guard blocks del umadmin"
+else
+	ok "last-admin guard skipped (lab has ${_admin_count} managed admins)"
 fi
-ok "last-admin guard blocks del umadmin"
 
 # Live ubus session revoke (issue #95) — lab-only; passwords never logged.
 # Requires set-luci-login + ubus session login on the guest.
@@ -237,10 +251,6 @@ _obs_sid="$(printf '%s' "$_obs_login" | grep -oE '"ubus_rpc_session":[[:space:]]
 _assert_denied "$(_sid_access "$_obs_sid" file /etc/shadow read)" "readonly file.read /etc/shadow"
 _assert_denied "$(_sid_access "$_obs_sid" ubus usrmanage add)" "readonly usrmanage.add"
 _assert_denied "$(_sid_access "$_obs_sid" ubus log read)" "readonly log.read"
-# Diagnostic grants luci-mod-network-config on READ → config-level uci read of
-# wireless/network (uci plugin checks read/write, not get). Web-path `uci get`
-# (ubus:uci:get) lives in luci-base, which readonly must NOT have (K1: PSK).
-_assert_denied "$(_sid_access "$_obs_sid" ubus uci get)" "readonly ubus uci get denied (no luci-base, K1)"
 _assert_denied "$(_sid_access "$_obs_sid" uci openvpn read)" "readonly uci openvpn read (not in diagnostic set)"
 _assert_allowed "$(_sid_access "$_obs_sid" uci wireless read)" "readonly diagnostic uci wireless read"
 _assert_allowed "$(_sid_access "$_obs_sid" uci network read)" "readonly diagnostic uci network read"
@@ -249,6 +259,20 @@ _assert_denied "$(_sid_access "$_obs_sid" uci network write)" "readonly diagnost
 _assert_allowed "$(_sid_access "$_obs_sid" access-group luci-mod-status-index read)" "readonly diagnostic luci-mod-status-index"
 _assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage list)" "readonly usrmanage.list (view-only)"
 _assert_allowed "$(_sid_access "$_obs_sid" ubus usrmanage health)" "readonly usrmanage.health"
+
+# #156: stock Status/Network pages need these RPCs via luci-app-usrmanage-diagnostic-rpc.
+# Still no luci-base / luci-base-network-status / getWirelessDevices (K1/K2).
+_assert_allowed "$(_sid_access "$_obs_sid" ubus network.interface dump)" \
+	"readonly network.interface dump (#156 Routing pages)"
+_assert_allowed "$(_sid_access "$_obs_sid" ubus uci changes)" \
+	"readonly ubus uci changes (#156 Interfaces/Routing forms)"
+_assert_allowed "$(_sid_access "$_obs_sid" ubus uci get)" \
+	"readonly ubus uci get (#156 form.Map / diagnostics)"
+_assert_denied "$(_sid_access "$_obs_sid" access-group luci-base read)" \
+	"readonly luci-base still denied"
+_assert_denied "$(_sid_access "$_obs_sid" ubus luci-rpc getWirelessDevices)" \
+	"readonly luci-rpc getWirelessDevices denied (K2)"
+
 ok "readonly diagnostic: view list/health/status; deny add/logs/shadow/openvpn"
 
 _h="$(ssh_guest "ubus call usrmanage health \"{\\\"ubus_rpc_session\\\":\\\"${_obs_sid}\\\"}\"")" \

@@ -128,6 +128,39 @@ async function openDeviceHealth(page) {
 }
 
 /**
+ * Navigate to a LuCI admin path and fail if an RPC Access denied banner appears.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} adminPath e.g. admin/status/routes
+ * @param {{ heading?: RegExp|string, headingExact?: boolean, headingLevel?: number, timeout?: number }} [opts]
+ */
+async function openLuciAdminView(page, adminPath, opts = {}) {
+	const timeout = opts.timeout ?? 30_000;
+	const path = adminPath.replace(/^\/+/, '');
+	await page.goto(`/cgi-bin/luci/${path}`, { waitUntil: 'domcontentloaded' });
+	if (opts.heading) {
+		/** @type {{ name: RegExp|string, exact: boolean, level?: number }} */
+		const headingOpts = {
+			name: opts.heading,
+			exact: opts.headingExact ?? false,
+		};
+		// Status → Routing also has h3 "IPv4 Routing"/"IPv6 Routing"; pin h2.
+		if (opts.headingLevel != null) {
+			headingOpts.level = opts.headingLevel;
+		}
+		await page.getByRole('heading', headingOpts).waitFor({
+			state: 'visible',
+			timeout,
+		});
+	}
+	// Stock LuCI paints the shell first, then fires ubus; wait for network settle
+	// so a late Access denied cannot slip past an instant zero-count assert.
+	await page.waitForLoadState('networkidle', { timeout });
+	await expect(page.getByText(/RPCError|Access denied|-32002/i)).toHaveCount(0, {
+		timeout,
+	});
+}
+
+/**
  * Unique managed username for a run (OpenWrt username rules: [a-z_][a-z0-9_-]*).
  * @param {string} [prefix]
  */
@@ -261,6 +294,7 @@ module.exports = {
 	luciLogoutClear,
 	openUserManagement,
 	openDeviceHealth,
+	openLuciAdminView,
 	uniqueUsername,
 	sshDelUser,
 	sshAddUser,

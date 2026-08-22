@@ -10,7 +10,7 @@ below; testing/release details stay in the linked docs.
 - Read ACL: policy **name/label only**. Write ACL: `get_policy` / `set_policy` + mutators.
 - Passwords: never on argv or in audit/logs; LuCI → rpcd → `--password-fd` / stdin only.
 - LuCI web logins for managed users are **opt-in** (`set-luci-login` / Add checkbox); owned logins use `$p$user` only. Manual `luci-app-acl` still supported for foreign principals.
-- LuCI ACL is **role-locked**: admin+LuCI → **Full** (`*`); readonly+LuCI → **diagnostic** (Status Overview/Routing/Realtime, Network Interfaces/Diagnostics, Device health, view-only User Management — stock groups on `list read` only). No `--scope` picker.
+- LuCI ACL is **role-locked**: admin+LuCI → **Full** (`*`); readonly+LuCI → **diagnostic** (Status Overview/Routing/Realtime, Network Interfaces/Diagnostics, Device health, view-only User Management — stock groups on `list read` only, plus narrow `luci-app-usrmanage-diagnostic-rpc` for page RPCs; no `luci-base` / `getWirelessDevices`). No `--scope` picker.
 - Admin = full root via sudo after password (no NOPASSWD) — by design.
 
 ## Code conventions

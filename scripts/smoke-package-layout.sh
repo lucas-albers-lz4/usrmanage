@@ -17,6 +17,7 @@ need "$FEED/usrmanage/files/usr/lib/usrmanage/usrmanage-health.sh"
 need "$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
 need "$FEED/usrmanage/files/etc/usrmanage/users"
 need "$FEED/usrmanage/files/etc/uci-defaults/90-usrmanage"
+need "$FEED/usrmanage/files/etc/uci-defaults/91-usrmanage-diagnostic-rpc"
 
 need "$FEED/luci-app-usrmanage/Makefile"
 need "$FEED/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js"
@@ -25,6 +26,7 @@ need "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/luci-app-usrmanage.jso
 need "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/z-luci-app-usrmanage-logout.json"
 need "$FEED/luci-app-usrmanage/root/usr/share/rpcd/acl.d/luci-app-usrmanage.json"
 need "$FEED/luci-app-usrmanage/root/etc/uci-defaults/91-usrmanage-readonly-observer"
+need "$FEED/luci-app-usrmanage/root/etc/uci-defaults/92-usrmanage-diagnostic-rpc"
 
 grep -q 'PKGARCH:=all' "$FEED/usrmanage/Makefile"
 grep -q 'LUCI_PKGARCH:=all' "$FEED/luci-app-usrmanage/Makefile"
@@ -68,6 +70,20 @@ sess = acl["luci-app-usrmanage-session"]["read"]
 assert "uci" not in sess and "uci" not in sess.get("ubus", {}), sess
 assert "luci-app-usrmanage" in acl
 print("acl health/session: ok")
+
+diag = acl.get("luci-app-usrmanage-diagnostic-rpc")
+assert diag is not None, "missing luci-app-usrmanage-diagnostic-rpc"
+assert "write" not in diag, "diagnostic-rpc ACL must not have write"
+assert "file" not in (diag.get("read") or {}), "diagnostic-rpc must not grant file"
+ub = diag["read"]["ubus"]
+# Exact allowlist — extra methods (esp. getWirelessDevices) must fail CI.
+assert set(ub) == {"network.interface", "network", "uci", "luci-rpc"}, ub
+assert set(ub["network.interface"]) == {"dump"}, ub
+assert set(ub["network"]) == {"get_proto_handlers"}, ub
+assert set(ub["uci"]) == {"get", "changes"}, ub
+assert set(ub["luci-rpc"]) == {"getBoardJSON", "getHostHints", "getNetworkDevices"}, ub
+print("acl diagnostic-rpc: ok")
+
 PY
 
 # LuCI APP_VERSION must match luci-app Makefile PKG_VERSION (fwlive-style)
