@@ -1,7 +1,7 @@
 {
 	"admin/logout": {
 		"depends": {
-			"acl": [ "luci-base", "luci-app-usrmanage-session" ]
+			"acl": [ "luci-app-usrmanage-session" ]
 		}
 	}
 }

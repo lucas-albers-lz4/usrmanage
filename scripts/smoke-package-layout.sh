@@ -45,12 +45,12 @@ python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share
 python3 -c "import json; json.load(open('$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/z-luci-app-usrmanage-logout.json'))"
 
 # Logout menu: readonly session ACL may end LuCI without luci-base (issue #142).
+# LuCI depends.acl is AND — list only luci-app-usrmanage-session (not luci-base).
 python3 - "$FEED/luci-app-usrmanage/root/usr/share/luci/menu.d/z-luci-app-usrmanage-logout.json" <<'PY'
 import json, sys
 menu = json.load(open(sys.argv[1]))
 logout = menu["admin/logout"]["depends"]["acl"]
-assert "luci-app-usrmanage-session" in logout, logout
-assert "luci-base" in logout, logout
+assert logout == ["luci-app-usrmanage-session"], logout
 print("menu logout depends: ok")
 PY
 

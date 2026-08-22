@@ -11,7 +11,7 @@ Menus:
 2. Redacted fields: hostname, release, uptime, load, WAN/LAN up, Wi-Fi radio/station counts, DHCP lease count — no SSIDs, keys, MACs, or user table
 3. Refresh button; errors show `health_unavailable` token only
 4. View imports `view` / `rpc` / `ui` only; calls `usrmanage.health` with whole-object `expect: { '': { … } }`
-5. **Log out** uses stock `admin/logout`; menu ACL OR includes `luci-app-usrmanage-session` so observers see it without `luci-base`
+5. **Log out** uses stock `admin/logout`. A later `menu.d` override sets `depends.acl` to `luci-app-usrmanage-session` only (LuCI treats the ACL list as **AND**, not OR). Readonly observers already have that group; `*` logins get it via rpcd expanding every installed ACL group. Do not list `luci-base` alongside it — that would hide logout for observers.
 
 ## User Management layout
 
