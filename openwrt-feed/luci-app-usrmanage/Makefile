@@ -9,7 +9,9 @@ include $(TOPDIR)/rules.mk
 LUCI_TITLE:=User Management
 LUCI_DESCRIPTION:=Manage local UNIX users (readonly vs admin/wheel) with operational audit log
 # Pin usrmanage so expected-reads 9-set lands with luci-app migrate (#156 skew).
-LUCI_DEPENDS:=+luci-base +usrmanage (>=0.1.13) +sudo
+# Version constraints belong in LUCI_EXTRA_DEPENDS (not LUCI_DEPENDS — breaks Kconfig).
+LUCI_DEPENDS:=+luci-base +usrmanage +sudo
+LUCI_EXTRA_DEPENDS:=usrmanage (>=0.1.13)
 LUCI_PKGARCH:=all
 
 PKG_VERSION:=0.1.13

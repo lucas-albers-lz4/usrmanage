@@ -32,6 +32,11 @@ grep -q 'PKGARCH:=all' "$FEED/usrmanage/Makefile"
 grep -q 'LUCI_PKGARCH:=all' "$FEED/luci-app-usrmanage/Makefile"
 grep -q 'Apache-2.0' "$FEED/usrmanage/Makefile"
 grep -q '+usrmanage' "$FEED/luci-app-usrmanage/Makefile"
+# Version pins must not appear in LUCI_DEPENDS (OpenWrt parses "(>=…)" as a package name).
+if grep -qE 'LUCI_DEPENDS:.*\(>=' "$FEED/luci-app-usrmanage/Makefile"; then
+	echo "LUCI_DEPENDS must not contain version constraints; use LUCI_EXTRA_DEPENDS" >&2
+	exit 1
+fi
 grep -q '%wheel' "$FEED/usrmanage/files/etc/sudoers.d/usrmanage"
 # V3: install path must chmod 0440 (git does not preserve mode bits on the
 # feed-tree source file; doctor asserts the live fragment on-device).
@@ -88,6 +93,8 @@ PY
 
 # LuCI APP_VERSION must match luci-app Makefile PKG_VERSION (fwlive-style)
 pkg_ver=$(sed -n 's/^PKG_VERSION:=//p' "$FEED/luci-app-usrmanage/Makefile" | head -1)
+grep -q "LUCI_EXTRA_DEPENDS:=usrmanage (>=$pkg_ver)" "$FEED/luci-app-usrmanage/Makefile" \
+	|| { echo "LUCI_EXTRA_DEPENDS must pin usrmanage (>=$pkg_ver)" >&2; exit 1; }
 view_js="$FEED/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js"
 grep -q "APP_VERSION = '$pkg_ver'" "$view_js" \
 	|| { echo "APP_VERSION mismatch in usrmanage.js (want $pkg_ver)" >&2; exit 1; }
