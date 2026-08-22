@@ -131,17 +131,23 @@ async function openDeviceHealth(page) {
  * Navigate to a LuCI admin path and fail if an RPC Access denied banner appears.
  * @param {import('@playwright/test').Page} page
  * @param {string} adminPath e.g. admin/status/routes
- * @param {{ heading?: RegExp|string, headingExact?: boolean, timeout?: number }} [opts]
+ * @param {{ heading?: RegExp|string, headingExact?: boolean, headingLevel?: number, timeout?: number }} [opts]
  */
 async function openLuciAdminView(page, adminPath, opts = {}) {
 	const timeout = opts.timeout ?? 30_000;
 	const path = adminPath.replace(/^\/+/, '');
 	await page.goto(`/cgi-bin/luci/${path}`, { waitUntil: 'domcontentloaded' });
 	if (opts.heading) {
-		await page.getByRole('heading', {
+		/** @type {{ name: RegExp|string, exact: boolean, level?: number }} */
+		const headingOpts = {
 			name: opts.heading,
 			exact: opts.headingExact ?? false,
-		}).waitFor({
+		};
+		// Status → Routing also has h3 "IPv4 Routing"/"IPv6 Routing"; pin h2.
+		if (opts.headingLevel != null) {
+			headingOpts.level = opts.headingLevel;
+		}
+		await page.getByRole('heading', headingOpts).waitFor({
 			state: 'visible',
 			timeout,
 		});

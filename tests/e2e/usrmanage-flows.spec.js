@@ -442,7 +442,8 @@ test.describe('LuCI login matrix (role × luci opt-in)', () => {
 
 	// Advertised diagnostic stock pages must not RPC-deny (#156).
 	const diagnosticPages = [
-		{ id: 'status/routes', path: 'admin/status/routes', heading: 'Routing', headingExact: true },
+		// h2 "Routing" only — page also has h3 "IPv4 Routing" / "IPv6 Routing".
+		{ id: 'status/routes', path: 'admin/status/routes', heading: 'Routing', headingExact: true, headingLevel: 2 },
 		{ id: 'network/interfaces', path: 'admin/network/network', heading: 'Interfaces', headingExact: true },
 		{ id: 'network/routes', path: 'admin/network/routes', heading: 'Static IPv4 Routes' },
 		{ id: 'network/diagnostics', path: 'admin/network/diagnostics', heading: 'Diagnostics', headingExact: true },
@@ -459,6 +460,7 @@ test.describe('LuCI login matrix (role × luci opt-in)', () => {
 			await openLuciAdminView(page, p.path, {
 				heading: p.heading,
 				headingExact: p.headingExact,
+				headingLevel: p.headingLevel,
 			});
 		});
 	}
