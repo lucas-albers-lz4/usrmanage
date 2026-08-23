@@ -104,27 +104,6 @@ jobs:
           sudo apt-get install -y shellcheck
           ./scripts/smoke-host.sh
 
-      - name: Write signing keys
-        env:
-          OPKG_SECRET: ${{ secrets.OPKG_FEED_SECRET_KEY }}
-          APK_SECRET: ${{ secrets.APK_FEED_SECRET_KEY }}
-          OPKG_PUB: ${{ secrets.OPKG_FEED_PUBLIC_KEY }}
-          APK_PUB: ${{ secrets.APK_FEED_PUBLIC_KEY }}
-        run: |
-          # shellcheck disable=SC2153 # env vars mapped from secrets above
-          test -n "$OPKG_SECRET" && test -n "$APK_SECRET"
-          # shellcheck source=scripts/lib/feed-keys.sh
-          source ./scripts/lib/feed-keys.sh
-          feed_keys_write_from_env "$GITHUB_WORKSPACE"
-
-      - name: Validate signing keys
-        env:
-          OPKG_FEED_SECRET_KEY: ${{ github.workspace }}/opkg-secret.key
-          OPKG_FEED_PUBLIC_KEY: ${{ github.workspace }}/public.key
-          APK_FEED_SECRET_KEY: ${{ github.workspace }}/apk-secret.rsa
-          APK_FEED_PUBLIC_KEY: ${{ github.workspace }}/usrmanage-feed.rsa.pub
-        run: ./scripts/validate-feed-keys.sh
-
       - name: Restore SDK dl/feeds cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: sdk-cache
@@ -168,6 +147,30 @@ jobs:
             .ci-sdk-cache/dl
             .ci-sdk-cache/feeds
           key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
+
+      # Issue #159: signing keys must not exist in the workspace while `sdk`
+      # compose cells run (workspace is bind-mounted read-only as root). Keys
+      # are only needed for validate + feed staging/signing below.
+      - name: Write signing keys
+        env:
+          OPKG_SECRET: ${{ secrets.OPKG_FEED_SECRET_KEY }}
+          APK_SECRET: ${{ secrets.APK_FEED_SECRET_KEY }}
+          OPKG_PUB: ${{ secrets.OPKG_FEED_PUBLIC_KEY }}
+          APK_PUB: ${{ secrets.APK_FEED_PUBLIC_KEY }}
+        run: |
+          # shellcheck disable=SC2153 # env vars mapped from secrets above
+          test -n "$OPKG_SECRET" && test -n "$APK_SECRET"
+          # shellcheck source=scripts/lib/feed-keys.sh
+          source ./scripts/lib/feed-keys.sh
+          feed_keys_write_from_env "$GITHUB_WORKSPACE"
+
+      - name: Validate signing keys
+        env:
+          OPKG_FEED_SECRET_KEY: ${{ github.workspace }}/opkg-secret.key
+          OPKG_FEED_PUBLIC_KEY: ${{ github.workspace }}/public.key
+          APK_FEED_SECRET_KEY: ${{ github.workspace }}/apk-secret.rsa
+          APK_FEED_PUBLIC_KEY: ${{ github.workspace }}/usrmanage-feed.rsa.pub
+        run: ./scripts/validate-feed-keys.sh
 
       - name: Stage signed feed
         env:

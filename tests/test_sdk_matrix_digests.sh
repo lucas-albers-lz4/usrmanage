@@ -42,6 +42,17 @@ else
 	bad "R7: feed-publish secret mounts must use --network none with sdk-export tools/lib (got $_secret_runs)"
 fi
 
+# Issue #159: feed signing keys must not be on disk during SDK build cells
+# (sdk service bind-mounts the workspace as root).
+_pub_wf="$ROOT/.github/workflows/publish-packages.yml"
+_build_ln=$(grep -n 'Build packages (4 cells' "$_pub_wf" | head -1 | cut -d: -f1)
+_keys_ln=$(grep -n 'feed_keys_write_from_env' "$_pub_wf" | head -1 | cut -d: -f1)
+if [[ -n "$_build_ln" && -n "$_keys_ln" && "$_keys_ln" -gt "$_build_ln" ]]; then
+	ok "publish workflow: signing keys written after SDK build cells (#159)"
+else
+	bad "publish workflow: feed_keys_write_from_env must follow SDK build cells"
+fi
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export SDK_MATRIX_DIGEST_CACHE_DIR="$TMP/sdk-digests"
