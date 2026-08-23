@@ -20,7 +20,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
 | CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-08-22 (#156 diagnostic-rpc 9-set) | none |
-| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-22 (`luci-app-usrmanage-diagnostic-rpc`) | none |
+| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-23 (#158 `show` write-ACL gate) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
 | CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-15 (#126 peaceiris pin checklist) | none |
@@ -119,13 +119,11 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 ## Open findings
 
-Three open security findings ([#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148), [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149), [#150](https://github.com/lucas-albers-lz4/usrmanage/issues/150), tracked below). #125 (L12/R7) and #126 (CodeQL alert-2 record + pin checklist) closed in the 2026-08-15 closeout. I3 remains an accepted residual.
+One open security finding ([#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159), tracked below). #148–#150 closed 2026-08-21; #158 closes in the fix PR for this branch. I3 remains an accepted residual.
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
-| [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149) | — | Low | rpcd ACL | Diagnostic `list --all` enumeration via read scope; write-ACL gate landed in the fix PR — open until merge |
-| [#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148) | — | Medium | password | Preferred chpasswd path did not pin SHA-512 (D6); verify-then-fallback-then-fail-loudly landed in the fix PR — open until merge |
-| [#150](https://github.com/lucas-albers-lz4/usrmanage/issues/150) | — | Low | LuCI login | Tampered (ACL-escalated) owned logins stayed active until manual reset; fail-closed auto-revoke + doctor error surfaced in the fix PR — open until merge |
+| [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) | — | Low | publish / supply chain | Feed signing keys written before SDK build cells mount workspace — defer key write until after builds |
 
 ## Resolved findings
 
@@ -133,6 +131,10 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
+| [#158](https://github.com/lucas-albers-lz4/usrmanage/issues/158) | rpcd ACL | fix PR — `show` requires write ACL; readonly fails closed with `access_denied` (no CLI / no existence oracle) |
+| [#150](https://github.com/lucas-albers-lz4/usrmanage/issues/150) | LuCI login | merged 2026-08-21 — tampered owned login auto-revoke + doctor `luci_tampered` error |
+| [#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148) | password | merged 2026-08-21 — SHA-512 verify-then-fallback on `um_password_write` |
+| [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149) | rpcd ACL | merged 2026-08-21 — `list --all` write-ACL gate (`session_has_write_acl`) |
 | [#125](https://github.com/lucas-albers-lz4/usrmanage/issues/125) L12/R7 | On-device / publish | [PR #128](https://github.com/lucas-albers-lz4/usrmanage/pull/128) — incomplete marker `0640`; `sdk_matrix_pull_and_pin` before usign secret mount; `--network none` on secret containers |
 | [#126](https://github.com/lucas-albers-lz4/usrmanage/issues/126) | CI record / pin hygiene | Alert 2 reopened then **fixed** (2026-08-13); pre-release SHA re-check in [github-publish-checklist.md](github-publish-checklist.md) ([PR #128](https://github.com/lucas-albers-lz4/usrmanage/pull/128)) |
 | [#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L8–L11, I4/I5, V2/V3 | On-device | [PR #121](https://github.com/lucas-albers-lz4/usrmanage/pull/121) (L8–L11) + [PR #122](https://github.com/lucas-albers-lz4/usrmanage/pull/122) (I4/I5/V2/V3); I3 → accepted residual |
@@ -373,6 +375,14 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 
 **Proof.** `host`: contract (0 gaps) + luci-login 9-set + package-layout + `./scripts/smoke-host.sh` green. `lab` (2026-08-22, guest 24.10.8 + packages 0.1.13): `./scripts/qemu-smoke-usrmanage.sh` PASSED (dump/uci get+changes allow; luci-base + getWirelessDevices deny); Playwright `#156` 4/4.
 
+### 2026-08-23 — rpcd `show` write-ACL gate (#158)
+
+**Scope.** Read-only security pass follow-on to #149: diagnostic/read-only sessions could call `show <name>` for any system user and receive uid/gid/home/shell details — a per-name existence probe bypassing the `list --all` gate.
+
+**Fix.** `show` in the rpcd plugin now requires `session_has_write_acl` (same probe as #149). Sessions without write ACL receive `{"ok":false,"error":"access_denied"}` without invoking the CLI (no `not_found` existence oracle). LuCI does not call `show`; managed-user detail is already available via plain `list`.
+
+**Proof.** `host`: `tests/test_rpcd_show_acl.sh` (write ACL forwards / readonly+no-ubus+bad-SID fail closed without CLI); full `./scripts/smoke-host.sh` green. `lab`: none — no new guest surface.
+
 ## Review procedure
 
 1. Read this file and [threat-model.md](threat-model.md) first. Do not reopen the #3 won't-fix bucket or the [Accepted residuals](#accepted-residuals) without new evidence.
@@ -396,4 +406,5 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 - [security-opus-luci-login-brief.md](security-opus-luci-login-brief.md) — Opus/read-only audit brief (LuCI login)
 - [security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md) — 2026-08-12 deep-dive results
 - [security-prevention-plan.md](security-prevention-plan.md) — PR gates / false-green prevention
+- [security-resolution-plan.md](security-resolution-plan.md) — open findings #158 / #159 execution plan (2026-08-23)
 - Open security work: the `security` label — <https://github.com/lucas-albers-lz4/usrmanage/labels/security>
