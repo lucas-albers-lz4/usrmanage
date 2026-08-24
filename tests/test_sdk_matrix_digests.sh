@@ -48,11 +48,36 @@ _pub_wf="$ROOT/.github/workflows/publish-packages.yml"
 _build_ln=$(grep -nF './scripts/docker-sdk.sh build' "$_pub_wf" | tail -1 | cut -d: -f1)
 _repro_ln=$(grep -nF './scripts/verify-reproducible-build.sh' "$_pub_wf" | tail -1 | cut -d: -f1)
 _keys_ln=$(grep -n 'feed_keys_write_from_env' "$_pub_wf" | head -1 | cut -d: -f1)
+_sdk_done=0
+if [[ -n "$_build_ln" && -n "$_repro_ln" ]]; then
+	if [[ "$_build_ln" -gt "$_repro_ln" ]]; then
+		_sdk_done=$_build_ln
+	else
+		_sdk_done=$_repro_ln
+	fi
+fi
 if [[ -n "$_build_ln" && -n "$_repro_ln" && -n "$_keys_ln" &&
       "$_keys_ln" -gt "$_build_ln" && "$_keys_ln" -gt "$_repro_ln" ]]; then
 	ok "publish workflow: signing keys written after SDK builds + repro gate (#159)"
 else
 	bad "publish workflow: feed_keys_write_from_env must follow last SDK build and reproducible gate"
+fi
+# Key material / writers must not appear before SDK work finishes (static
+# absence proof — no earlier step may name or write these paths).
+_pre_key_hit=0
+if [[ "$_sdk_done" -gt 0 ]]; then
+	while IFS=: read -r _ln _rest; do
+		[[ -n "$_ln" ]] || continue
+		if [[ "$_ln" -le "$_sdk_done" ]]; then
+			_pre_key_hit=1
+			bad "publish workflow: key material before SDK done (line $_ln): ${_rest:0:80}"
+		fi
+	done < <(grep -nE 'feed_keys_write_from_env|opkg-secret\.key|apk-secret\.rsa' "$_pub_wf" || true)
+fi
+if [[ "$_sdk_done" -gt 0 && "$_pre_key_hit" -eq 0 ]]; then
+	ok "publish workflow: no key paths/writers before SDK builds + repro (#159)"
+elif [[ "$_sdk_done" -eq 0 ]]; then
+	bad "publish workflow: could not locate SDK build/repro steps for key-absence proof"
 fi
 
 TMP="$(mktemp -d)"
