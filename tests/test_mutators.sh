@@ -260,8 +260,24 @@ export USRMANAGE_BIN="$TMP/bin/usrmanage-stub"
 export USRMANAGE_STUB_LOG="$TMP/stub.log"
 export PATH="$TMP/bin:$PATH"
 
+# ubus shim for write-ACL-gated `show` (#158): session access probe only.
+cat > "$TMP/bin/ubus" <<'STUB'
+#!/bin/sh
+case "$1 $2 $3" in
+	"call session access") ;;
+	*) echo "unexpected ubus args: $*" >&2; exit 1 ;;
+esac
+case "$4" in
+	*'"object":"usrmanage"'*'"function":"add"'*) ;;
+	*) echo "unexpected session access payload: $4" >&2; exit 1 ;;
+esac
+printf '%s\n' '{"access":true}'
+STUB
+chmod +x "$TMP/bin/ubus"
+
 rm -f "$USRMANAGE_STUB_LOG"
-sh "$RPCD" call show '{"name":"x --actor root"}' >/dev/null
+FAKE_ACCESS=true RPC_SESSION=0123456789abcdef \
+	sh "$RPCD" call show '{"name":"x --actor root"}' >/dev/null
 grep -q 'arg1=show' "$USRMANAGE_STUB_LOG" && ok "rpcd show arg1=show" || bad "rpcd show argv: $(cat "$USRMANAGE_STUB_LOG")"
 grep -q 'arg2=x --actor root' "$USRMANAGE_STUB_LOG" && ok "rpcd show keeps name as one argv" || bad "rpcd show name split"
 grep -q 'arg3=--json' "$USRMANAGE_STUB_LOG" && ok "rpcd show --json" || bad "rpcd show missing --json"

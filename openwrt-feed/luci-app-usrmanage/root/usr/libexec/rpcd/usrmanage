@@ -262,7 +262,14 @@ case "$1" in
 				;;
 			show)
 				_name=$(json_get name)
-				run_cli show "$_name" --json
+				# Issue #158: `show` probes any system user; readonly sessions
+				# must not bypass the #149 write-ACL gate. Fail closed without
+				# calling the CLI (no existence oracle via not_found).
+				if ! session_has_write_acl; then
+					printf '{"ok":false,"error":"access_denied"}\n'
+				else
+					run_cli show "$_name" --json
+				fi
 				;;
 			audit)
 				_last=$(json_get last)
