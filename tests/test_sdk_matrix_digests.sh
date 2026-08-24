@@ -45,12 +45,14 @@ fi
 # Issue #159: feed signing keys must not be on disk during SDK build cells
 # (sdk service bind-mounts the workspace as root).
 _pub_wf="$ROOT/.github/workflows/publish-packages.yml"
-_build_ln=$(grep -n 'Build packages (4 cells' "$_pub_wf" | head -1 | cut -d: -f1)
+_build_ln=$(grep -nF './scripts/docker-sdk.sh build' "$_pub_wf" | tail -1 | cut -d: -f1)
+_repro_ln=$(grep -nF './scripts/verify-reproducible-build.sh' "$_pub_wf" | tail -1 | cut -d: -f1)
 _keys_ln=$(grep -n 'feed_keys_write_from_env' "$_pub_wf" | head -1 | cut -d: -f1)
-if [[ -n "$_build_ln" && -n "$_keys_ln" && "$_keys_ln" -gt "$_build_ln" ]]; then
-	ok "publish workflow: signing keys written after SDK build cells (#159)"
+if [[ -n "$_build_ln" && -n "$_repro_ln" && -n "$_keys_ln" &&
+      "$_keys_ln" -gt "$_build_ln" && "$_keys_ln" -gt "$_repro_ln" ]]; then
+	ok "publish workflow: signing keys written after SDK builds + repro gate (#159)"
 else
-	bad "publish workflow: feed_keys_write_from_env must follow SDK build cells"
+	bad "publish workflow: feed_keys_write_from_env must follow last SDK build and reproducible gate"
 fi
 
 TMP="$(mktemp -d)"
