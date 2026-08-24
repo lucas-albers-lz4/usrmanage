@@ -1,6 +1,6 @@
 # Security resolution plan — open findings (2026-08-23)
 
-> **Status:** plan only — no fixes landed yet. Execute via two draft PRs (#158, #159).
+> **Status:** #158 resolved by [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160) (pending merge). #159 remains open in [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161).
 
 Action plan for the **two open `security` issues** filed from the 2026-08-23 read-only
 pass on `main@a0020ba`. Ledger: [security-review.md](security-review.md). Process locks:
@@ -12,12 +12,11 @@ pass on `main@a0020ba`. Ledger: [security-review.md](security-review.md). Proces
 
 | Issue | Severity | Area | Title |
 |-------|----------|------|-------|
-| [#158](https://github.com/lucas-albers-lz4/usrmanage/issues/158) | Low | rpcd ACL | `show` ungated for read-only sessions — bypasses #149 `list --all` gate |
 | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) | Low | publish / supply chain | Feed signing keys written before SDK build cells mount workspace |
 
-**Recently closed (ledger stale):** #148 (SHA-512 pin), #149 (`list --all` gate), #150 (tampered login revoke). Close out rows in `security-review.md` as part of the fix PRs below — do not leave #148–#150 in the open table.
+**Resolved by this wave (pending merge):** [#158](https://github.com/lucas-albers-lz4/usrmanage/issues/158) — rpcd `show` write-ACL gate ([PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160)).
 
-**Open PRs:** none at plan time.
+**Recently closed (ledger):** #148 (SHA-512 pin), #149 (`list --all` gate), #150 (tampered login revoke).
 
 ---
 
@@ -192,10 +191,10 @@ changes staging paths — reordering is the minimal fix aligned with existing
 
 | Order | PR | Rationale |
 |-------|-----|-----------|
-| 1 | #158 | Smaller diff; completes #149 ACL theme; pure host proof |
-| 2 | #159 | Workflow-only; manual proof on next release |
+| 1 | #158 ([PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160)) | Smaller diff; completes #149 ACL theme; pure host proof |
+| 2 | #159 ([PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161)) | Workflow-only; manual proof on next release |
 
-PRs are independent (no file overlap) and **may run in parallel** if two agents/branches are available.
+Both PRs touch `docs/security-review.md` — **merge #160 first**, then rebase #161 onto `main` and reconcile the ledger before marking #161 ready.
 
 ---
 

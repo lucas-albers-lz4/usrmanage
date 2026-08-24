@@ -119,7 +119,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 ## Open findings
 
-One open security finding ([#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159), tracked below). #148–#150 closed 2026-08-21; #158 closes in the fix PR for this branch. I3 remains an accepted residual.
+One open security finding ([#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159), tracked below). #148–#150 closed 2026-08-21; #158 in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160). I3 remains an accepted residual.
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
@@ -131,7 +131,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
-| [#158](https://github.com/lucas-albers-lz4/usrmanage/issues/158) | rpcd ACL | fix PR — `show` requires write ACL; readonly fails closed with `access_denied` (no CLI / no existence oracle) |
+| [#158](https://github.com/lucas-albers-lz4/usrmanage/issues/158) | rpcd ACL | [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160) — `show` requires write ACL; readonly fails closed with `access_denied` (no CLI / no existence oracle) |
 | [#150](https://github.com/lucas-albers-lz4/usrmanage/issues/150) | LuCI login | merged 2026-08-21 — tampered owned login auto-revoke + doctor `luci_tampered` error |
 | [#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148) | password | merged 2026-08-21 — SHA-512 verify-then-fallback on `um_password_write` |
 | [#149](https://github.com/lucas-albers-lz4/usrmanage/issues/149) | rpcd ACL | merged 2026-08-21 — `list --all` write-ACL gate (`session_has_write_acl`) |
@@ -406,5 +406,5 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 - [security-opus-luci-login-brief.md](security-opus-luci-login-brief.md) — Opus/read-only audit brief (LuCI login)
 - [security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md) — 2026-08-12 deep-dive results
 - [security-prevention-plan.md](security-prevention-plan.md) — PR gates / false-green prevention
-- [security-resolution-plan.md](security-resolution-plan.md) — open findings #158 / #159 execution plan (2026-08-23)
+- [security-resolution-plan.md](security-resolution-plan.md) — security resolution plan for #158 / #159 (2026-08-23)
 - Open security work: the `security` label — <https://github.com/lucas-albers-lz4/usrmanage/labels/security>
