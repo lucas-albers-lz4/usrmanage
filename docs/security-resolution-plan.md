@@ -2,7 +2,7 @@
 
 > **Status:** #158 merged via [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160). #159 open in [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161).
 
-Action plan for the **two open `security` issues** filed from the 2026-08-23 read-only
+Action plan for the **remaining open `security` issue** filed from the 2026-08-23 read-only
 pass on `main@a0020ba`. Ledger: [security-review.md](security-review.md). Process locks:
 [security-prevention-plan.md](security-prevention-plan.md), [AGENTS.md](../AGENTS.md).
 
@@ -105,16 +105,9 @@ Pick one option in the PR description; default to **Option A** unless a readonly
 | `host` | `tests/test_rpcd_show_acl.sh` + `./scripts/smoke-host.sh` |
 | `lab` | None — no new guest surface (ACL scope unchanged vs #149 pattern) |
 
-### PR checklist (#158)
+### PR checklist (#158) — merged
 
-- [ ] Draft PR, `Fixes #158`, `security` label
-- [ ] `./scripts/smoke-host.sh` green
-- [ ] luna or grok review (branch changes)
-- [ ] Bugbot (branch changes)
-- [ ] `/review-security` (branch changes)
-- [ ] `docs/security-review.md` updated
-- [ ] Mark Ready → CodeRabbit round complete
-- [ ] Merge; verify issue auto-closes
+Merged via [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160) (2026-08-24); issue #158 auto-closed. Section kept for audit history.
 
 ---
 

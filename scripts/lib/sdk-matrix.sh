@@ -184,6 +184,21 @@ sdk_matrix_compose_run() {
 	)
 }
 
+sdk_matrix_export_run() {
+	# Run a command in the volume-only sdk-export service (SDK volume, NO
+	# workspace mount). Safe while signing keys exist in the workspace (#161):
+	# the `sdk` service binds the workspace read-only and must never be
+	# launched after key creation — container root could read the keys.
+	local root
+	root="$(sdk_matrix_root)"
+	(
+		cd "$root"
+		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
+		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
+		docker compose run --rm sdk-export "$@"
+	)
+}
+
 sdk_matrix_feeds_lock_path() {
 	local label
 	label="$(sdk_matrix_version_label "$1")"
@@ -193,16 +208,31 @@ sdk_matrix_feeds_lock_path() {
 sdk_matrix_feeds_ready() {
 	# Require .config, package feeds present, and lock stamp matching the pinned
 	# feeds.conf so a restored cache cannot skip refresh after pin changes.
-	sdk_matrix_compose_run sh -c "
-		test -f /builder/.config || exit 1
-		lock=/work/usrmanage/scripts/feeds.lock/${SDK_MATRIX_VERSION_LABEL}/feeds.conf
-		stamp=/builder/feeds/.usrmanage-feeds.lock.sha
-		test -f \"\$lock\" && test -f \"\$stamp\" || exit 1
-		cur=\$(sha256sum \"\$lock\" | awk '{print \$1}')
-		old=\$(cat \"\$stamp\")
-		[ -n \"\$cur\" ] && [ \"\$cur\" = \"\$old\" ] || exit 1
-		find -L /builder/feeds -maxdepth 8 \\( -path '*/luci-app-usrmanage/Makefile' -o -path '*/usrmanage/Makefile' \\) 2>/dev/null | grep -q .
-	" 2>/dev/null
+	# #161: staging runs AFTER signing keys are written, so this probe must NOT
+	# launch the workspace-mounted `sdk` service — probe via the volume-only
+	# `sdk-export` service with the feeds cache bound in; the lock hash is
+	# passed by env, never as a workspace path.
+	local root lock cur
+	root="$(sdk_matrix_root)"
+	lock="${root}/scripts/feeds.lock/${SDK_MATRIX_VERSION_LABEL}/feeds.conf"
+	[[ -f "$lock" ]] || return 1
+	cur="$(sha256sum "$lock" | awk '{print $1}')"
+	[[ -n "$cur" ]] || return 1
+	(
+		cd "$root"
+		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
+		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
+		LOCK_SHA="$cur" \
+		docker compose run --rm \
+			-v "${OWRT_SDK_FEEDS_CACHE:-.ci-sdk-cache/feeds/${SDK_MATRIX_VERSION_LABEL}}:/builder/feeds" \
+			sdk-export sh -ec '
+				test -f /builder/.config || exit 1
+				stamp=/builder/feeds/.usrmanage-feeds.lock.sha
+				test -f "$stamp" || exit 1
+				[ -n "$LOCK_SHA" ] && [ "$LOCK_SHA" = "$(cat "$stamp")" ] || exit 1
+				find -L /builder/feeds -maxdepth 8 \( -path "*/luci-app-usrmanage/Makefile" -o -path "*/usrmanage/Makefile" \) 2>/dev/null | grep -q .
+			'
+	) 2>/dev/null
 }
 
 sdk_matrix_feeds_setup() {

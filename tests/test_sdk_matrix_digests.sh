@@ -80,6 +80,23 @@ elif [[ "$_sdk_done" -eq 0 ]]; then
 	bad "publish workflow: could not locate SDK build/repro steps for key-absence proof"
 fi
 
+# #161 fold: post-key staging must never launch the workspace-mounted `sdk`
+# service (container root could read signing keys from the workspace). The
+# readiness/mkhash probes use the volume-only `sdk-export` service instead —
+# assert no caller of the workspace-mounted sdk_matrix_compose_run helper.
+if grep -q 'sdk_matrix_compose_run' "$ROOT/scripts/lib/feed-publish.sh"; then
+	bad "feed-publish.sh must not call the workspace-mounted sdk compose helper post-key (#161)"
+else
+	ok "feed-publish.sh has no workspace-mounted sdk compose helper call (#161)"
+fi
+if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'sdk_matrix_compose_run'; then
+	bad "sdk_matrix_feeds_ready must not call the workspace-mounted sdk compose helper (#161)"
+elif awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'sdk-export'; then
+	ok "sdk_matrix_feeds_ready probes via sdk-export, not the workspace-mounted sdk service (#161)"
+else
+	bad "sdk_matrix_feeds_ready must probe via sdk-export only, never the workspace-mounted sdk service (#161)"
+fi
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export SDK_MATRIX_DIGEST_CACHE_DIR="$TMP/sdk-digests"

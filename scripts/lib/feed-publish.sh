@@ -209,7 +209,7 @@ feed_publish_stage_opkg_host() {
 	for ver in 25.12 24.10; do
 		sdk_matrix_resolve x86-64 "$ver" 2>/dev/null || continue
 		if sdk_matrix_feeds_ready 2>/dev/null; then
-			mkhash="$(sdk_matrix_compose_run sh -c 'test -x /builder/staging_dir/host/bin/mkhash && echo /builder/staging_dir/host/bin/mkhash' 2>/dev/null | tr -d '\r' || true)"
+			mkhash="$(sdk_matrix_export_run sh -c 'test -x /builder/staging_dir/host/bin/mkhash && echo /builder/staging_dir/host/bin/mkhash' 2>/dev/null | tr -d '\r' || true)"
 			[[ -n "$mkhash" ]] && break
 		fi
 	done
