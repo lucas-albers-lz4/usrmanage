@@ -141,6 +141,14 @@ if [[ -n "$_cinit_ln" && -n "$_crun_ln" && "$_cinit_ln" -lt "$_crun_ln" ]]; then
 else
 	bad "sdk_matrix_copy_out must normalize cache BEFORE the compose run (#161)"
 fi
+# Cache init must fail closed: mkdir -p failures are explicitly returned
+# (feeds_ready runs in if/! /|| contexts where errexit is suppressed — luna r8).
+if awk '/^sdk_matrix_cache_dirs\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" \
+	| grep -qF 'mkdir -p "$SDK_MATRIX_DL_CACHE" "$SDK_MATRIX_FEEDS_CACHE" || return 1'; then
+	ok "sdk_matrix_cache_dirs fails closed on mkdir failure (#161)"
+else
+	bad "sdk_matrix_cache_dirs must return 1 when mkdir -p fails (#161)"
+fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
