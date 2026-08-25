@@ -114,6 +114,15 @@ if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | 
 else
 	bad "sdk_matrix_feeds_ready must check the src-link target host-side and the link in-container (#161)"
 fi
+# The probe must initialize the cache dirs BEFORE bind-mounting them — docker
+# -v auto-creates missing host dirs as root, breaking a clean local build
+# (luna r4), and the mount must use the absolute cache path cache_dirs sets.
+if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'sdk_matrix_cache_dirs' \
+	&& awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'SDK_MATRIX_FEEDS_CACHE}:/builder/feeds'; then
+	ok "sdk_matrix_feeds_ready initializes the cache before the probe mount (#161)"
+else
+	bad "sdk_matrix_feeds_ready must initialize cache dirs before bind-mounting (#161)"
+fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

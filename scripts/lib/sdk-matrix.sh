@@ -226,13 +226,18 @@ sdk_matrix_feeds_ready() {
 	# checkout, which the probe container must never mount.
 	[[ -f "${root}/openwrt-feed/usrmanage/Makefile" \
 		&& -f "${root}/openwrt-feed/luci-app-usrmanage/Makefile" ]] || return 1
+	# Initialize the cache dirs BEFORE the probe mount: docker -v auto-creates
+	# missing host dirs as root, which would break a clean local build's
+	# follow-up chown/buildbot init (luna r4). cache_dirs also sets the
+	# absolute SDK_MATRIX_FEEDS_CACHE path used below.
+	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL"
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
 		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
 		docker compose run --rm \
 			-e "LOCK_SHA=$cur" \
-			-v "${OWRT_SDK_FEEDS_CACHE:-.ci-sdk-cache/feeds/${SDK_MATRIX_VERSION_LABEL}}:/builder/feeds" \
+			-v "${SDK_MATRIX_FEEDS_CACHE}:/builder/feeds" \
 			sdk-export sh -ec '
 				test -f /builder/.config || exit 1
 				stamp=/builder/feeds/.usrmanage-feeds.lock.sha
