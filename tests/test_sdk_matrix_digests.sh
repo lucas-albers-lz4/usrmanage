@@ -104,6 +104,16 @@ if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | 
 else
 	bad "sdk_matrix_feeds_ready must pass LOCK_SHA via docker compose run -e (#161)"
 fi
+# The feeds cache holds usrmanage as an absolute src-link into the workspace,
+# which the workspace-free probe cannot resolve: the src-link TARGET content
+# (package Makefiles) must be checked host-side, and the cache side must check
+# the link's existence, not its resolved target (luna r3).
+if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'openwrt-feed/usrmanage/Makefile' \
+	&& awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q -- '\[ -L /builder/feeds/usrmanage \]'; then
+	ok "sdk_matrix_feeds_ready handles the src-link cache without a workspace mount (#161)"
+else
+	bad "sdk_matrix_feeds_ready must check the src-link target host-side and the link in-container (#161)"
+fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

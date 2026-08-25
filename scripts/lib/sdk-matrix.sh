@@ -210,14 +210,22 @@ sdk_matrix_feeds_ready() {
 	# feeds.conf so a restored cache cannot skip refresh after pin changes.
 	# #161: staging runs AFTER signing keys are written, so this probe must NOT
 	# launch the workspace-mounted `sdk` service — probe via the volume-only
-	# `sdk-export` service with the feeds cache bound in; the lock hash is
-	# passed by env, never as a workspace path.
+	# `sdk-export` service with the feeds cache bound in; the lock hash and the
+	# package-source checks are evaluated host-side, never from inside a
+	# container. The feeds cache holds `usrmanage` as an absolute src-link into
+	# the workspace (feeds.conf), so the container cannot resolve it — the link
+	# itself proves feeds update materialized the package; the checkout proves
+	# the sources exist.
 	local root lock cur
 	root="$(sdk_matrix_root)"
 	lock="${root}/scripts/feeds.lock/${SDK_MATRIX_VERSION_LABEL}/feeds.conf"
 	[[ -f "$lock" ]] || return 1
 	cur="$(sha256sum "$lock" | awk '{print $1}')"
 	[[ -n "$cur" ]] || return 1
+	# src-link target content: the package sources live in the workspace
+	# checkout, which the probe container must never mount.
+	[[ -f "${root}/openwrt-feed/usrmanage/Makefile" \
+		&& -f "${root}/openwrt-feed/luci-app-usrmanage/Makefile" ]] || return 1
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
@@ -230,7 +238,10 @@ sdk_matrix_feeds_ready() {
 				stamp=/builder/feeds/.usrmanage-feeds.lock.sha
 				test -f "$stamp" || exit 1
 				[ -n "$LOCK_SHA" ] && [ "$LOCK_SHA" = "$(cat "$stamp")" ] || exit 1
-				find -L /builder/feeds -maxdepth 8 \( -path "*/luci-app-usrmanage/Makefile" -o -path "*/usrmanage/Makefile" \) 2>/dev/null | grep -q .
+				# src-link usrmanage materializes as a symlink into the
+				# workspace; the probe has no workspace mount, so check the
+				# link itself (existence = feeds update ran), not its target.
+				[ -L /builder/feeds/usrmanage ] || [ -d /builder/feeds/usrmanage ] || exit 1
 			'
 	) 2>/dev/null
 }
