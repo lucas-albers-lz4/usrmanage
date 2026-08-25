@@ -23,9 +23,9 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-23 (#158 `show` write-ACL gate) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
-| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-15 (#126 peaceiris pin checklist) | none |
-| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-18 (R7 layout: sdk-export + sibling mounts) | none |
-| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-18 (R7 layout: `sdk-export` service, no workspace mount) | none |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-23 (#159 defer feed keys until after SDK builds) | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) |
+| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-23 (#159 publish workflow key ordering) | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) |
+| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-23 (#159 workspace key-free during `sdk` cells) | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
 | QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-22 (#156 page RPC allow + deny luci-base/getWirelessDevices; Playwright 4/4) | none open (I3 accepted residual) — fixtures remain lab-only by design |
 
@@ -111,7 +111,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Silently altered build inputs | Feed commits pinned in `scripts/feeds.lock/`; SDK image pinned to registry digest at first **secret-touching** pull (`sdk_matrix_pull_and_pin` in `validate-feed-keys.sh` before the usign container; later staging prefers the pin cache) | host | `tests/test_sdk_matrix_digests.sh` (R4 pin cache + R7 grep) · `sdk_matrix_feeds_ready` |
 | Signing secret exfil via SDK container network | `--network none` on every container that bind-mounts a signing secret (`validate-feed-keys.sh` usign check; `feed_publish_stage_opkg_sdk` / `feed_publish_stage_apk` sign steps) ([#125](https://github.com/lucas-albers-lz4/usrmanage/issues/125) R7) | host | `tests/test_sdk_matrix_digests.sh` (R7 grep) |
 | Non-reproducible release artifacts | `SOURCE_DATE_EPOCH` from the tag commit + repro gate | host | `scripts/verify-reproducible-build.sh` |
-| Publish job token / build container isolation | Checkout `persist-credentials: false`; signing tools copied out of `/builder` before secret mounts | manual | `publish-packages.yml` · `feed_publish_stage_opkg_sdk` / `feed_publish_stage_apk` |
+| Publish job token / build container isolation | Checkout `persist-credentials: false`; signing keys written only **after** SDK build cells **and** the reproducible-build gate complete (#159); signing tools copied out of `/builder` before secret mounts | manual | `publish-packages.yml` · `feed_publish_stage_opkg_sdk` / `feed_publish_stage_apk` |
 | Signing keys never visible to the tool-export container | Export runs in the dedicated `sdk-export` compose service (SDK volume only, **no workspace mount**) as the invoking uid; workspace holds the keys (`.:/work/usrmanage:ro` is only on the `sdk` build service) | manual | `docker-compose.yml` `sdk-export` · `feed_publish_stage_opkg_sdk` / `feed_publish_stage_apk` export steps |
 | Pages deploy-key action pin | `peaceiris/actions-gh-pages` SHA-pinned (`84c30a85c…` = `v4.1.0` as of 2026-08-13); CodeQL alert 2 closed as **fixed**; pin re-checked before each `v*` tag ([#126](https://github.com/lucas-albers-lz4/usrmanage/issues/126)) | manual | `publish-packages.yml` · [github-publish-checklist.md](github-publish-checklist.md) |
 | Feed origin trust-bootstrap README | Fingerprints + `sha256sum -c` gate in in-tree `packages-repo/README.md` (copied to Pages on every publish) | manual | `packages-repo/README.md` · [binary-feed.md](binary-feed.md) |
@@ -119,11 +119,11 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 ## Open findings
 
-One open security finding ([#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159), tracked below). #148–#150 closed 2026-08-21; #158 in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160). I3 remains an accepted residual.
+One open security finding ([#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159), tracked below). #148–#150 closed 2026-08-21; #158 merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160). I3 remains an accepted residual.
 
 | Issue | IDs | Severity | Area | Notes |
 |-------|-----|----------|------|-------|
-| [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) | — | Low | publish / supply chain | Feed signing keys written before SDK build cells mount workspace — defer key write until after builds |
+| [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) | — | Low | publish / supply chain | Feed signing keys written before SDK build cells — fix PR in review |
 
 ## Resolved findings
 
@@ -382,6 +382,14 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Fix.** `show` in the rpcd plugin now requires `session_has_write_acl` (same probe as #149). Sessions without write ACL receive `{"ok":false,"error":"access_denied"}` without invoking the CLI (no `not_found` existence oracle). LuCI does not call `show`; managed-user detail is already available via plain `list`.
 
 **Proof.** `host`: `tests/test_rpcd_show_acl.sh` (write ACL forwards / readonly+no-ubus+bad-SID fail closed without CLI); full `./scripts/smoke-host.sh` green. `lab`: none — no new guest surface.
+
+### 2026-08-23 — Defer feed signing keys until after SDK build cells (#159)
+
+**Scope.** Publish workflow wrote opkg/apk signing secrets into the workspace before the four `docker-sdk.sh build` cells. The `sdk` compose service bind-mounts `.:/work/usrmanage:ro` while cells run as root, so container root could read 0600 key material during builds — contradicting the `sdk-export` invariant.
+
+**Fix.** Reordered `.github/workflows/publish-packages.yml`: **Write signing keys** + **Validate signing keys** now run after all SDK build cells and the reproducible-build gate, immediately before **Stage signed feed**. Workflow comment documents the invariant.
+
+**Proof.** `host`: `tests/test_sdk_matrix_digests.sh` asserts `feed_keys_write_from_env` follows the last `./scripts/docker-sdk.sh build` and `verify-reproducible-build.sh`, and that `opkg-secret.key` / `apk-secret.rsa` / `feed_keys_write_from_env` do not appear before that SDK window; full `./scripts/smoke-host.sh` green. `manual`: record first `v*` tag publish after merge in this entry.
 
 ## Review procedure
 

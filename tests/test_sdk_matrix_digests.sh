@@ -42,6 +42,121 @@ else
 	bad "R7: feed-publish secret mounts must use --network none with sdk-export tools/lib (got $_secret_runs)"
 fi
 
+# Issue #159: feed signing keys must not be on disk during SDK build cells
+# (sdk service bind-mounts the workspace as root).
+_pub_wf="$ROOT/.github/workflows/publish-packages.yml"
+_build_ln=$(grep -nF './scripts/docker-sdk.sh build' "$_pub_wf" | tail -1 | cut -d: -f1)
+_repro_ln=$(grep -nF './scripts/verify-reproducible-build.sh' "$_pub_wf" | tail -1 | cut -d: -f1)
+_keys_ln=$(grep -n 'feed_keys_write_from_env' "$_pub_wf" | head -1 | cut -d: -f1)
+_sdk_done=0
+if [[ -n "$_build_ln" && -n "$_repro_ln" ]]; then
+	if [[ "$_build_ln" -gt "$_repro_ln" ]]; then
+		_sdk_done=$_build_ln
+	else
+		_sdk_done=$_repro_ln
+	fi
+fi
+if [[ -n "$_build_ln" && -n "$_repro_ln" && -n "$_keys_ln" &&
+      "$_keys_ln" -gt "$_build_ln" && "$_keys_ln" -gt "$_repro_ln" ]]; then
+	ok "publish workflow: signing keys written after SDK builds + repro gate (#159)"
+else
+	bad "publish workflow: feed_keys_write_from_env must follow last SDK build and reproducible gate"
+fi
+# Key material / writers must not appear before SDK work finishes (static
+# absence proof — no earlier step may name or write these paths).
+_pre_key_hit=0
+if [[ "$_sdk_done" -gt 0 ]]; then
+	while IFS=: read -r _ln _rest; do
+		[[ -n "$_ln" ]] || continue
+		if [[ "$_ln" -le "$_sdk_done" ]]; then
+			_pre_key_hit=1
+			bad "publish workflow: key material before SDK done (line $_ln): ${_rest:0:80}"
+		fi
+	done < <(grep -nE 'feed_keys_write_from_env|opkg-secret\.key|apk-secret\.rsa' "$_pub_wf" || true)
+fi
+if [[ "$_sdk_done" -gt 0 && "$_pre_key_hit" -eq 0 ]]; then
+	ok "publish workflow: no key paths/writers before SDK builds + repro (#159)"
+elif [[ "$_sdk_done" -eq 0 ]]; then
+	bad "publish workflow: could not locate SDK build/repro steps for key-absence proof"
+fi
+
+# #161 fold: post-key staging must never launch the workspace-mounted `sdk`
+# service (container root could read signing keys from the workspace). The
+# readiness/mkhash probes use the volume-only `sdk-export` service instead —
+# assert no caller of the workspace-mounted sdk_matrix_compose_run helper.
+if grep -q 'sdk_matrix_compose_run' "$ROOT/scripts/lib/feed-publish.sh"; then
+	bad "feed-publish.sh must not call the workspace-mounted sdk compose helper post-key (#161)"
+else
+	ok "feed-publish.sh has no workspace-mounted sdk compose helper call (#161)"
+fi
+if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'sdk_matrix_compose_run'; then
+	bad "sdk_matrix_feeds_ready must not call the workspace-mounted sdk compose helper (#161)"
+elif awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'sdk-export'; then
+	ok "sdk_matrix_feeds_ready probes via sdk-export, not the workspace-mounted sdk service (#161)"
+else
+	bad "sdk_matrix_feeds_ready must probe via sdk-export only, never the workspace-mounted sdk service (#161)"
+fi
+# The lock hash must be passed INTO the probe container explicitly: a bare
+# `VAR=x docker compose run` prefix only feeds Compose file interpolation
+# (like ${OWRT_SDK_IMAGE}), it does not reach the container env (luna r2).
+if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q -- '-e "LOCK_SHA='; then
+	ok "sdk_matrix_feeds_ready passes LOCK_SHA into the probe container (-e) (#161)"
+else
+	bad "sdk_matrix_feeds_ready must pass LOCK_SHA via docker compose run -e (#161)"
+fi
+# The feeds cache holds usrmanage as an absolute src-link into the workspace,
+# which the workspace-free probe cannot resolve: the src-link TARGET content
+# (package Makefiles) must be checked host-side, and the cache side must check
+# the link's existence, not its resolved target (luna r3).
+if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'openwrt-feed/usrmanage/Makefile' \
+	&& awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q -- '\[ -L /builder/feeds/usrmanage \]'; then
+	ok "sdk_matrix_feeds_ready handles the src-link cache without a workspace mount (#161)"
+else
+	bad "sdk_matrix_feeds_ready must check the src-link target host-side and the link in-container (#161)"
+fi
+# The probe must initialize the cache dirs BEFORE bind-mounting them — docker
+# -v auto-creates missing host dirs as root, breaking a clean local build
+# (luna r4), and the mount must use the absolute cache path cache_dirs sets.
+# ORDER matters: both tokens existing is not enough (luna r5).
+_init_ln="$(awk '/^sdk_matrix_feeds_ready\(\)/,/^}/ { if ($0 ~ /sdk_matrix_cache_dirs/) { print NR; exit } }' "$ROOT/scripts/lib/sdk-matrix.sh")"
+_mount_ln="$(awk '/^sdk_matrix_feeds_ready\(\)/,/^}/ { if ($0 ~ /SDK_MATRIX_FEEDS_CACHE}:\/builder\/feeds/) { print NR; exit } }' "$ROOT/scripts/lib/sdk-matrix.sh")"
+if [[ -n "$_init_ln" && -n "$_mount_ln" && "$_init_ln" -lt "$_mount_ln" ]]; then
+	ok "sdk_matrix_feeds_ready initializes the cache before the probe mount (#161)"
+else
+	bad "sdk_matrix_feeds_ready must initialize cache dirs BEFORE bind-mounting (init line ${_init_ln:-?}, mount line ${_mount_ln:-?}) (#161)"
+fi
+# sdk_matrix_copy_out launches the `sdk` service directly — it must pass the
+# same normalized cache vars as the build path and normalize BEFORE the
+# compose invocation (luna r6 Minor, r7: both vars + order).
+if awk '/^sdk_matrix_copy_out\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'OWRT_SDK_DL_CACHE=' \
+	&& awk '/^sdk_matrix_copy_out\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'OWRT_SDK_FEEDS_CACHE='; then
+	ok "sdk_matrix_copy_out passes both normalized cache vars (#161)"
+else
+	bad "sdk_matrix_copy_out must pass both normalized cache vars (#161)"
+fi
+_cinit_ln="$(awk '/^sdk_matrix_copy_out\(\)/,/^}/ { if ($0 ~ /sdk_matrix_cache_dirs/) { print NR; exit } }' "$ROOT/scripts/lib/sdk-matrix.sh")"
+_crun_ln="$(awk '/^sdk_matrix_copy_out\(\)/,/^}/ { if ($0 ~ /docker compose run/) { print NR; exit } }' "$ROOT/scripts/lib/sdk-matrix.sh")"
+if [[ -n "$_cinit_ln" && -n "$_crun_ln" && "$_cinit_ln" -lt "$_crun_ln" ]]; then
+	ok "sdk_matrix_copy_out normalizes cache before the compose run (#161)"
+else
+	bad "sdk_matrix_copy_out must normalize cache BEFORE the compose run (#161)"
+fi
+# Cache init must fail closed: mkdir -p failures are explicitly returned
+# (feeds_ready runs in if/! /|| contexts where errexit is suppressed — luna r8),
+# and feeds_ready must PROPAGATE the cache_dirs failure (luna r9).
+if awk '/^sdk_matrix_cache_dirs\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" \
+	| grep -q "mkdir -p \"\$SDK_MATRIX_DL_CACHE\" \"\$SDK_MATRIX_FEEDS_CACHE\" || return 1"; then
+	ok "sdk_matrix_cache_dirs fails closed on mkdir failure (#161)"
+else
+	bad "sdk_matrix_cache_dirs must return 1 when mkdir -p fails (#161)"
+fi
+if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" \
+	| grep -q "sdk_matrix_cache_dirs \"\$root\" \"\$SDK_MATRIX_VERSION_LABEL\" || return 1"; then
+	ok "sdk_matrix_feeds_ready propagates cache-init failure (#161)"
+else
+	bad "sdk_matrix_feeds_ready must fail closed when cache init fails (#161)"
+fi
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export SDK_MATRIX_DIGEST_CACHE_DIR="$TMP/sdk-digests"

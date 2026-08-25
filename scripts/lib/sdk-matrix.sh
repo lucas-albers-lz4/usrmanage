@@ -163,9 +163,19 @@ sdk_matrix_validate_version() {
 
 sdk_matrix_cache_dirs() {
 	local root="$1" version_label="$2"
-	SDK_MATRIX_DL_CACHE="${OWRT_SDK_DL_CACHE:-${root}/.ci-sdk-cache/dl}"
-	SDK_MATRIX_FEEDS_CACHE="${OWRT_SDK_FEEDS_CACHE:-${root}/.ci-sdk-cache/feeds/${version_label}}"
-	mkdir -p "$SDK_MATRIX_DL_CACHE" "$SDK_MATRIX_FEEDS_CACHE"
+	# Resolve relative overrides against the repo root so every consumer
+	# (compose -v, cache_dirs) sees an absolute host path (luna r5).
+	if [[ -n "${OWRT_SDK_DL_CACHE:-}" && "${OWRT_SDK_DL_CACHE}" != /* ]]; then
+		SDK_MATRIX_DL_CACHE="${root}/${OWRT_SDK_DL_CACHE}"
+	else
+		SDK_MATRIX_DL_CACHE="${OWRT_SDK_DL_CACHE:-${root}/.ci-sdk-cache/dl}"
+	fi
+	if [[ -n "${OWRT_SDK_FEEDS_CACHE:-}" && "${OWRT_SDK_FEEDS_CACHE}" != /* ]]; then
+		SDK_MATRIX_FEEDS_CACHE="${root}/${OWRT_SDK_FEEDS_CACHE}"
+	else
+		SDK_MATRIX_FEEDS_CACHE="${OWRT_SDK_FEEDS_CACHE:-${root}/.ci-sdk-cache/feeds/${version_label}}"
+	fi
+	mkdir -p "$SDK_MATRIX_DL_CACHE" "$SDK_MATRIX_FEEDS_CACHE" || return 1
 	# buildbot (uid 1000) must write bind mounts; Actions runner is often 1001.
 	chmod -R a+rwX "$SDK_MATRIX_DL_CACHE" "$SDK_MATRIX_FEEDS_CACHE" 2>/dev/null || true
 }
@@ -184,6 +194,21 @@ sdk_matrix_compose_run() {
 	)
 }
 
+sdk_matrix_export_run() {
+	# Run a command in the volume-only sdk-export service (SDK volume, NO
+	# workspace mount). Safe while signing keys exist in the workspace (#161):
+	# the `sdk` service binds the workspace read-only and must never be
+	# launched after key creation — container root could read the keys.
+	local root
+	root="$(sdk_matrix_root)"
+	(
+		cd "$root"
+		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
+		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
+		docker compose run --rm sdk-export "$@"
+	)
+}
+
 sdk_matrix_feeds_lock_path() {
 	local label
 	label="$(sdk_matrix_version_label "$1")"
@@ -193,16 +218,48 @@ sdk_matrix_feeds_lock_path() {
 sdk_matrix_feeds_ready() {
 	# Require .config, package feeds present, and lock stamp matching the pinned
 	# feeds.conf so a restored cache cannot skip refresh after pin changes.
-	sdk_matrix_compose_run sh -c "
-		test -f /builder/.config || exit 1
-		lock=/work/usrmanage/scripts/feeds.lock/${SDK_MATRIX_VERSION_LABEL}/feeds.conf
-		stamp=/builder/feeds/.usrmanage-feeds.lock.sha
-		test -f \"\$lock\" && test -f \"\$stamp\" || exit 1
-		cur=\$(sha256sum \"\$lock\" | awk '{print \$1}')
-		old=\$(cat \"\$stamp\")
-		[ -n \"\$cur\" ] && [ \"\$cur\" = \"\$old\" ] || exit 1
-		find -L /builder/feeds -maxdepth 8 \\( -path '*/luci-app-usrmanage/Makefile' -o -path '*/usrmanage/Makefile' \\) 2>/dev/null | grep -q .
-	" 2>/dev/null
+	# #161: staging runs AFTER signing keys are written, so this probe must NOT
+	# launch the workspace-mounted `sdk` service — probe via the volume-only
+	# `sdk-export` service with the feeds cache bound in; the lock hash and the
+	# package-source checks are evaluated host-side, never from inside a
+	# container. The feeds cache holds `usrmanage` as an absolute src-link into
+	# the workspace (feeds.conf), so the container cannot resolve it — the link
+	# itself proves feeds update materialized the package; the checkout proves
+	# the sources exist.
+	local root lock cur
+	root="$(sdk_matrix_root)"
+	lock="${root}/scripts/feeds.lock/${SDK_MATRIX_VERSION_LABEL}/feeds.conf"
+	[[ -f "$lock" ]] || return 1
+	cur="$(sha256sum "$lock" | awk '{print $1}')"
+	[[ -n "$cur" ]] || return 1
+	# src-link target content: the package sources live in the workspace
+	# checkout, which the probe container must never mount.
+	[[ -f "${root}/openwrt-feed/usrmanage/Makefile" \
+		&& -f "${root}/openwrt-feed/luci-app-usrmanage/Makefile" ]] || return 1
+	# Initialize the cache dirs BEFORE the probe mount: docker -v auto-creates
+	# missing host dirs as root, which would break a clean local build's
+	# follow-up chown/buildbot init (luna r4). cache_dirs also sets the
+	# absolute SDK_MATRIX_FEEDS_CACHE path used below. Fail closed when the
+	# init itself fails (conditional callers suppress errexit — luna r9).
+	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL" || return 1
+	(
+		cd "$root"
+		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
+		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
+		docker compose run --rm \
+			-e "LOCK_SHA=$cur" \
+			-v "${SDK_MATRIX_FEEDS_CACHE}:/builder/feeds" \
+			sdk-export sh -ec '
+				test -f /builder/.config || exit 1
+				stamp=/builder/feeds/.usrmanage-feeds.lock.sha
+				test -f "$stamp" || exit 1
+				[ -n "$LOCK_SHA" ] && [ "$LOCK_SHA" = "$(cat "$stamp")" ] || exit 1
+				# src-link usrmanage materializes as a symlink into the
+				# workspace; the probe has no workspace mount, so check the
+				# link itself (existence = feeds update ran), not its target.
+				[ -L /builder/feeds/usrmanage ] || [ -d /builder/feeds/usrmanage ] || exit 1
+			'
+	) 2>/dev/null
 }
 
 sdk_matrix_feeds_setup() {
@@ -318,12 +375,17 @@ sdk_matrix_clean_package() {
 sdk_matrix_copy_out() {
 	local root out_mount
 	root="$(sdk_matrix_root)"
+	# Normalize cache vars so the direct `sdk` compose run below binds the same
+	# absolute cache paths as the build path (luna r6).
+	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL"
 	out_mount="${root}/out"
 	mkdir -p "${out_mount}/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}"
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
 		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
+		OWRT_SDK_DL_CACHE="$SDK_MATRIX_DL_CACHE" \
+		OWRT_SDK_FEEDS_CACHE="$SDK_MATRIX_FEEDS_CACHE" \
 		docker compose run --rm --user root -v "${out_mount}:/out" sdk sh -ec "
 			dest=/out/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}
 			mkdir -p \"\$dest\"

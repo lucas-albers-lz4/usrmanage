@@ -1,8 +1,8 @@
 # Security resolution plan — open findings (2026-08-23)
 
-> **Status:** #158 resolved by [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160) (pending merge). #159 remains open in [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161).
+> **Status:** #158 merged via [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160). #159 open in [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161).
 
-Action plan for the **two open `security` issues** filed from the 2026-08-23 read-only
+Action plan for the **remaining open `security` issue** filed from the 2026-08-23 read-only
 pass on `main@a0020ba`. Ledger: [security-review.md](security-review.md). Process locks:
 [security-prevention-plan.md](security-prevention-plan.md), [AGENTS.md](../AGENTS.md).
 
@@ -14,7 +14,7 @@ pass on `main@a0020ba`. Ledger: [security-review.md](security-review.md). Proces
 |-------|----------|------|-------|
 | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) | Low | publish / supply chain | Feed signing keys written before SDK build cells mount workspace |
 
-**Resolved by this wave (pending merge):** [#158](https://github.com/lucas-albers-lz4/usrmanage/issues/158) — rpcd `show` write-ACL gate ([PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160)).
+**Resolved:** [#158](https://github.com/lucas-albers-lz4/usrmanage/issues/158) — rpcd `show` write-ACL gate ([PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160), merged).
 
 **Recently closed (ledger):** #148 (SHA-512 pin), #149 (`list --all` gate), #150 (tampered login revoke).
 
@@ -105,16 +105,9 @@ Pick one option in the PR description; default to **Option A** unless a readonly
 | `host` | `tests/test_rpcd_show_acl.sh` + `./scripts/smoke-host.sh` |
 | `lab` | None — no new guest surface (ACL scope unchanged vs #149 pattern) |
 
-### PR checklist (#158)
+### PR checklist (#158) — merged
 
-- [ ] Draft PR, `Fixes #158`, `security` label
-- [ ] `./scripts/smoke-host.sh` green
-- [ ] luna or grok review (branch changes)
-- [ ] Bugbot (branch changes)
-- [ ] `/review-security` (branch changes)
-- [ ] `docs/security-review.md` updated
-- [ ] Mark Ready → CodeRabbit round complete
-- [ ] Merge; verify issue auto-closes
+Merged via [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160) (2026-08-24); issue #158 auto-closed. Section kept for audit history.
 
 ---
 
@@ -191,10 +184,10 @@ changes staging paths — reordering is the minimal fix aligned with existing
 
 | Order | PR | Rationale |
 |-------|-----|-----------|
-| 1 | #158 ([PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160)) | Smaller diff; completes #149 ACL theme; pure host proof |
+| 1 | #158 ([PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160)) | Smaller diff; completes #149 ACL theme; pure host proof — **merged** |
 | 2 | #159 ([PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161)) | Workflow-only; manual proof on next release |
 
-Both PRs touch `docs/security-review.md` — **merge #160 first**, then rebase #161 onto `main` and reconcile the ledger before marking #161 ready.
+Both PRs touch `docs/security-review.md` — **#160 merged first**; rebase #161 onto `main` and reconcile the ledger before marking ready.
 
 ---
 
