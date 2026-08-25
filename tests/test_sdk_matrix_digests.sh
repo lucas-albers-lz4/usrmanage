@@ -145,13 +145,13 @@ fi
 # (feeds_ready runs in if/! /|| contexts where errexit is suppressed — luna r8),
 # and feeds_ready must PROPAGATE the cache_dirs failure (luna r9).
 if awk '/^sdk_matrix_cache_dirs\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" \
-	| grep -q 'mkdir -p "\$SDK_MATRIX_DL_CACHE" "\$SDK_MATRIX_FEEDS_CACHE" || return 1'; then
+	| grep -q "mkdir -p \"\$SDK_MATRIX_DL_CACHE\" \"\$SDK_MATRIX_FEEDS_CACHE\" || return 1"; then
 	ok "sdk_matrix_cache_dirs fails closed on mkdir failure (#161)"
 else
 	bad "sdk_matrix_cache_dirs must return 1 when mkdir -p fails (#161)"
 fi
 if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" \
-	| grep -q 'sdk_matrix_cache_dirs "\$root" "\$SDK_MATRIX_VERSION_LABEL" || return 1'; then
+	| grep -q "sdk_matrix_cache_dirs \"\$root\" \"\$SDK_MATRIX_VERSION_LABEL\" || return 1"; then
 	ok "sdk_matrix_feeds_ready propagates cache-init failure (#161)"
 else
 	bad "sdk_matrix_feeds_ready must fail closed when cache init fails (#161)"
