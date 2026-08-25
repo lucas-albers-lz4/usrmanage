@@ -239,8 +239,9 @@ sdk_matrix_feeds_ready() {
 	# Initialize the cache dirs BEFORE the probe mount: docker -v auto-creates
 	# missing host dirs as root, which would break a clean local build's
 	# follow-up chown/buildbot init (luna r4). cache_dirs also sets the
-	# absolute SDK_MATRIX_FEEDS_CACHE path used below.
-	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL"
+	# absolute SDK_MATRIX_FEEDS_CACHE path used below. Fail closed when the
+	# init itself fails (conditional callers suppress errexit — luna r9).
+	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL" || return 1
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
