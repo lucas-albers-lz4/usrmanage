@@ -374,12 +374,17 @@ sdk_matrix_clean_package() {
 sdk_matrix_copy_out() {
 	local root out_mount
 	root="$(sdk_matrix_root)"
+	# Normalize cache vars so the direct `sdk` compose run below binds the same
+	# absolute cache paths as the build path (luna r6).
+	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL"
 	out_mount="${root}/out"
 	mkdir -p "${out_mount}/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}"
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
 		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
+		OWRT_SDK_DL_CACHE="$SDK_MATRIX_DL_CACHE" \
+		OWRT_SDK_FEEDS_CACHE="$SDK_MATRIX_FEEDS_CACHE" \
 		docker compose run --rm --user root -v "${out_mount}:/out" sdk sh -ec "
 			dest=/out/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}
 			mkdir -p \"\$dest\"

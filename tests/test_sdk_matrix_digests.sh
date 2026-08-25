@@ -125,6 +125,13 @@ if [[ -n "$_init_ln" && -n "$_mount_ln" && "$_init_ln" -lt "$_mount_ln" ]]; then
 else
 	bad "sdk_matrix_feeds_ready must initialize cache dirs BEFORE bind-mounting (init line ${_init_ln:-?}, mount line ${_mount_ln:-?}) (#161)"
 fi
+# sdk_matrix_copy_out launches the `sdk` service directly — it must pass the
+# same normalized cache vars as the build path (luna r6 Minor).
+if awk '/^sdk_matrix_copy_out\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'OWRT_SDK_FEEDS_CACHE='; then
+	ok "sdk_matrix_copy_out passes normalized cache vars (#161)"
+else
+	bad "sdk_matrix_copy_out must pass normalized cache vars (#161)"
+fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
