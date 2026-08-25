@@ -163,8 +163,18 @@ sdk_matrix_validate_version() {
 
 sdk_matrix_cache_dirs() {
 	local root="$1" version_label="$2"
-	SDK_MATRIX_DL_CACHE="${OWRT_SDK_DL_CACHE:-${root}/.ci-sdk-cache/dl}"
-	SDK_MATRIX_FEEDS_CACHE="${OWRT_SDK_FEEDS_CACHE:-${root}/.ci-sdk-cache/feeds/${version_label}}"
+	# Resolve relative overrides against the repo root so every consumer
+	# (compose -v, cache_dirs) sees an absolute host path (luna r5).
+	if [[ -n "${OWRT_SDK_DL_CACHE:-}" && "${OWRT_SDK_DL_CACHE}" != /* ]]; then
+		SDK_MATRIX_DL_CACHE="${root}/${OWRT_SDK_DL_CACHE}"
+	else
+		SDK_MATRIX_DL_CACHE="${OWRT_SDK_DL_CACHE:-${root}/.ci-sdk-cache/dl}"
+	fi
+	if [[ -n "${OWRT_SDK_FEEDS_CACHE:-}" && "${OWRT_SDK_FEEDS_CACHE}" != /* ]]; then
+		SDK_MATRIX_FEEDS_CACHE="${root}/${OWRT_SDK_FEEDS_CACHE}"
+	else
+		SDK_MATRIX_FEEDS_CACHE="${OWRT_SDK_FEEDS_CACHE:-${root}/.ci-sdk-cache/feeds/${version_label}}"
+	fi
 	mkdir -p "$SDK_MATRIX_DL_CACHE" "$SDK_MATRIX_FEEDS_CACHE"
 	# buildbot (uid 1000) must write bind mounts; Actions runner is often 1001.
 	chmod -R a+rwX "$SDK_MATRIX_DL_CACHE" "$SDK_MATRIX_FEEDS_CACHE" 2>/dev/null || true

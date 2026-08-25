@@ -117,11 +117,13 @@ fi
 # The probe must initialize the cache dirs BEFORE bind-mounting them — docker
 # -v auto-creates missing host dirs as root, breaking a clean local build
 # (luna r4), and the mount must use the absolute cache path cache_dirs sets.
-if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'sdk_matrix_cache_dirs' \
-	&& awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q 'SDK_MATRIX_FEEDS_CACHE}:/builder/feeds'; then
+# ORDER matters: both tokens existing is not enough (luna r5).
+_init_ln="$(awk '/^sdk_matrix_feeds_ready\(\)/,/^}/ { if ($0 ~ /sdk_matrix_cache_dirs/) { print NR; exit } }' "$ROOT/scripts/lib/sdk-matrix.sh")"
+_mount_ln="$(awk '/^sdk_matrix_feeds_ready\(\)/,/^}/ { if ($0 ~ /SDK_MATRIX_FEEDS_CACHE}:\/builder\/feeds/) { print NR; exit } }' "$ROOT/scripts/lib/sdk-matrix.sh")"
+if [[ -n "$_init_ln" && -n "$_mount_ln" && "$_init_ln" -lt "$_mount_ln" ]]; then
 	ok "sdk_matrix_feeds_ready initializes the cache before the probe mount (#161)"
 else
-	bad "sdk_matrix_feeds_ready must initialize cache dirs before bind-mounting (#161)"
+	bad "sdk_matrix_feeds_ready must initialize cache dirs BEFORE bind-mounting (init line ${_init_ln:-?}, mount line ${_mount_ln:-?}) (#161)"
 fi
 
 TMP="$(mktemp -d)"
