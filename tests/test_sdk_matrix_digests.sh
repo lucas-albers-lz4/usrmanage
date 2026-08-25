@@ -96,6 +96,14 @@ elif awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" 
 else
 	bad "sdk_matrix_feeds_ready must probe via sdk-export only, never the workspace-mounted sdk service (#161)"
 fi
+# The lock hash must be passed INTO the probe container explicitly: a bare
+# `VAR=x docker compose run` prefix only feeds Compose file interpolation
+# (like ${OWRT_SDK_IMAGE}), it does not reach the container env (luna r2).
+if awk '/^sdk_matrix_feeds_ready\(\)/,/^}/' "$ROOT/scripts/lib/sdk-matrix.sh" | grep -q -- '-e "LOCK_SHA='; then
+	ok "sdk_matrix_feeds_ready passes LOCK_SHA into the probe container (-e) (#161)"
+else
+	bad "sdk_matrix_feeds_ready must pass LOCK_SHA via docker compose run -e (#161)"
+fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

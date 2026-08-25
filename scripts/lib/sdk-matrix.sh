@@ -222,8 +222,8 @@ sdk_matrix_feeds_ready() {
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
 		OWRT_SDK_VOLUME="$SDK_MATRIX_VOLUME" \
-		LOCK_SHA="$cur" \
 		docker compose run --rm \
+			-e "LOCK_SHA=$cur" \
 			-v "${OWRT_SDK_FEEDS_CACHE:-.ci-sdk-cache/feeds/${SDK_MATRIX_VERSION_LABEL}}:/builder/feeds" \
 			sdk-export sh -ec '
 				test -f /builder/.config || exit 1
