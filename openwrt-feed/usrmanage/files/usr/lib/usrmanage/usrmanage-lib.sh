@@ -1908,6 +1908,24 @@ um_mut_fail() {
 	um_die "$6"
 }
 
+um_password_capture_denied() {
+	# um_password_capture_denied <name> <role> — audit+die for capture/policy
+	# failures before mutation (shared by um_mut_add / um_mut_passwd).
+	_cap_name=$1
+	_cap_role=$2
+	_cap="${UM_POL_FAIL_REASON:-failed}"
+	case "$_cap" in
+		no_tty|echo_disable|mismatch|read_error)
+			um_audit denied "$_cap_name" denied "password_${_cap}" "$_cap_role"
+			um_die "error: password_${_cap}"
+			;;
+		*)
+			um_audit denied "$_cap_name" denied "password_${_cap}" "$_cap_role"
+			um_die "error: password_policy:${_cap}"
+			;;
+	esac
+}
+
 um_set_password() {
 	# um_set_password <user> <password_fd_or_empty>
 	if [ -n "$2" ]; then
@@ -1969,24 +1987,9 @@ um_mut_add() {
 	# Policy gate before account-file mutation (same ordering as um_mut_passwd):
 	# capture once; commit only after um_create_user inside the tx snapshot.
 	if [ -n "$_pfd" ]; then
-		um_password_capture_fd "$_name" "$_pfd" || {
-			um_audit denied "$_name" denied "password_${UM_POL_FAIL_REASON:-failed}" "$_role"
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
-		}
+		um_password_capture_fd "$_name" "$_pfd" || um_password_capture_denied "$_name" "$_role"
 	else
-		um_password_capture_prompt "$_name" || {
-			_cap="${UM_POL_FAIL_REASON:-failed}"
-			case "$_cap" in
-				no_tty|echo_disable|mismatch|read_error)
-					um_audit denied "$_name" denied "password_${_cap}" "$_role"
-					um_die "error: password_${_cap}"
-					;;
-				*)
-					um_audit denied "$_name" denied "password_${_cap}" "$_role"
-					um_die "error: password_policy:${_cap}"
-					;;
-			esac
-		}
+		um_password_capture_prompt "$_name" || um_password_capture_denied "$_name" "$_role"
 	fi
 	um_tx_begin
 	um_incomplete_set "add:${_name}"
@@ -2158,15 +2161,9 @@ um_mut_passwd() {
 	# not destroy the target's live LuCI sessions or touch the shadow hash.
 	# The fd/prompt is consumed exactly once (staged); never read twice.
 	if [ -n "$_pfd" ]; then
-		um_password_capture_fd "$_name" "$_pfd" || {
-			um_audit fail "$_name" fail password
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
-		}
+		um_password_capture_fd "$_name" "$_pfd" || um_password_capture_denied "$_name" "$_role"
 	else
-		um_password_capture_prompt "$_name" || {
-			um_audit fail "$_name" fail password
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
-		}
+		um_password_capture_prompt "$_name" || um_password_capture_denied "$_name" "$_role"
 	fi
 	um_incomplete_set "passwd:${_name}"
 	# Revoke before write so a failed revoke cannot leave live sessions after
