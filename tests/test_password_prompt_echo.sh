@@ -179,6 +179,84 @@ else:
         sys.exit(1)
 
 print("ok: PTY no-echo functional")
+
+# EOF (EOT) after New password: must fail as read_error (not empty policy).
+eof_shell = shell_read_s_capable()
+if eof_shell is None:
+    print("skip: EOF read_error PTY test (need busybox or bash)")
+else:
+    script = f"""set -e
+. "{lib}"
+if um_password_capture_prompt {user}; then
+  echo CAPTURE_OK
+  exit 0
+fi
+echo REASON=$UM_POL_FAIL_REASON
+exit 1
+"""
+    master, slave = pty.openpty()
+    env = os.environ.copy()
+    env["USRMANAGE_ETC"] = os.environ.get("USRMANAGE_ETC", "")
+    env["USRMANAGE_TEST_OVERRIDES"] = "1"
+    env["USRMANAGE_TEST_FORCE_READ_S"] = "1"
+    proc = subprocess.Popen(
+        eof_shell + ["-c", script],
+        stdin=slave,
+        stdout=slave,
+        stderr=slave,
+        env=env,
+        close_fds=True,
+    )
+    os.close(slave)
+    buf = ""
+    deadline = time.monotonic() + 5.0
+    while "New password:" not in buf and time.monotonic() < deadline:
+        r, _, _ = select.select([master], [], [], 0.1)
+        if r:
+            try:
+                buf += os.read(master, 4096).decode("utf-8", errors="replace")
+            except OSError:
+                break
+    # Empty-line EOT: ash/bash read returns nonzero (EOF).
+    os.write(master, b"\x04")
+    deadline = time.monotonic() + 3.0
+    while proc.poll() is None and time.monotonic() < deadline:
+        r, _, _ = select.select([master], [], [], 0.1)
+        if not r:
+            continue
+        try:
+            buf += os.read(master, 4096).decode("utf-8", errors="replace")
+        except OSError:
+            break
+    try:
+        rc = proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        print("FAIL: EOF prompt hung", file=sys.stderr)
+        sys.exit(1)
+    if "CAPTURE_OK" in buf or rc == 0:
+        print("FAIL: EOF prompt succeeded", file=sys.stderr)
+        print(buf, file=sys.stderr)
+        sys.exit(1)
+    if "REASON=read_error" not in buf:
+        print("FAIL: EOF did not set read_error", file=sys.stderr)
+        print(buf, file=sys.stderr)
+        sys.exit(1)
+    print("ok: PTY EOF read_error")
+
+# Static: no soft-success on failed read in the hidden helper.
+with open(lib, encoding="utf-8") as fh:
+    lib_text = fh.read()
+start = lib_text.find("um_password_read_hidden()")
+end = lib_text.find("\num_password_capture_prompt()", start)
+chunk = lib_text[start:end]
+if "|| true" in chunk:
+    print("FAIL: um_password_read_hidden still soft-succeeds read", file=sys.stderr)
+    sys.exit(1)
+print("ok: read failures propagate")
+
+print("ok: all PTY checks")
 sys.exit(0)
 PY
 then

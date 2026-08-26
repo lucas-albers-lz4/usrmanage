@@ -1068,14 +1068,18 @@ um_password_read_hidden() {
 	# UM_PASSWORD_READ_HIDDEN. Uses stty -echo when stty exists (fail-closed
 	# on error); otherwise BusyBox ash/bash read -s (stock OpenWrt has no stty;
 	# -s is part of ASH_BASH_COMPAT, not ASH_READ_NCHARS).
-	_label=$1
+	_label="$1"
 	UM_PASSWORD_READ_HIDDEN=
 	printf '%s' "$_label" >&2
 	if [ "${USRMANAGE_TEST_OVERRIDES:-0}" = "1" ] && [ "${USRMANAGE_TEST_FORCE_READ_S:-0}" = "1" ]; then
 		# Host test hook: stock OpenWrt has no stty applet; desktop busybox may
 		# still expose stty as an applet — force the read -s path (#cli-no-echo).
 		# shellcheck disable=SC2039,SC3045
-		IFS= read -s -r UM_PASSWORD_READ_HIDDEN || true
+		if ! IFS= read -s -r UM_PASSWORD_READ_HIDDEN; then
+			UM_POL_FAIL_REASON=read_error
+			printf '\n' >&2
+			return 1
+		fi
 	elif command -v stty >/dev/null 2>&1; then
 		# INT/TERM only — never EXIT (um_tx_exit_hook owns EXIT; BusyBox ash
 		# cannot chain traps). Prompt runs before um_tx_begin on add/passwd.
@@ -1087,12 +1091,22 @@ um_password_read_hidden() {
 			um_err "error: cannot disable terminal echo; use --password-fd"
 			return 1
 		fi
-		IFS= read -r UM_PASSWORD_READ_HIDDEN || true
+		if ! IFS= read -r UM_PASSWORD_READ_HIDDEN; then
+			um_password_tty_echo_on
+			trap - INT TERM
+			UM_POL_FAIL_REASON=read_error
+			printf '\n' >&2
+			return 1
+		fi
 		um_password_tty_echo_on
 		trap - INT TERM
 	else
 		# shellcheck disable=SC2039,SC3045
-		IFS= read -s -r UM_PASSWORD_READ_HIDDEN || true
+		if ! IFS= read -s -r UM_PASSWORD_READ_HIDDEN; then
+			UM_POL_FAIL_REASON=read_error
+			printf '\n' >&2
+			return 1
+		fi
 	fi
 	printf '\n' >&2
 	return 0
@@ -1103,8 +1117,9 @@ um_password_capture_prompt() {
 	# accepted value in UM_PASSWORD_STAGED. Echo is restored after each read in
 	# um_password_read_hidden; do not install EXIT traps here — um_tx_exit_hook
 	# owns EXIT during mutators (BusyBox ash cannot chain traps).
-	# Sets UM_POL_FAIL_REASON on failure: no_tty | echo_disable | mismatch | policy tokens.
-	_u=$1
+	# Sets UM_POL_FAIL_REASON on failure: no_tty | echo_disable | read_error |
+	# mismatch | policy tokens.
+	_u="$1"
 	_p1=
 	_p2=
 	UM_PASSWORD_STAGED=
@@ -1114,18 +1129,14 @@ um_password_capture_prompt() {
 		um_err "error: no TTY; use --password-fd"
 		return 1
 	fi
-	um_password_read_hidden 'New password: ' || {
-		[ -n "$UM_POL_FAIL_REASON" ] || UM_POL_FAIL_REASON=echo_disable
-		return 1
-	}
-	_p1=$UM_PASSWORD_READ_HIDDEN
+	um_password_read_hidden 'New password: ' || return 1
+	_p1="$UM_PASSWORD_READ_HIDDEN"
 	UM_PASSWORD_READ_HIDDEN=
 	um_password_read_hidden 'Confirm password: ' || {
 		_p1=
-		[ -n "$UM_POL_FAIL_REASON" ] || UM_POL_FAIL_REASON=echo_disable
 		return 1
 	}
-	_p2=$UM_PASSWORD_READ_HIDDEN
+	_p2="$UM_PASSWORD_READ_HIDDEN"
 	UM_PASSWORD_READ_HIDDEN=
 	[ "$_p1" = "$_p2" ] || {
 		_p1=
@@ -1141,7 +1152,7 @@ um_password_capture_prompt() {
 		return 1
 	}
 	_p2=
-	UM_PASSWORD_STAGED=$_p1
+	UM_PASSWORD_STAGED="$_p1"
 	_p1=
 	return 0
 }
@@ -1964,9 +1975,9 @@ um_mut_add() {
 		}
 	else
 		um_password_capture_prompt "$_name" || {
-			_cap=${UM_POL_FAIL_REASON:-failed}
+			_cap="${UM_POL_FAIL_REASON:-failed}"
 			case "$_cap" in
-				no_tty|echo_disable|mismatch)
+				no_tty|echo_disable|mismatch|read_error)
 					um_audit denied "$_name" denied "password_${_cap}" "$_role"
 					um_die "error: password_${_cap}"
 					;;
