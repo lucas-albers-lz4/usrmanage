@@ -1083,6 +1083,7 @@ um_password_read_hidden() {
 		trap 'um_password_tty_echo_on; exit 143' TERM
 		if ! stty -echo 2>/dev/null; then
 			trap - INT TERM
+			UM_POL_FAIL_REASON=echo_disable
 			um_err "error: cannot disable terminal echo; use --password-fd"
 			return 1
 		fi
@@ -1102,19 +1103,26 @@ um_password_capture_prompt() {
 	# accepted value in UM_PASSWORD_STAGED. Echo is restored after each read in
 	# um_password_read_hidden; do not install EXIT traps here — um_tx_exit_hook
 	# owns EXIT during mutators (BusyBox ash cannot chain traps).
+	# Sets UM_POL_FAIL_REASON on failure: no_tty | echo_disable | mismatch | policy tokens.
 	_u=$1
 	_p1=
 	_p2=
 	UM_PASSWORD_STAGED=
+	UM_POL_FAIL_REASON=
 	if [ ! -t 0 ]; then
+		UM_POL_FAIL_REASON=no_tty
 		um_err "error: no TTY; use --password-fd"
 		return 1
 	fi
-	um_password_read_hidden 'New password: ' || return 1
+	um_password_read_hidden 'New password: ' || {
+		[ -n "$UM_POL_FAIL_REASON" ] || UM_POL_FAIL_REASON=echo_disable
+		return 1
+	}
 	_p1=$UM_PASSWORD_READ_HIDDEN
 	UM_PASSWORD_READ_HIDDEN=
 	um_password_read_hidden 'Confirm password: ' || {
 		_p1=
+		[ -n "$UM_POL_FAIL_REASON" ] || UM_POL_FAIL_REASON=echo_disable
 		return 1
 	}
 	_p2=$UM_PASSWORD_READ_HIDDEN
@@ -1122,6 +1130,7 @@ um_password_capture_prompt() {
 	[ "$_p1" = "$_p2" ] || {
 		_p1=
 		_p2=
+		UM_POL_FAIL_REASON=mismatch
 		um_err "error: passwords do not match"
 		return 1
 	}
@@ -1955,8 +1964,17 @@ um_mut_add() {
 		}
 	else
 		um_password_capture_prompt "$_name" || {
-			um_audit denied "$_name" denied "password_${UM_POL_FAIL_REASON:-failed}" "$_role"
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+			_cap=${UM_POL_FAIL_REASON:-failed}
+			case "$_cap" in
+				no_tty|echo_disable|mismatch)
+					um_audit denied "$_name" denied "password_${_cap}" "$_role"
+					um_die "error: password_${_cap}"
+					;;
+				*)
+					um_audit denied "$_name" denied "password_${_cap}" "$_role"
+					um_die "error: password_policy:${_cap}"
+					;;
+			esac
 		}
 	fi
 	um_tx_begin
