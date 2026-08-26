@@ -1066,22 +1066,29 @@ um_password_tty_echo_on() {
 um_password_read_hidden() {
 	# um_password_read_hidden <prompt> — read one line without echo; sets
 	# UM_PASSWORD_READ_HIDDEN. Uses stty -echo when stty exists (fail-closed
-	# on error); otherwise BusyBox ash/bash read -s (stock OpenWrt has no stty).
+	# on error); otherwise BusyBox ash/bash read -s (stock OpenWrt has no stty;
+	# -s is part of ASH_BASH_COMPAT, not ASH_READ_NCHARS).
 	_label=$1
 	UM_PASSWORD_READ_HIDDEN=
 	printf '%s' "$_label" >&2
-	if [ "$USRMANAGE_TEST_OVERRIDES" = "1" ] && [ "$USRMANAGE_TEST_FORCE_READ_S" = "1" ]; then
+	if [ "${USRMANAGE_TEST_OVERRIDES:-0}" = "1" ] && [ "${USRMANAGE_TEST_FORCE_READ_S:-0}" = "1" ]; then
 		# Host test hook: stock OpenWrt has no stty applet; desktop busybox may
 		# still expose stty as an applet — force the read -s path (#cli-no-echo).
 		# shellcheck disable=SC2039,SC3045
 		IFS= read -s -r UM_PASSWORD_READ_HIDDEN || true
 	elif command -v stty >/dev/null 2>&1; then
+		# INT/TERM only — never EXIT (um_tx_exit_hook owns EXIT; BusyBox ash
+		# cannot chain traps). Prompt runs before um_tx_begin on add/passwd.
+		trap 'um_password_tty_echo_on; exit 130' INT
+		trap 'um_password_tty_echo_on; exit 143' TERM
 		if ! stty -echo 2>/dev/null; then
+			trap - INT TERM
 			um_err "error: cannot disable terminal echo; use --password-fd"
 			return 1
 		fi
 		IFS= read -r UM_PASSWORD_READ_HIDDEN || true
 		um_password_tty_echo_on
+		trap - INT TERM
 	else
 		# shellcheck disable=SC2039,SC3045
 		IFS= read -s -r UM_PASSWORD_READ_HIDDEN || true
@@ -1943,19 +1950,25 @@ um_mut_add() {
 	# capture once; commit only after um_create_user inside the tx snapshot.
 	if [ -n "$_pfd" ]; then
 		um_password_capture_fd "$_name" "$_pfd" || {
-			um_audit fail "$_name" fail password
+			um_audit denied "$_name" denied "password_${UM_POL_FAIL_REASON:-failed}" "$_role"
 			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	else
 		um_password_capture_prompt "$_name" || {
-			um_audit fail "$_name" fail password
+			um_audit denied "$_name" denied "password_${UM_POL_FAIL_REASON:-failed}" "$_role"
 			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 		}
 	fi
 	um_tx_begin
 	um_incomplete_set "add:${_name}"
 	um_create_user "$_name" "$_role" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" create "error: create_failed"
-	um_password_commit "$_name" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+	um_password_commit "$_name" || {
+		_pw_rc=$?
+		if [ "$_pw_rc" = "2" ]; then
+			um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password_hash_unverified "error: password_hash_unverified"
+		fi
+		um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_write_failed"
+	}
 	um_registry_add "$_name" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" registry "error: registry_failed"
 	if [ "$_luci_login" = "1" ] && command -v um_luci_login_enable_user >/dev/null 2>&1; then
 		if ! um_luci_login_enable_user "$_name"; then

@@ -362,7 +362,7 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 
 **Scope.** `um_password_capture_prompt` used `stty -echo 2>/dev/null || true`, so typed passwords echoed on stock OpenWrt images where the BusyBox `stty` applet is disabled (`BUSYBOX_DEFAULT_STTY=n`).
 
-**Fix.** `um_password_read_hidden`: when `stty` exists, `-echo` must succeed or the prompt fails closed with `use --password-fd`; when absent, BusyBox ash/bash `read -s`. Echo is restored after each read (no EXIT trap — preserves `um_tx_exit_hook`). `um_mut_add` captures password before `um_tx_begin`, matching `um_mut_passwd`.
+**Fix.** `um_password_read_hidden`: when `stty` exists, `-echo` must succeed or the prompt fails closed with `use --password-fd`; when absent, BusyBox ash/bash `read -s` (`ASH_BASH_COMPAT`, not `ASH_READ_NCHARS`). Echo restored after each read; INT/TERM trap restores echo on interrupt (never EXIT — preserves `um_tx_exit_hook`). `um_mut_add` captures password before `um_tx_begin`, matching `um_mut_passwd`.
 
 **Proof.** host: `tests/test_password_prompt_echo.sh` (static: no soft-fail; PTY: `read -s` path via test hook; fake `stty` fail-closed). lab: none — no new lab surface.
 

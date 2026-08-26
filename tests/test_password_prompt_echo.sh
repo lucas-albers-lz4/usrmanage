@@ -43,9 +43,8 @@ if ! command -v python3 >/dev/null 2>&1; then
 	exit "$fail"
 fi
 
-PTY_OUT=$TMP/pty.out
-export LIB TMP PTY_OUT
-python3 <<'PY'
+export LIB TMP
+if python3 <<'PY'
 from __future__ import annotations
 
 import os
@@ -164,21 +163,25 @@ stty_fake = os.path.join(fake_bin, "stty")
 with open(stty_fake, "w", encoding="utf-8") as fh:
     fh.write("#!/bin/sh\ncase \"$1\" in -echo) exit 1 ;; echo) exit 0 ;; esac\nexit 0\n")
 os.chmod(stty_fake, 0o755)
-fail_shell = [shutil.which("bash") or "bash"]
-fail_path = f"{fake_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}"
-rc_fail, out_fail = run_pty("stty-fail", fail_shell, fail_path)
-if rc_fail == 0:
-    print("FAIL: prompt succeeded when stty -echo failed", file=sys.stderr)
-    sys.exit(1)
-if "cannot disable terminal echo" not in out_fail:
-    print("FAIL: missing fail-closed stty error", file=sys.stderr)
-    print(out_fail, file=sys.stderr)
-    sys.exit(1)
+bash_path = shutil.which("bash")
+if bash_path is None:
+    print("skip: stty-fail PTY test (bash not on host)")
+else:
+    fail_shell = [bash_path]
+    fail_path = f"{fake_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}"
+    rc_fail, out_fail = run_pty("stty-fail", fail_shell, fail_path)
+    if rc_fail == 0:
+        print("FAIL: prompt succeeded when stty -echo failed", file=sys.stderr)
+        sys.exit(1)
+    if "cannot disable terminal echo" not in out_fail:
+        print("FAIL: missing fail-closed stty error", file=sys.stderr)
+        print(out_fail, file=sys.stderr)
+        sys.exit(1)
 
 print("ok: PTY no-echo functional")
+sys.exit(0)
 PY
-
-if [ "$?" -eq 0 ]; then
+then
 	ok "PTY functional checks"
 else
 	bad "PTY functional checks"
