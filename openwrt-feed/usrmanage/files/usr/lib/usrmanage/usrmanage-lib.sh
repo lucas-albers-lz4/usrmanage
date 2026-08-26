@@ -1058,24 +1058,68 @@ um_password_capture_fd() {
 	return 0
 }
 
+um_password_tty_echo_on() {
+	command -v stty >/dev/null 2>&1 || return 0
+	stty echo 2>/dev/null || true
+}
+
+um_password_read_hidden() {
+	# um_password_read_hidden <prompt> — read one line without echo; sets
+	# UM_PASSWORD_READ_HIDDEN. Uses stty -echo when stty exists (fail-closed
+	# on error); otherwise BusyBox ash/bash read -s (stock OpenWrt has no stty).
+	_label=$1
+	UM_PASSWORD_READ_HIDDEN=
+	printf '%s' "$_label" >&2
+	if [ "$USRMANAGE_TEST_OVERRIDES" = "1" ] && [ "$USRMANAGE_TEST_FORCE_READ_S" = "1" ]; then
+		# Host test hook: stock OpenWrt has no stty applet; desktop busybox may
+		# still expose stty as an applet — force the read -s path (#cli-no-echo).
+		# shellcheck disable=SC2039,SC3045
+		IFS= read -s -r UM_PASSWORD_READ_HIDDEN || true
+	elif command -v stty >/dev/null 2>&1; then
+		if ! stty -echo 2>/dev/null; then
+			um_err "error: cannot disable terminal echo; use --password-fd"
+			return 1
+		fi
+		IFS= read -r UM_PASSWORD_READ_HIDDEN || true
+		um_password_tty_echo_on
+	else
+		# shellcheck disable=SC2039,SC3045
+		IFS= read -s -r UM_PASSWORD_READ_HIDDEN || true
+	fi
+	printf '\n' >&2
+	return 0
+}
+
 um_password_capture_prompt() {
 	# um_password_capture_prompt <user> — interactive TTY prompt; stages the
 	# accepted value in UM_PASSWORD_STAGED.
 	_u=$1
+	_p1=
+	_p2=
 	UM_PASSWORD_STAGED=
 	if [ ! -t 0 ]; then
 		um_err "error: no TTY; use --password-fd"
 		return 1
 	fi
-	printf 'New password: ' >&2
-	stty -echo 2>/dev/null || true
-	IFS= read -r _p1 || true
-	stty echo 2>/dev/null || true
-	printf '\nConfirm password: ' >&2
-	stty -echo 2>/dev/null || true
-	IFS= read -r _p2 || true
-	stty echo 2>/dev/null || true
-	printf '\n' >&2
+	if command -v stty >/dev/null 2>&1; then
+		trap 'um_password_tty_echo_on' EXIT INT TERM
+	fi
+	um_password_read_hidden 'New password: ' || {
+		trap - EXIT INT TERM
+		return 1
+	}
+	_p1=$UM_PASSWORD_READ_HIDDEN
+	UM_PASSWORD_READ_HIDDEN=
+	um_password_read_hidden 'Confirm password: ' || {
+		_p1=
+		trap - EXIT INT TERM
+		return 1
+	}
+	_p2=$UM_PASSWORD_READ_HIDDEN
+	UM_PASSWORD_READ_HIDDEN=
+	if command -v stty >/dev/null 2>&1; then
+		trap - EXIT INT TERM
+	fi
 	[ "$_p1" = "$_p2" ] || {
 		_p1=
 		_p2=

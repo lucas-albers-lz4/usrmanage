@@ -51,6 +51,7 @@ if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	"$ROOT/tests/test_mutators-busybox-fallback.sh"
 	"$ROOT/tests/test_password_control.sh"
 	"$ROOT/tests/test_password_sha512_pin.sh"
+	"$ROOT/tests/test_password_prompt_echo.sh"
 	"$ROOT/tests/test_sdk_matrix_digests.sh"
 	"$ROOT/tests/test_download_gzip_gate.sh"
 	"$ROOT/tests/test_qemu_net_seed.sh"

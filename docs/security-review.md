@@ -65,6 +65,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Shell / command injection via username | Strict charset (`a-z0-9_-`, 1–32, deny-list) gates mutators and `show` | host | `tests/test_validators.sh` · Z3 P1 |
 | Passwd/shadow line confusion via suffix username | Field-anchored awk `$1 == user` in `um_passwd_line` / `um_user_locked` ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L10) | host | `tests/test_mutators.sh` (ntp/tp, daemon/n) |
 | Password in argv / `ps` / logs | `--password-fd` or stdin; rpcd pipes fd 0; never audit/syslog | host | `tests/test_mutators.sh` stub argv |
+| Interactive CLI password echo | `stty -echo` fail-closed when `stty` exists; else ash/bash `read -s` (no `stty` applet on stock OpenWrt) | host | `tests/test_password_prompt_echo.sh` |
 | Audit field injection (actor/src) | Whitelist + 64-char cap (`um_actor_resolve`, `sanitize_actor`); audit tokens may contain `=` but never a space, so no new field can be introduced | host | #3 C1 · Z3 P2 |
 | Unquoted argv rpcd → CLI | Explicit argv per ubus method | host | #3 C2 · `tests/test_mutators.sh` |
 | View → manage escalation | Split rpcd ACL (`luci-app-usrmanage-session` / `-health` / app); server authoritative | host | `acl.d/luci-app-usrmanage.json` · `tests/test_health.sh` |
@@ -356,6 +357,14 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Fix.** `um_password_write` now verifies the stored shadow hash is `$6$` after every write (`um_user_hash_is_sha512`, field-anchored awk). A non-`$6$` result after `chpasswd` falls through to the pinned `passwd -a sha512` path, which is itself re-verified; if a weak hash still survives the write fails loudly (`password_hash_unverified`). Password never on argv in either path.
 
 **Proof.** host: `tests/test_password_sha512_pin.sh` (shimmed chpasswd/passwd: `$6$` accepted without fallback; weak `$1$` triggers the pinned fallback with `-a sha512` argv proof; double-weak fails loudly; password absent from tool argv; no-chpasswd environment same discipline). Red on revert (6 assertions). Full `./scripts/smoke-host.sh` green incl. shellcheck. lab: none — no new lab surface.
+
+### 2026-08-25 — Interactive CLI password prompt no-echo
+
+**Scope.** `um_password_capture_prompt` used `stty -echo 2>/dev/null || true`, so typed passwords echoed on stock OpenWrt images where the BusyBox `stty` applet is disabled (`BUSYBOX_DEFAULT_STTY=n`).
+
+**Fix.** `um_password_read_hidden`: when `stty` exists, `-echo` must succeed or the prompt fails closed with `use --password-fd`; when absent, BusyBox ash/bash `read -s`. EXIT/INT/TERM trap restores echo when using `stty`.
+
+**Proof.** host: `tests/test_password_prompt_echo.sh` (static: no soft-fail; PTY: `read -s` path via test hook; fake `stty` fail-closed). lab: none — no new lab surface.
 
 ### 2026-08-21 — Tampered LuCI logins fail closed (#150)
 
