@@ -19,7 +19,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-08-22 (#156 diagnostic-rpc 9-set) | none |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-08-25 (interactive CLI password no-echo) | none |
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-23 (#158 `show` write-ACL gate) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
@@ -362,7 +362,7 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 
 **Scope.** `um_password_capture_prompt` used `stty -echo 2>/dev/null || true`, so typed passwords echoed on stock OpenWrt images where the BusyBox `stty` applet is disabled (`BUSYBOX_DEFAULT_STTY=n`).
 
-**Fix.** `um_password_read_hidden`: when `stty` exists, `-echo` must succeed or the prompt fails closed with `use --password-fd`; when absent, BusyBox ash/bash `read -s`. EXIT/INT/TERM trap restores echo when using `stty`.
+**Fix.** `um_password_read_hidden`: when `stty` exists, `-echo` must succeed or the prompt fails closed with `use --password-fd`; when absent, BusyBox ash/bash `read -s`. Echo is restored after each read (no EXIT trap — preserves `um_tx_exit_hook`). `um_mut_add` captures password before `um_tx_begin`, matching `um_mut_passwd`.
 
 **Proof.** host: `tests/test_password_prompt_echo.sh` (static: no soft-fail; PTY: `read -s` path via test hook; fake `stty` fail-closed). lab: none — no new lab surface.
 

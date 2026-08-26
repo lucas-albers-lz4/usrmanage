@@ -46,6 +46,8 @@ fi
 PTY_OUT=$TMP/pty.out
 export LIB TMP PTY_OUT
 python3 <<'PY'
+from __future__ import annotations
+
 import os
 import pty
 import select

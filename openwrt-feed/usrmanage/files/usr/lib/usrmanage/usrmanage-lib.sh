@@ -1092,7 +1092,9 @@ um_password_read_hidden() {
 
 um_password_capture_prompt() {
 	# um_password_capture_prompt <user> — interactive TTY prompt; stages the
-	# accepted value in UM_PASSWORD_STAGED.
+	# accepted value in UM_PASSWORD_STAGED. Echo is restored after each read in
+	# um_password_read_hidden; do not install EXIT traps here — um_tx_exit_hook
+	# owns EXIT during mutators (BusyBox ash cannot chain traps).
 	_u=$1
 	_p1=
 	_p2=
@@ -1101,25 +1103,15 @@ um_password_capture_prompt() {
 		um_err "error: no TTY; use --password-fd"
 		return 1
 	fi
-	if command -v stty >/dev/null 2>&1; then
-		trap 'um_password_tty_echo_on' EXIT INT TERM
-	fi
-	um_password_read_hidden 'New password: ' || {
-		trap - EXIT INT TERM
-		return 1
-	}
+	um_password_read_hidden 'New password: ' || return 1
 	_p1=$UM_PASSWORD_READ_HIDDEN
 	UM_PASSWORD_READ_HIDDEN=
 	um_password_read_hidden 'Confirm password: ' || {
 		_p1=
-		trap - EXIT INT TERM
 		return 1
 	}
 	_p2=$UM_PASSWORD_READ_HIDDEN
 	UM_PASSWORD_READ_HIDDEN=
-	if command -v stty >/dev/null 2>&1; then
-		trap - EXIT INT TERM
-	fi
 	[ "$_p1" = "$_p2" ] || {
 		_p1=
 		_p2=
@@ -1947,10 +1939,23 @@ um_mut_add() {
 	_home="${USRMANAGE_HOME_ROOT}/${_name}"
 	_home_existed=0
 	[ -e "$_home" ] && _home_existed=1
+	# Policy gate before account-file mutation (same ordering as um_mut_passwd):
+	# capture once; commit only after um_create_user inside the tx snapshot.
+	if [ -n "$_pfd" ]; then
+		um_password_capture_fd "$_name" "$_pfd" || {
+			um_audit fail "$_name" fail password
+			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+		}
+	else
+		um_password_capture_prompt "$_name" || {
+			um_audit fail "$_name" fail password
+			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+		}
+	fi
 	um_tx_begin
 	um_incomplete_set "add:${_name}"
 	um_create_user "$_name" "$_role" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" create "error: create_failed"
-	um_set_password "$_name" "$_pfd" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+	um_password_commit "$_name" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
 	um_registry_add "$_name" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" registry "error: registry_failed"
 	if [ "$_luci_login" = "1" ] && command -v um_luci_login_enable_user >/dev/null 2>&1; then
 		if ! um_luci_login_enable_user "$_name"; then
