@@ -1058,27 +1058,90 @@ um_password_capture_fd() {
 	return 0
 }
 
+um_password_tty_echo_on() {
+	command -v stty >/dev/null 2>&1 || return 0
+	stty echo 2>/dev/null || true
+}
+
+um_password_read_hidden() {
+	# um_password_read_hidden <prompt> — read one line without echo; sets
+	# UM_PASSWORD_READ_HIDDEN. Uses stty -echo when stty exists (fail-closed
+	# on error); otherwise BusyBox ash/bash read -s (stock OpenWrt has no stty;
+	# -s is part of ASH_BASH_COMPAT, not ASH_READ_NCHARS).
+	_label="$1"
+	UM_PASSWORD_READ_HIDDEN=
+	printf '%s' "$_label" >&2
+	if [ "${USRMANAGE_TEST_OVERRIDES:-0}" = "1" ] && [ "${USRMANAGE_TEST_FORCE_READ_S:-0}" = "1" ]; then
+		# Host test hook: stock OpenWrt has no stty applet; desktop busybox may
+		# still expose stty as an applet — force the read -s path (#cli-no-echo).
+		# shellcheck disable=SC2039,SC3045
+		if ! IFS= read -s -r UM_PASSWORD_READ_HIDDEN; then
+			UM_POL_FAIL_REASON=read_error
+			printf '\n' >&2
+			return 1
+		fi
+	elif command -v stty >/dev/null 2>&1; then
+		# INT/TERM only — never EXIT (um_tx_exit_hook owns EXIT; BusyBox ash
+		# cannot chain traps). Prompt runs before um_tx_begin on add/passwd.
+		trap 'um_password_tty_echo_on; exit 130' INT
+		trap 'um_password_tty_echo_on; exit 143' TERM
+		if ! stty -echo 2>/dev/null; then
+			trap - INT TERM
+			UM_POL_FAIL_REASON=echo_disable
+			um_err "error: cannot disable terminal echo; use --password-fd"
+			return 1
+		fi
+		if ! IFS= read -r UM_PASSWORD_READ_HIDDEN; then
+			um_password_tty_echo_on
+			trap - INT TERM
+			UM_POL_FAIL_REASON=read_error
+			printf '\n' >&2
+			return 1
+		fi
+		um_password_tty_echo_on
+		trap - INT TERM
+	else
+		# shellcheck disable=SC2039,SC3045
+		if ! IFS= read -s -r UM_PASSWORD_READ_HIDDEN; then
+			UM_POL_FAIL_REASON=read_error
+			printf '\n' >&2
+			return 1
+		fi
+	fi
+	printf '\n' >&2
+	return 0
+}
+
 um_password_capture_prompt() {
 	# um_password_capture_prompt <user> — interactive TTY prompt; stages the
-	# accepted value in UM_PASSWORD_STAGED.
-	_u=$1
+	# accepted value in UM_PASSWORD_STAGED. Echo is restored after each read in
+	# um_password_read_hidden; do not install EXIT traps here — um_tx_exit_hook
+	# owns EXIT during mutators (BusyBox ash cannot chain traps).
+	# Sets UM_POL_FAIL_REASON on failure: no_tty | echo_disable | read_error |
+	# mismatch | policy tokens.
+	_u="$1"
+	_p1=
+	_p2=
 	UM_PASSWORD_STAGED=
+	UM_POL_FAIL_REASON=
 	if [ ! -t 0 ]; then
+		UM_POL_FAIL_REASON=no_tty
 		um_err "error: no TTY; use --password-fd"
 		return 1
 	fi
-	printf 'New password: ' >&2
-	stty -echo 2>/dev/null || true
-	IFS= read -r _p1 || true
-	stty echo 2>/dev/null || true
-	printf '\nConfirm password: ' >&2
-	stty -echo 2>/dev/null || true
-	IFS= read -r _p2 || true
-	stty echo 2>/dev/null || true
-	printf '\n' >&2
+	um_password_read_hidden 'New password: ' || return 1
+	_p1="$UM_PASSWORD_READ_HIDDEN"
+	UM_PASSWORD_READ_HIDDEN=
+	um_password_read_hidden 'Confirm password: ' || {
+		_p1=
+		return 1
+	}
+	_p2="$UM_PASSWORD_READ_HIDDEN"
+	UM_PASSWORD_READ_HIDDEN=
 	[ "$_p1" = "$_p2" ] || {
 		_p1=
 		_p2=
+		UM_POL_FAIL_REASON=mismatch
 		um_err "error: passwords do not match"
 		return 1
 	}
@@ -1089,7 +1152,7 @@ um_password_capture_prompt() {
 		return 1
 	}
 	_p2=
-	UM_PASSWORD_STAGED=$_p1
+	UM_PASSWORD_STAGED="$_p1"
 	_p1=
 	return 0
 }
@@ -1845,6 +1908,24 @@ um_mut_fail() {
 	um_die "$6"
 }
 
+um_password_capture_denied() {
+	# um_password_capture_denied <name> <role> — audit+die for capture/policy
+	# failures before mutation (shared by um_mut_add / um_mut_passwd).
+	_cap_name=$1
+	_cap_role=$2
+	_cap="${UM_POL_FAIL_REASON:-failed}"
+	case "$_cap" in
+		no_tty|echo_disable|mismatch|read_error)
+			um_audit denied "$_cap_name" denied "password_${_cap}" "$_cap_role"
+			um_die "error: password_${_cap}"
+			;;
+		*)
+			um_audit denied "$_cap_name" denied "password_${_cap}" "$_cap_role"
+			um_die "error: password_policy:${_cap}"
+			;;
+	esac
+}
+
 um_set_password() {
 	# um_set_password <user> <password_fd_or_empty>
 	if [ -n "$2" ]; then
@@ -1903,10 +1984,23 @@ um_mut_add() {
 	_home="${USRMANAGE_HOME_ROOT}/${_name}"
 	_home_existed=0
 	[ -e "$_home" ] && _home_existed=1
+	# Policy gate before account-file mutation (same ordering as um_mut_passwd):
+	# capture once; commit only after um_create_user inside the tx snapshot.
+	if [ -n "$_pfd" ]; then
+		um_password_capture_fd "$_name" "$_pfd" || um_password_capture_denied "$_name" "$_role"
+	else
+		um_password_capture_prompt "$_name" || um_password_capture_denied "$_name" "$_role"
+	fi
 	um_tx_begin
 	um_incomplete_set "add:${_name}"
 	um_create_user "$_name" "$_role" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" create "error: create_failed"
-	um_set_password "$_name" "$_pfd" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+	um_password_commit "$_name" || {
+		_pw_rc=$?
+		if [ "$_pw_rc" = "2" ]; then
+			um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password_hash_unverified "error: password_hash_unverified"
+		fi
+		um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" password "error: password_write_failed"
+	}
 	um_registry_add "$_name" || um_mut_fail "$_name" "$_role" "$_home" "$_home_existed" registry "error: registry_failed"
 	if [ "$_luci_login" = "1" ] && command -v um_luci_login_enable_user >/dev/null 2>&1; then
 		if ! um_luci_login_enable_user "$_name"; then
@@ -2067,15 +2161,9 @@ um_mut_passwd() {
 	# not destroy the target's live LuCI sessions or touch the shadow hash.
 	# The fd/prompt is consumed exactly once (staged); never read twice.
 	if [ -n "$_pfd" ]; then
-		um_password_capture_fd "$_name" "$_pfd" || {
-			um_audit fail "$_name" fail password
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
-		}
+		um_password_capture_fd "$_name" "$_pfd" || um_password_capture_denied "$_name" "$_role"
 	else
-		um_password_capture_prompt "$_name" || {
-			um_audit fail "$_name" fail password
-			um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
-		}
+		um_password_capture_prompt "$_name" || um_password_capture_denied "$_name" "$_role"
 	fi
 	um_incomplete_set "passwd:${_name}"
 	# Revoke before write so a failed revoke cannot leave live sessions after
