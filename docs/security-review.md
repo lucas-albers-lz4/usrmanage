@@ -1,5 +1,11 @@
 # Security audit ledger — usrmanage
 
+> **Status:** 40 controls in force · 5 proven in lab · 0 open findings.
+> **Last review:** 2026-08-25 (interactive CLI password prompt no-echo).
+> **Open findings:** none — last open (#159) closed by PR #161 (2026-08-23); the "Open findings" table below still shows it and needs a cleanup pass.
+> **Next step:** run a dated QEMU lab pass (readonly diagnostic/full + session revoke) before the next release.
+> **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab).
+
 Record of what was **checked**, **proven**, **fixed**, **accepted**, and **still open** (open items are candidates pending review/fix).
 Start here for future security / integrity reviews so prior work is not re-done blindly.
 
