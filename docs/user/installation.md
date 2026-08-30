@@ -33,7 +33,7 @@ apk update
 apk add usrmanage luci-app-usrmanage
 ```
 
-Verify the install:
+Make sure that the install works:
 
 ```sh
 usrmanage doctor

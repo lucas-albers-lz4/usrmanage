@@ -34,7 +34,7 @@ LuCI remains **opt-in** per managed user. Owned logins still use `$p$username` o
 
 **Goals**
 
-1. Readonly + owned LuCI can confirm device health without seeing secrets **in the web/ubus session**, and without changing config.
+1. Readonly + owned LuCI can make sure that the device is healthy without seeing secrets **in the web/ubus session**, and without changing configuration.
 2. Admin + owned LuCI gets **Full LuCI** (keys, backups, all apps) — intentional; prefer HTTPS / management VLAN.
 3. Secret classes in §5 never appear in readonly ubus replies, menus, or HTML.
 4. Demote/disable/delete still revoke sessions and rewrite owned ACL lists (existing lifecycle).
@@ -52,7 +52,7 @@ LuCI remains **opt-in** per managed user. Owned logins still use `$p$username` o
 | Actor | UNIX | Story |
 |-------|------|--------|
 | IT operator | `admin` | Several named people with root **on SSH**. Create/revoke via usrmanage at scale. Web: Full LuCI when enabled. |
-| Untrusted viewer | `readonly` | Customer/site contact troubleshoots with diagnostic menus (Overview/Routing/Realtime, Interfaces/Diagnostics, health) and **view-only** User Management. Cannot change config or mint users. Must not get Full LuCI / `luci-base` / mutator write. |
+| Untrusted viewer | `readonly` | Customer/site contact troubleshoots with diagnostic menus (Overview/Routing/Realtime, Interfaces/Diagnostics, health) and **view-only** User Management. Cannot change configuration or mint users. Must not get Full LuCI / `luci-base` / mutator write. |
 | Root CLI | root | Unchanged. |
 | Foreign web login | (not owned) | `luci-app-acl` still supported; never adopted. |
 
@@ -67,7 +67,7 @@ Readonly owned sessions **must not** obtain any of:
 | K3 | VPN / WG / IPSec / OpenVPN / OVPN / WireGuard private keys and PSKs | `uci` of those packages, luci-app-wireguard, backups |
 | K4 | UNIX password hashes, `root` password, dropbear keys | `file read` `/etc/shadow`, luci-mod-system backup |
 | K5 | Feed/opkg signing material, usrmanage secrets | file ACL, luci-app-opkg |
-| K6 | Full UCI dump / config backup | `luci-base` file list + cgi-io backup |
+| K6 | Full UCI dump / configuration backup | `luci-base` file list + cgi-io backup |
 | K7 | Syslog / dmesg (credentials, tokens, client IDs) | `luci-mod-status-logs` |
 | K8 | usrmanage **write** (mint admins, passwd, policy) | `luci-app-usrmanage` write |
 

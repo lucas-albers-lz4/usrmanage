@@ -54,7 +54,7 @@ Menu: **System → User Management**.
 
 ## Key fingerprints
 
-Verify the downloaded key **before** trusting it. Compare the SHA-256 hash of the fetched file against the value below.
+Make sure that the downloaded key is correct **before** you trust it. Compare the SHA-256 hash of the fetched file against the value below.
 
 | Key file | usign Key ID | SHA-256 |
 |----------|-------------|---------|
@@ -90,10 +90,10 @@ When a signing key is rotated:
    first. Preferred: an **overlap period** — publish the new key
    alongside the old (e.g. `public.key.new` / both fingerprints
    listed) and instruct operators to install the new key while the
-   old one still validates; only cut over after the new key is
+   old one is still valid; only cut over after the new key is
    distributed. At minimum, the release notes must state that
-   operators must re-fetch and re-add the key (verifying the new
-   fingerprint) before updating to the post-rotation release.
+   operators must re-fetch and re-add the key and make sure that the new
+   fingerprint is correct before updating to the post-rotation release.
 6. **Format-specific migration (luna r2 2026-08-10):** the mechanics
    differ per package manager — `opkg-key add /tmp/usrmanage.key`
    installs an ADDITIONAL usign key (the old one stays valid, so the
@@ -132,4 +132,4 @@ See also [developer/build-matrix.md](developer/build-matrix.md).
 
 ## Maintainer publish
 
-Tag `v*` → `.github/workflows/publish-packages.yml` builds the 4-cell matrix, verifies reproducibility, stages the feed, deploys `usrmanage-packages` gh-pages, uploads Release assets.
+Tag `v*` → `.github/workflows/publish-packages.yml` builds the 4-cell matrix, makes sure that the build is reproducible, stages the feed, deploys `usrmanage-packages` gh-pages, uploads Release assets.

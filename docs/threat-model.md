@@ -61,7 +61,7 @@ Passwords may traverse ubus JSON once (platform limitation) then are piped to CL
 | Signing key readable beyond the job that needs it | Written under `umask 077`, mode 0600; mode preservation through decode/normalize is [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R2 |
 | Secret key material published with the feed | Staging copies only public key material (`feed_publish_copy_keys`) |
 | Compromised third-party action or build tool signs the feed | Pin actions, SDK images, and signing tooling by digest/commit ([#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63) R3/R4) |
-| Operator trusts a substituted feed key on first install | Key fingerprints published for out-of-band verification. Install snippets verify the SHA-256 before trust ([#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64), fixed in [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81)) |
+| Operator trusts a substituted feed key on first install | Key fingerprints published for out-of-band checking. Install snippets make sure that the SHA-256 matches before trust ([#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64), fixed in [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81)) |
 
 ## Hard invariants
 

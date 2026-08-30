@@ -14,7 +14,7 @@ Cross-build **`usrmanage`** and **`luci-app-usrmanage`** with official [`ghcr.io
 | `x86-64` | `out/x86_64/<patch>/usrmanage/` |
 | `armsr-armv8` | `out/aarch64_generic/<patch>/usrmanage/` |
 
-Packages are **`PKGARCH:=all`**. Dual-arch SDK builds verify compile cleanliness; the signed Pages feed stages **x86-64** `_all` artifacts.
+Packages are **`PKGARCH:=all`**. Dual-arch SDK builds make sure that the packages compile cleanly; the signed Pages feed stages **x86-64** `_all` artifacts.
 
 ## Commands
 

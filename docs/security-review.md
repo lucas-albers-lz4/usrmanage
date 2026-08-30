@@ -154,7 +154,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 | [#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64) | Operator trust | [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81) — key fingerprints published; in-tree `packages-repo/README.md` gate restored in #117 |
 | [#65](https://github.com/lucas-albers-lz4/usrmanage/issues/65) P1/P2 | Product | [PR #83](https://github.com/lucas-albers-lz4/usrmanage/pull/83) — test-only env-override gate and multi-line / control-char password rejection |
 | [#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66) | Tooling | [PR #84](https://github.com/lucas-albers-lz4/usrmanage/pull/84) — portable stat helper, flock shim, and skip reasons. The full gate runs on macOS. |
-| [#95](https://github.com/lucas-albers-lz4/usrmanage/issues/95) | Lab / LuCI login | [PR #103](https://github.com/lucas-albers-lz4/usrmanage/pull/103) — qemu-smoke asserts live session revoke; `@.values.username` verified on 24.10.8 |
+| [#95](https://github.com/lucas-albers-lz4/usrmanage/issues/95) | Lab / LuCI login | [PR #103](https://github.com/lucas-albers-lz4/usrmanage/pull/103) — qemu-smoke asserts live session revoke; `@.values.username` checked on 24.10.8 |
 
 ## Accepted residuals
 
@@ -246,7 +246,7 @@ Scope: how design locks and “security done” claims were allowed to merge wit
 1. **Repeated find→fix waves** (#3, shadow-free #42/#49, Aug-9 #61–#65, LuCI login #92–#98) instead of requiring pre-merge proof for new security surfaces.
 2. **Unchecked lab boxes on feature PRs** that already claimed security locks (PR #87 listed session revoke; “Demote/disable revokes live ubus session” stayed unchecked at merge).
 3. **DRY_RUN / stub false-green** — `USRMANAGE_DRY_RUN=1` makes `um_session_revoke_user` return 0 without ubus; host tests counted as coverage while the live path was unproven (#95).
-4. **Lab verification scoped out of P0** (#90) without a release-blocking follow-up — became #95 only after another MCR pass.
+4. **Lab check scoped out of P0** (#90) without a release-blocking follow-up — became #95 only after another MCR pass.
 5. **Coverage map lag** — new LuCI login surface dates were not bumped on the feature PR; lab-class controls were not called out until after merge.
 
 **Process changes** (this revision of the ledger): proof-class column (`host` | `lab` | `manual`); false-green rule; feature PR gate and pre-merge review trigger in [Review procedure](#review-procedure); LuCI login lifecycle rows under [Controls in force](#controls-in-force); session revoke marked `lab` with qemu-smoke proof from #95 / PR #103.
@@ -270,7 +270,7 @@ L1 severity revised Medium → Low (drift requires a prior root write). Non-find
 
 ### 2026-08-12 — Multi-model pass (Opus / Grok / Sol / GLM)
 
-Scope: cooperative + adversarial audit after L1–L7 remediations on `main` @ `526ea73`. Angles: supply-chain/CI (Opus, deliberately not re-litigating LuCI login), adversarial exploit (Grok), integrity/races (Sol), control+ledger verification (GLM). Parent re-checked the highest-severity claims on host.
+Scope: cooperative + adversarial audit after L1–L7 remediations on `main` @ `526ea73`. Angles: supply-chain/CI (Opus, deliberately not re-litigating LuCI login), adversarial exploit (Grok), integrity/races (Sol), control+ledger check (GLM). Parent re-checked the highest-severity claims on host.
 
 **Gates:** `./scripts/smoke-host.sh` PASS · `python3 scripts/z3-verify.py --full` PASS. QEMU lab not re-run this pass.
 
@@ -285,7 +285,7 @@ Ledger hygiene in this revision: coverage-map dates bumped; L1–L7 moved to Res
 
 Scope: `.github/workflows/publish-packages.yml`, `packages-repo/README.md`, `scripts/lib/{sdk-matrix,feed-publish}.sh`, `scripts/{docker-sdk,shellcheck,publish-packages,verify-reproducible-build}.sh`, `docs/{release,security-review}.md`, `tests/test_sdk_matrix_digests.sh`.
 
-**Result:** R1–R6 and P1 closed. Checkout no longer persists credentials into the SDK bind mount; feed README fingerprint gates restored in-tree; signing tools exported off `/builder` before secret mounts; SDK digests pinned at first pull with cache for manifest; tag shape validated without `${{ }}` in `run:`; `environment: feed-publish` added (operator must configure reviewers); bash shellcheck is blocking. Host smoke + digest tests green. Residual operational notes: configure Environment in GitHub settings; optional checkout-before-validate ordering.
+**Result:** R1–R6 and P1 closed. Checkout no longer persists credentials into the SDK bind mount; feed README fingerprint gates restored in-tree; signing tools exported off `/builder` before secret mounts; SDK digests pinned at first pull with cache for manifest; tag shape checked without `${{ }}` in `run:`; `environment: feed-publish` added (operator must configure reviewers); bash shellcheck is blocking. Host smoke + digest tests green. Residual operational notes: configure Environment in GitHub settings; optional checkout-before-validate ordering.
 
 ### 2026-08-12 — On-device L8–L11 remediation (#118 partial)
 
@@ -321,11 +321,11 @@ Scope: `um_incomplete_set`, `scripts/validate-feed-keys.sh`, `scripts/lib/feed-p
 
 Scope: `scripts/lib/feed-publish.sh` opkg/apk sign steps; first publish after the 2026-08-15 R7 closeout failed.
 
-**Root cause (two bugs).** (1) The R7 change added `--network none` to `docker compose run`, but **Compose v2's `run` subcommand has no `--network` flag** — the sign step died with `unknown flag: --network` before doing anything. (2) Independent of that, OpenWrt SDK `staging_dir/host/bin/{usign,mkhash,apk}` are **runas wrapper scripts**, not plain binaries: `bin/<tool>` execs `../lib/ld-linux-x86-64.so.2` with `LD_PRELOAD=../lib/runas.so` against the hidden real binary `bin/.<tool>.bin`. Exporting only the bare wrapper (R2/R7 design) leaves `../lib` and `.bin` siblings unresolvable — verified across 21.02.7 / 24.10.8 / 25.12.5 SDK tarballs.
+**Root cause (two bugs).** (1) The R7 change added `--network none` to `docker compose run`, but **Compose v2's `run` subcommand has no `--network` flag** — the sign step died with `unknown flag: --network` before doing anything. (2) Independent of that, OpenWrt SDK `staging_dir/host/bin/{usign,mkhash,apk}` are **runas wrapper scripts**, not plain binaries: `bin/<tool>` execs `../lib/ld-linux-x86-64.so.2` with `LD_PRELOAD=../lib/runas.so` against the hidden real binary `bin/.<tool>.bin`. Exporting only the bare wrapper (R2/R7 design) leaves `../lib` and `.bin` siblings unresolvable — checked across 21.02.7 / 24.10.8 / 25.12.5 SDK tarballs.
 
 **Fix.** (1) Sign step switched from `docker compose run --network none` to `docker run --rm --network none --platform linux/amd64` with the digest-pinned `$SDK_MATRIX_IMAGE` (fwlive's R7 pattern; no `/builder` mount, keys `:ro`). (2) Export copies the wrapper **and** the hidden `.bin` into `tools_dir` and the shared-lib tree (`*.so*` only) into a separate `lib_dir`, mounted as siblings at `/feed/tools` + `/feed/lib`; export runs in the dedicated `sdk-export` compose service (SDK volume only, **no workspace mount**) as the invoking uid — the workspace holds the signing keys, so the export container must never see them. `validate-feed-keys.sh` was already correct (runs usign in-image with `--network none`).
 
-**Result.** `bash -n` clean; fix verified by re-running the publish workflow (v0.1.5). Controls in force unchanged — the R7 security properties (digest pin before secret mount, `--network none`, no `/builder` in secret containers, keys never visible to the export container) are preserved.
+**Result.** `bash -n` clean; fix checked by re-running the publish workflow (v0.1.5). Controls in force unchanged — the R7 security properties (digest pin before secret mount, `--network none`, no `/builder` in secret containers, keys never visible to the export container) are preserved.
 
 ### 2026-08-19 — Readonly observer LuCI (HARD path, spec revision 2)
 
@@ -357,7 +357,7 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 
 **Scope.** From the same zen security pass as #149/#150: `um_password_write` preferred `chpasswd`, which hashes with the BusyBox build-time `CONFIG_FEATURE_DEFAULT_PASSWD_ALGO` (may be md5/des on some images/rebuilds) — the documented D6 control ("chpasswd/passwd -a sha512 fed on stdin only", security-audit-luci-login-2026-08-12:211) was not enforced on the preferred path.
 
-**Fix.** `um_password_write` now verifies the stored shadow hash is `$6$` after every write (`um_user_hash_is_sha512`, field-anchored awk). A non-`$6$` result after `chpasswd` falls through to the pinned `passwd -a sha512` path, which is itself re-verified; if a weak hash still survives the write fails loudly (`password_hash_unverified`). Password never on argv in either path.
+**Fix.** `um_password_write` now makes sure that the stored shadow hash is `$6$` after every write (`um_user_hash_is_sha512`, field-anchored awk). A non-`$6$` result after `chpasswd` falls through to the pinned `passwd -a sha512` path, which is itself checked again; if a weak hash still survives the write fails loudly (`password_hash_unverified`). Password never on argv in either path.
 
 **Proof.** host: `tests/test_password_sha512_pin.sh` (shimmed chpasswd/passwd: `$6$` accepted without fallback; weak `$1$` triggers the pinned fallback with `-a sha512` argv proof; double-weak fails loudly; password absent from tool argv; no-chpasswd environment same discipline). Red on revert (6 assertions). Full `./scripts/smoke-host.sh` green incl. shellcheck. lab: none — no new lab surface.
 
