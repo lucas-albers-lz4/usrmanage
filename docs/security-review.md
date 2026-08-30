@@ -333,7 +333,7 @@ Scope: owned LuCI ACL matrix, `usrmanage.health` RPC, demote order, luci-app upg
 
 **Locks implemented.** Readonly owned reads = session + health only (no app list/enum). Session ACL has no `uci`. Health method is declared read, takes no params, ignores the request body, and emits a frozen schema (no WAN IP / SSID / MAC / lease lists). Admin default stays app scope; `*` only via `--scope full` (refused on readonly and if rpcd is unparsable). Demote rewrites ACLs to health before revoke, revokes twice, and fails closed if a SID remains when ubus is present. luci-app uci-defaults migrate owned readonly logins with `um_luci_login_ours_index` + flock/tx; never unmarked/`root`; never auto-`*`.
 
-**Proof.** Host: `tests/test_luci_login.sh`, `tests/test_health.sh`, `scripts/smoke-package-layout.sh`. Lab asserts added to `scripts/qemu-smoke-usrmanage.sh` (readonly deny/allow, admin app vs full wireless, demote leftover SID). DRY_RUN is not lab proof. SSH residual for the same UNIX password remains an accepted LuCI-only guarantee ([spec appendix §12 / §16](developer/readonly-observer-luci-appendix.md#12-threats-this-spec-accepts-or-rejects)).
+**Proof.** Host: `tests/test_luci_login.sh`, `tests/test_health.sh`, `scripts/smoke-package-layout.sh`. Lab asserts added to `scripts/qemu-smoke-usrmanage.sh` (readonly deny/allow, admin app vs full wireless, demote leftover SID). DRY_RUN is not lab proof. Residual SSH access for the same UNIX password remains an accepted LuCI-only guarantee ([spec appendix §12 / §16](developer/readonly-observer-luci-appendix.md#12-threats-this-spec-accepts-or-rejects)).
 
 ### 2026-08-20 — Role-locked LuCI scopes (diagnostic / full)
 
