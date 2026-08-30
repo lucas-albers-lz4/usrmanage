@@ -249,7 +249,7 @@ makes the revocation claim true and unblocks the #107 lab asserts.
 ## 8. Prevention notes
 
 Both new findings are *classes*, not one-offs, and both were invisible to the existing
-gates. See [security-prevention-plan.md](security-prevention-plan.md):
+gates. See [security-prevention-plan.md](../security-prevention-plan.md):
 
 - No test asserts the **mode** of any file usrmanage rewrites. A control that says "fixed
   mode" needs a mode assertion, not a comment.

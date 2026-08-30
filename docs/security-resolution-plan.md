@@ -4,7 +4,7 @@
 
 Action plan for the **remaining open `security` issue** filed from the 2026-08-23 read-only
 pass on `main@a0020ba`. Ledger: [security-review.md](security-review.md). Process locks:
-[archive/security-prevention-plan.md](archive/security-prevention-plan.md), [AGENTS.md](../AGENTS.md).
+[security-prevention-plan.md](security-prevention-plan.md), [AGENTS.md](../AGENTS.md).
 
 **Scope:** security issues only. Non-security backlog (e.g. [#15](https://github.com/lucas-albers-lz4/usrmanage/issues/15) docs/screenshots) is out of scope here.
 
@@ -51,7 +51,7 @@ CodeRabbit rules: one stable diff per round; do not push mid-round; rate-limit =
 
 ### Same-PR ledger requirements
 
-Per [archive/security-prevention-plan.md](archive/security-prevention-plan.md) and [security-review.md § Review procedure](security-review.md#review-procedure):
+Per [security-prevention-plan.md](security-prevention-plan.md) and [security-review.md § Review procedure](security-review.md#review-procedure):
 
 1. Update **Open findings** / **Resolved findings** for the tracking issue.
 2. Bump **coverage map** dates for touched surfaces.
@@ -209,6 +209,6 @@ Both PRs touch `docs/security-review.md` — **#160 merged first**; rebase #161 
 ## Related
 
 - [security-review.md](security-review.md) — ledger and review procedure
-- [archive/security-prevention-plan.md](archive/security-prevention-plan.md) — PR checklist and proof classes
+- [security-prevention-plan.md](security-prevention-plan.md) — PR checklist and proof classes
 - [developer/coderabbit.md](developer/coderabbit.md) — draft/ready protocol
 - [AGENTS.md](../AGENTS.md) — product locks and merge gates

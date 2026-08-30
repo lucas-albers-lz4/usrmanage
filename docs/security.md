@@ -101,4 +101,4 @@ Installing from the [signed feed](binary-feed.md) bootstraps trust on first use.
 
 ## Future reviews
 
-Procedure, scope map, proof classes (`host` / `lab` / `manual`), and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state. Do not treat host DRY_RUN stubs as proof of lab-class controls (e.g. live ubus session revoke). Prevention gates: [archive/security-prevention-plan.md](archive/security-prevention-plan.md). Latest LuCI-login deep dive: [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md).
+Procedure, scope map, proof classes (`host` / `lab` / `manual`), and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state. Do not treat host DRY_RUN stubs as proof of lab-class controls (e.g. live ubus session revoke). Prevention gates: [security-prevention-plan.md](security-prevention-plan.md). Latest LuCI-login deep dive: [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md).

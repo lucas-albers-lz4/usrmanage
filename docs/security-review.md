@@ -266,7 +266,7 @@ Scope: LuCI login lifecycle, session revoke, ACL ownership, set-role interaction
 
 The file-mode class has now produced four instances (#63 R2, #109 L5, #109 L6, #111 L7) and no test in this repo has ever asserted the mode of a file the package writes. That argues for running rule 1 of the prevention plan as a single sweep across every file `usrmanage` creates, rather than reactively per report.
 
-L1 severity revised Medium → Low (drift requires a prior root write). Non-findings re-confirmed: CLI arg parser cannot be turned into option injection from ubus, rpcd argv/password path, audit token grammar, no XSS sink in the view, ACL split, env-override gate, symlink refusal on home create/remove, sudoers `0440` static `%wheel`, SHA-pinned CI. Prevention plan: [archive/security-prevention-plan.md](archive/security-prevention-plan.md).
+L1 severity revised Medium → Low (drift requires a prior root write). Non-findings re-confirmed: CLI arg parser cannot be turned into option injection from ubus, rpcd argv/password path, audit token grammar, no XSS sink in the view, ACL split, env-override gate, symlink refusal on home create/remove, sudoers `0440` static `%wheel`, SHA-pinned CI. Prevention plan: [security-prevention-plan.md](security-prevention-plan.md).
 
 ### 2026-08-12 — Multi-model pass (Opus / Grok / Sol / GLM)
 
@@ -423,7 +423,7 @@ deep-dive material now lives there:
 
 - Audit: [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md)
 - Brief: [archive/security-opus-luci-login-brief.md](archive/security-opus-luci-login-brief.md)
-- Prevention plan: [archive/security-prevention-plan.md](archive/security-prevention-plan.md)
+- Prevention plan: [security-prevention-plan.md](security-prevention-plan.md)
 
 **Key result (2026-08-12 readonly observer):** owned LuCI ACLs are role-locked —
 admin → full (`*`), readonly → diagnostic. Design: [developer/readonly-observer-luci.md](developer/readonly-observer-luci.md);
@@ -439,6 +439,6 @@ operational summary: [user/roles-and-acl.md](user/roles-and-acl.md).
 - [release.md](release.md) — tagging and the publish workflow
 - [archive/security-opus-luci-login-brief.md](archive/security-opus-luci-login-brief.md) — Opus/read-only audit brief (LuCI login)
 - [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md) — 2026-08-12 deep-dive results
-- [archive/security-prevention-plan.md](archive/security-prevention-plan.md) — PR gates / false-green prevention
+- [security-prevention-plan.md](security-prevention-plan.md) — PR gates / false-green prevention
 - [security-resolution-plan.md](security-resolution-plan.md) — security resolution plan for #158 / #159 (2026-08-23)
 - Open security work: the `security` label — <https://github.com/lucas-albers-lz4/usrmanage/labels/security>
