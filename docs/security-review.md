@@ -423,9 +423,10 @@ deep-dive material now lives there:
 
 - Audit: [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md)
 - Brief: [archive/security-opus-luci-login-brief.md](archive/security-opus-luci-login-brief.md)
-- Prevention plan: [security-prevention-plan.md](security-prevention-plan.md)
 
-**Key result (2026-08-12 readonly observer):** owned LuCI ACLs are role-locked —
+The prevention plan stays live as process SoT: [security-prevention-plan.md](security-prevention-plan.md).
+
+**Key result (2026-08-20 role-locked LuCI):** owned LuCI ACLs are role-locked —
 admin → full (`*`), readonly → diagnostic. Design: [developer/readonly-observer-luci.md](developer/readonly-observer-luci.md);
 operational summary: [user/roles-and-acl.md](user/roles-and-acl.md).
 
