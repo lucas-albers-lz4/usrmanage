@@ -24,7 +24,7 @@ This package cannot enforce device TLS configuration; operators must.
 
 ## Remote syslog (deployment guidance)
 
-Example (device-side): make sure that `logd` / `syslog-ng` / remote relay receives `usrmanage` tagged lines. Exact UCI varies by image; goal is off-box retention of grant/remove/role events.
+Example (device-side): make sure that `logd` / `syslog-ng` / remote relay receives `usrmanage`-tagged lines. Exact UCI varies by image; goal is off-box retention of grant/remove/role events.
 
 ## Password handling
 
