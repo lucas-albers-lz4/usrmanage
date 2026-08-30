@@ -253,7 +253,7 @@ Scope: how design locks and “security done” claims were allowed to merge wit
 
 ### 2026-08-12 — Exhaustive pass: LuCI login ownership + on-device file discipline
 
-Scope: LuCI login lifecycle, session revoke, ACL ownership, set-role interaction with owned logins, CLI arg parser, rpcd plugin, ACL JSON, LuCI view, package Makefile / uci-defaults / sudoers, CI workflows. Brief: [security-opus-luci-login-brief.md](security-opus-luci-login-brief.md). Full write-up with reproductions: [security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md).
+Scope: LuCI login lifecycle, session revoke, ACL ownership, set-role interaction with owned logins, CLI arg parser, rpcd plugin, ACL JSON, LuCI view, package Makefile / uci-defaults / sudoers, CI workflows. Brief: [archive/security-opus-luci-login-brief.md](archive/security-opus-luci-login-brief.md). Full write-up with reproductions: [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md).
 
 **Method:** line-level review cross-checked against upstream OpenWrt sources rather than against our own docs — `rpcd/session.c` (login/ACL resolution, crypt-hash passwords), `libuci/file.c` (real config grammar), `rules.mk` + `package/system/rpcd/Makefile` (installed file mode). Every finding reproduced in a throwaway host harness before filing.
 
@@ -266,7 +266,7 @@ Scope: LuCI login lifecycle, session revoke, ACL ownership, set-role interaction
 
 The file-mode class has now produced four instances (#63 R2, #109 L5, #109 L6, #111 L7) and no test in this repo has ever asserted the mode of a file the package writes. That argues for running rule 1 of the prevention plan as a single sweep across every file `usrmanage` creates, rather than reactively per report.
 
-L1 severity revised Medium → Low (drift requires a prior root write). Non-findings re-confirmed: CLI arg parser cannot be turned into option injection from ubus, rpcd argv/password path, audit token grammar, no XSS sink in the view, ACL split, env-override gate, symlink refusal on home create/remove, sudoers `0440` static `%wheel`, SHA-pinned CI. Prevention plan: [security-prevention-plan.md](security-prevention-plan.md).
+L1 severity revised Medium → Low (drift requires a prior root write). Non-findings re-confirmed: CLI arg parser cannot be turned into option injection from ubus, rpcd argv/password path, audit token grammar, no XSS sink in the view, ACL split, env-override gate, symlink refusal on home create/remove, sudoers `0440` static `%wheel`, SHA-pinned CI. Prevention plan: [archive/security-prevention-plan.md](archive/security-prevention-plan.md).
 
 ### 2026-08-12 — Multi-model pass (Opus / Grok / Sol / GLM)
 
@@ -355,7 +355,7 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 
 ### 2026-08-21 — SHA-512 pin on the preferred password path (#148)
 
-**Scope.** From the same zen security pass as #149/#150: `um_password_write` preferred `chpasswd`, which hashes with the BusyBox build-time `CONFIG_FEATURE_DEFAULT_PASSWD_ALGO` (may be md5/des on some images/rebuilds) — the documented D6 control ("chpasswd/passwd -a sha512 fed on stdin only", security-audit-luci-login-2026-08-12:211) was not enforced on the preferred path.
+**Scope.** From the same zen security pass as #149/#150: `um_password_write` preferred `chpasswd`, which hashes with the BusyBox build-time `CONFIG_FEATURE_DEFAULT_PASSWD_ALGO` (may be md5/des on some images/rebuilds) — the documented D6 control ("chpasswd/passwd -a sha512 fed on stdin only", archive/security-audit-luci-login-2026-08-12.md:211) was not enforced on the preferred path.
 
 **Fix.** `um_password_write` now makes sure that the stored shadow hash starts with `$6$` after every write (`um_user_hash_is_sha512`, field-anchored awk). A non-`$6$` result after `chpasswd` falls through to the pinned `passwd -a sha512` path, which is itself checked again; if a weak hash still survives the write fails loudly (`password_hash_unverified`). Password never on argv in either path.
 
@@ -415,6 +415,20 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 8. **Pre-merge review trigger:** any PR that adds a mutator, rpcd method, session/ACL write, or release/signing step gets a security-review pass against this ledger *before* merge (Cursor security-review / Bugbot when available), not only post-merge external MCR.
 9. Sibling repos (e.g. fwlive) may share patterns; treat cross-repo notes as candidates, not as an audit of that repo.
 
+## Post-review actions
+
+Post-incident analyses are archived under `docs/archive/` once their findings are
+closed in the ledger, keeping the live docs concise. The 2026-08-12 LuCI-login
+deep-dive material now lives there:
+
+- Audit: [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md)
+- Brief: [archive/security-opus-luci-login-brief.md](archive/security-opus-luci-login-brief.md)
+- Prevention plan: [archive/security-prevention-plan.md](archive/security-prevention-plan.md)
+
+**Key result (2026-08-12 readonly observer):** owned LuCI ACLs are role-locked —
+admin → full (`*`), readonly → diagnostic. Design: [developer/readonly-observer-luci.md](developer/readonly-observer-luci.md);
+operational summary: [user/roles-and-acl.md](user/roles-and-acl.md).
+
 ## Related
 
 - [security.md](security.md) — operator / deployment guidance
@@ -423,8 +437,8 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 - [developer/testing.md](developer/testing.md) — host smoke / QEMU / Playwright, incl. host prerequisites
 - [binary-feed.md](binary-feed.md) — signed feed layout and operator install path
 - [release.md](release.md) — tagging and the publish workflow
-- [security-opus-luci-login-brief.md](security-opus-luci-login-brief.md) — Opus/read-only audit brief (LuCI login)
-- [security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md) — 2026-08-12 deep-dive results
-- [security-prevention-plan.md](security-prevention-plan.md) — PR gates / false-green prevention
+- [archive/security-opus-luci-login-brief.md](archive/security-opus-luci-login-brief.md) — Opus/read-only audit brief (LuCI login)
+- [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md) — 2026-08-12 deep-dive results
+- [archive/security-prevention-plan.md](archive/security-prevention-plan.md) — PR gates / false-green prevention
 - [security-resolution-plan.md](security-resolution-plan.md) — security resolution plan for #158 / #159 (2026-08-23)
 - Open security work: the `security` label — <https://github.com/lucas-albers-lz4/usrmanage/labels/security>
