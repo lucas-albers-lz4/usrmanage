@@ -1,7 +1,7 @@
 # Security prevention plan — usrmanage
 
 Second-priority follow-on from the 2026-08-12 LuCI-login deep dive.
-Audit results: [security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md).
+Audit results: [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md).
 Ledger: [security-review.md](security-review.md).
 
 **Goal:** stop another find→fix wave by making proof and DiD requirements enforceable on PRs — not more prose alone.

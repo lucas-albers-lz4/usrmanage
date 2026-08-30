@@ -1,7 +1,7 @@
 # Security audit — 2026-08-12 (LuCI login + on-device file discipline)
 
 Read-only pass against the brief in [security-opus-luci-login-brief.md](security-opus-luci-login-brief.md).
-Ledger: [security-review.md](security-review.md). No remediation code was written in this pass.
+Ledger: [security-review.md](../security-review.md). No remediation code was written in this pass.
 
 Scope actually read line by line: `usrmanage` CLI arg parser, `usrmanage-lib.sh`,
 `usrmanage-luci-login.sh`, rpcd plugin, `acl.d/luci-app-usrmanage.json`, LuCI view,
@@ -131,7 +131,7 @@ package exists to provision — can then read the rpcd login table: usernames, A
 and any non-`$p$` **crypt hashes** stored by other principals (an ordinary pattern for
 API-only rpcd accounts). Hash disclosure enables offline cracking and credential reuse.
 It also silently contradicts the documented invariant in
-[security.md](security.md#account-file-write-safety-v013) that atomic replaces end at a
+[security.md](../security.md#account-file-write-safety-v013) that atomic replaces end at a
 *fixed, correct* mode.
 
 This is the same defect class as [#63](https://github.com/lucas-albers-lz4/usrmanage/issues/63)
@@ -249,7 +249,7 @@ makes the revocation claim true and unblocks the #107 lab asserts.
 ## 8. Prevention notes
 
 Both new findings are *classes*, not one-offs, and both were invisible to the existing
-gates. See [security-prevention-plan.md](security-prevention-plan.md):
+gates. See [security-prevention-plan.md](../security-prevention-plan.md):
 
 - No test asserts the **mode** of any file usrmanage rewrites. A control that says "fixed
   mode" needs a mode assertion, not a comment.

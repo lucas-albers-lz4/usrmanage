@@ -64,8 +64,8 @@ Managed users default to **SSH-only**. Opt-in LuCI logins created by usrmanage:
 
 - Always use `$p$username` (UNIX shadow). Empty or locked (`!`/`*`) shadow hashes are refused — rpcd treats an empty hash as **any password**.
 - Are marked `option usrmanage '1'` and only mutated when marker + registry + `$p$` match.
-- **Readonly owned:** session + health ACL only — Device health menu; no user table, wireless keys, or configuration backups over ubus.
-- **Admin owned (default app scope):** User Management ACL only (same as pre-0.1.7). **Full LuCI (`*`)** only with explicit `--scope full` / admin scope control — never auto-granted on upgrade.
+- **Readonly-owned:** diagnostic 9-set reads (session, health, app view-only, diagnostic-rpc, Status Overview/Routing/Realtime, Network Interfaces/Diagnostics) — Device health plus view-only User Management; no mutators, no `luci-base` backups, no `getWirelessDevices`. Package-scoped wireless UCI via diagnostic-rpc remains accepted residual #156.
+- **Admin-owned:** always Full LuCI (`*`, `usrmanage_scope=full`). Legacy `app` scope migrates to full on upgrade. There is no `--scope` picker.
 - Revoke the target user's ubus sessions on disable, role change, delete, and password change (live sessions keep ACLs until destroyed).
 
 The **no-secrets guarantee applies to LuCI/ubus sessions only.** A readonly account with SSH can still reach K1–K7 classes via the shell with the same UNIX password; that residual is documented, not hidden.
@@ -101,4 +101,4 @@ Installing from the [signed feed](binary-feed.md) bootstraps trust on first use.
 
 ## Future reviews
 
-Procedure, scope map, proof classes (`host` / `lab` / `manual`), and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state. Do not treat host DRY_RUN stubs as proof of lab-class controls (e.g. live ubus session revoke). Prevention gates: [security-prevention-plan.md](security-prevention-plan.md). Latest LuCI-login deep dive: [security-audit-luci-login-2026-08-12.md](security-audit-luci-login-2026-08-12.md).
+Procedure, scope map, proof classes (`host` / `lab` / `manual`), and open findings live in [security-review.md](security-review.md) — that ledger is the single source of truth for review state. Do not treat host DRY_RUN stubs as proof of lab-class controls (e.g. live ubus session revoke). Prevention gates: [security-prevention-plan.md](security-prevention-plan.md). Latest LuCI-login deep dive: [archive/security-audit-luci-login-2026-08-12.md](archive/security-audit-luci-login-2026-08-12.md).
