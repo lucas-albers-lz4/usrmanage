@@ -34,7 +34,7 @@ LuCI remains **opt-in** per managed user. Owned logins still use `$p$username` o
 
 **Goals**
 
-1. Readonly + owned LuCI can make sure that the device is healthy without seeing secrets **in the web/ubus session**, and without changing configuration.
+1. Readonly + owned LuCI can show that the device is healthy without seeing secrets **in the web/ubus session**, and without changing configuration.
 2. Admin + owned LuCI gets **Full LuCI** (keys, backups, all apps) — intentional; prefer HTTPS / management VLAN.
 3. Secret classes in §5 never appear in readonly ubus replies, menus, or HTML.
 4. Demote/disable/delete still revoke sessions and rewrite owned ACL lists (existing lifecycle).

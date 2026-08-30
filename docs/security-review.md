@@ -28,10 +28,17 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-08-25 (interactive CLI password no-echo) | none |
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-23 (#158 `show` write-ACL gate) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
+<<<<<<< HEAD
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
 | CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-25 (#159 closed by PR #161) | none |
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-25 (#159 closed by PR #161) | none |
 | Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-25 (#159 closed by PR #161) | none |
+=======
+| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI configuration, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-23 (#159 defer feed keys until after SDK builds) | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) |
+| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-23 (#159 publish workflow key ordering) | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) |
+| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-23 (#159 workspace key-free during `sdk` cells) | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) |
+>>>>>>> 2aae813 (docs(ste): fix review nits on make sure that / configuration)
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
 | QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-22 (#156 page RPC allow + deny luci-base/getWirelessDevices; Playwright 4/4) | none open (I3 accepted residual) — fixtures remain lab-only by design |
 
@@ -89,7 +96,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Demote/delete last managed admin | `um_count_managed_admins` deny | host | `tests/test_mutators.sh` · QEMU smoke |
 | Incomplete op with no record | `incomplete` marker (`0640`/`0:0`, not ambient umask) + `doctor`; failed restore keeps snapdir | host | `um_doctor_checks` · `tests/test_mutators.sh` (L12) |
 | Broken sudoers fragment | Minimal static `%wheel` rule; Makefile + uci-defaults `chmod 0440`; `doctor` asserts mode 0440 via validated `stat` output or BusyBox-safe `find -maxdepth 0 -perm 440` (symlink rejected before `[ -f ]`), then `visudo -cf`. Wheel missing with no live managed users is **warn** only (created on first add). Doctor does not chmod or create wheel (read ACL). | host | `um_doctor_checks` · `scripts/smoke-package-layout.sh` · `tests/test_mutators.sh` (V3 0644) · `tests/test_doctor.sh` (stat stub / garbage / symlink / wheel severity) |
-| Upgrade/remove wiping managed state | `users`, sudoers, UCI config are conffiles | host | package Makefile |
+| Upgrade/remove wiping managed state | `users`, sudoers, UCI configuration are conffiles | host | package Makefile |
 
 ### LuCI login lifecycle
 
