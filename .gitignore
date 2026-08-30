@@ -45,3 +45,6 @@ playwright/.cache/
 
 # Cursor / Playwright MCP
 .cursor/browser-output/
+
+# Wave working checkouts (sibling pattern; not tracked)
+/wave/

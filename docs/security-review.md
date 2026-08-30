@@ -1,5 +1,11 @@
 # Security audit ledger — usrmanage
 
+> **Status:** 40 controls in force · 5 proven in lab · 0 open findings.
+> **Last review:** 2026-08-25 (interactive CLI password prompt no-echo).
+> **Open findings:** none — last open (#159) closed by PR #161 (merged 2026-08-25).
+> **Next step:** run a dated QEMU lab pass (readonly diagnostic/full + session revoke) before the next release.
+> **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab).
+
 Record of what was **checked**, **proven**, **fixed**, **accepted**, and **still open** (open items are candidates pending review/fix).
 Start here for future security / integrity reviews so prior work is not re-done blindly.
 
@@ -23,9 +29,9 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-08-23 (#158 `show` write-ACL gate) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI config, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
-| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-23 (#159 defer feed keys until after SDK builds) | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) |
-| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-23 (#159 publish workflow key ordering) | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) |
-| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-23 (#159 workspace key-free during `sdk` cells) | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-25 (#159 closed by PR #161) | none |
+| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-25 (#159 closed by PR #161) | none |
+| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-25 (#159 closed by PR #161) | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
 | QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-08-22 (#156 page RPC allow + deny luci-base/getWirelessDevices; Playwright 4/4) | none open (I3 accepted residual) — fixtures remain lab-only by design |
 
@@ -120,11 +126,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 ## Open findings
 
-One open security finding ([#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159), tracked below). #148–#150 closed 2026-08-21; #158 merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160). I3 remains an accepted residual.
-
-| Issue | IDs | Severity | Area | Notes |
-|-------|-----|----------|------|-------|
-| [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) | — | Low | publish / supply chain | Feed signing keys written before SDK build cells — fix PR in review |
+None. #148–#150 closed 2026-08-21; #158 merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160); #159 closed by [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) (2026-08-25). I3 remains an accepted residual.
 
 ## Resolved findings
 
@@ -132,6 +134,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
+| [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) | publish / supply chain | [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) — feed signing keys written only after SDK build cells and the reproducible-build gate |
 | [#158](https://github.com/lucas-albers-lz4/usrmanage/issues/158) | rpcd ACL | [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160) — `show` requires write ACL; readonly fails closed with `access_denied` (no CLI / no existence oracle) |
 | [#150](https://github.com/lucas-albers-lz4/usrmanage/issues/150) | LuCI login | merged 2026-08-21 — tampered owned login auto-revoke + doctor `luci_tampered` error |
 | [#148](https://github.com/lucas-albers-lz4/usrmanage/issues/148) | password | merged 2026-08-21 — SHA-512 verify-then-fallback on `um_password_write` |
