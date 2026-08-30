@@ -13,7 +13,7 @@ Readonly owned sessions **must not** obtain any of:
 | K3 | VPN / WG / IPSec / OpenVPN / OVPN / WireGuard private keys and PSKs | `uci` of those packages, luci-app-wireguard, backups |
 | K4 | UNIX password hashes, `root` password, dropbear keys | `file read` `/etc/shadow`, luci-mod-system backup |
 | K5 | Feed/opkg signing material, usrmanage secrets | file ACL, luci-app-opkg |
-| K6 | Full UCI dump / config backup | `luci-base` file list + cgi-io backup |
+| K6 | Full UCI dump / configuration backup | `luci-base` file list + cgi-io backup |
 | K7 | Syslog / dmesg (credentials, tokens, client IDs) | `luci-mod-status-logs` |
 | K8 | usrmanage **write** (mint admins, passwd, policy) | `luci-app-usrmanage` write |
 
@@ -126,7 +126,7 @@ Upgrade **must not** widen admin web privilege. Admin is role-locked to full sco
 
 **Lab (qemu-smoke, proof class `lab`)**
 
-- Readonly `session.access` **deny** config-level `uci read` openvpn (non-diagnostic), `uci write` wireless/network, `luci-rpc.getWirelessDevices`, `luci-base` (file list of `/`); `file.read` `/etc/shadow`; `usrmanage.add` (mutators); `log.read`. **Allow** the diagnostic 9-set reads including `luci-app-usrmanage-diagnostic-rpc` (`network.interface` `dump`, `uci` `get`/`changes`, `luci-rpc` getBoardJSON/getHostHints/getNetworkDevices — **not** getWirelessDevices). Package-scoped wireless UCI read via network-config remains a documented residual for stock Network pages (#156).
+- Readonly `session.access` **deny** configuration-level `uci read` openvpn (non-diagnostic), `uci write` wireless/network, `luci-rpc.getWirelessDevices`, `luci-base` (file list of `/`); `file.read` `/etc/shadow`; `usrmanage.add` (mutators); `log.read`. **Allow** the diagnostic 9-set reads including `luci-app-usrmanage-diagnostic-rpc` (`network.interface` `dump`, `uci` `get`/`changes`, `luci-rpc` getBoardJSON/getHostHints/getNetworkDevices — **not** getWirelessDevices). Package-scoped wireless UCI read via network-config remains a documented residual for stock Network pages (#156).
 - Readonly `usrmanage.health` allow; schema match; no ssid/key/MAC.
 - Admin **full** can `uci get wireless`; demote then racing login cannot; leftover SID dead.
 - Menu: readonly receives the diagnostic Status/Network views (`luci-mod-status-index` probe allowed; `session.access` on those five ACL names), no Full LuCI menus.
@@ -160,7 +160,7 @@ DRY_RUN stubs are **not** proof of lab denies ([security-review.md](../security-
 ## 14. Open questions (resolve in implementation PR)
 
 1. Exact ubus name: **`health`** (locked).
-2. Hostname on health (site identifier on CPE fleets). Default still **yes**; may omit later.
+2. Hostname on health (site identifier on CPE fleets). Default still **yes**; can omit later.
 3. `assoc_count` occupancy side channel. Default **yes** as integer; consider buckets later.
 4. Upgrade: auto-widen admin to `*` vs require explicit scope. **Locked: admin is role-locked to full scope (`*`); upgrade migrate rewrites legacy admin `app` → full, readonly → diagnostic** (§16).
 5. Split ACL vs residual user enumeration. **Locked: split is mandatory** (§16).
@@ -180,7 +180,7 @@ Models: grok, luna, opus (2026-08-19). All three: **do not ship revision 1**. Sh
 | Health deny-list grep is not a schema | Frozen key set, primitive types, no pass-through, `health` takes **no** params |
 | Demote + I3 + `*` is full-root TOCTOU | Rewrite ACL **before** revoke; revoke twice; lab race |
 | “No secrets” is false if the same account has a shell | Guarantee is **LuCI/ubus only** unless we later add nologin; document SSH residual |
-| Session ACL `uci get/changes` may leak pending wireless | Prefer **no uci** on session ACL; lab plant `uci changes wireless` |
+| Session ACL `uci get/changes` can leak pending wireless | Prefer **no uci** on session ACL; lab plant `uci changes wireless` |
 | `*` matcher currently rejects all `*` (ash word-split) | Role-gate `*`; never unquoted glob; exact set equality for readonly |
 | Menu hide ≠ authorization | Lab `ubus call usrmanage list` deny |
 | Hidden/non-canonical `config login` + `*` (Luna D4 / #108 class) | `--scope` picker removed (role-locked). Invisible `*` must not survive disable/demote |
