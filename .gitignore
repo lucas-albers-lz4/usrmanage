@@ -47,4 +47,4 @@ playwright/.cache/
 .cursor/browser-output/
 
 # Wave working checkouts (sibling pattern; not tracked)
-wave/
+/wave/
