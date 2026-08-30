@@ -21,6 +21,8 @@ Readonly owned sessions **must not** obtain any of:
 
 DHCP client identifiers and wifi station MACs are **PII**. Default: **omit**. Do not grant `getDHCPLeases` or `iwinfo assoclist`.
 
+**Accepted residual (#156):** package-scoped `uci get` / `uci changes` via `luci-app-usrmanage-diagnostic-rpc` over network-config packages (`network` / `wireless` / `dhcp` / `firewall` / `system`) can expose wireless PSKs and related UCI secrets. That residual is intentional for stock Network diagnostic pages. Health replies still omit SSID/BSSID/keys; `luci-base` file list and `getWirelessDevices` stay denied. See §12.
+
 ## 6. Why not stock LuCI ACL groups
 
 Granting `luci-mod-status-*` or `luci-base` to readonly fails closed on paper and open in practice:

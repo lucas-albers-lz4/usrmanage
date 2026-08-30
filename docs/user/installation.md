@@ -22,7 +22,7 @@ opkg update
 opkg install usrmanage luci-app-usrmanage
 ```
 
-OpenWrt 23.05 operators: use the last published **v0.1.2** artifacts under the historical `23.05/` feed directory.
+OpenWrt 23.05 operators: install **v0.1.2** from the historical `23.05/` feed directory. Details: [supported-releases.md](../supported-releases.md#2305-deprecation).
 
 **OpenWrt 25.12 (apk):**
 

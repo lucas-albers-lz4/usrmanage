@@ -36,7 +36,7 @@ LuCI remains **opt-in** per managed user. Owned logins still use `$p$username` o
 
 1. Readonly + owned LuCI can show that the device is healthy without seeing secrets **in the web/ubus session**, and without changing configuration.
 2. Admin + owned LuCI gets **Full LuCI** (keys, backups, all apps) — intentional; prefer HTTPS / management VLAN.
-3. Secret classes (K1–K8, appendix) never appear in readonly ubus replies, menus, or HTML.
+3. Secret classes (K1–K8, appendix) never appear in readonly **health** replies or menus that this app owns. Stock Network diagnostic pages keep accepted residual #156 (package-scoped wireless UCI via diagnostic-rpc).
 4. Demote/disable/delete still revoke sessions and rewrite owned ACL lists (existing lifecycle).
 5. Host tests + lab (qemu-smoke) prove allow and **deny** (not only “page loads”).
 
@@ -56,48 +56,7 @@ LuCI remains **opt-in** per managed user. Owned logins still use `$p$username` o
 | Root CLI | root | Unchanged. |
 | Foreign web login | (not owned) | `luci-app-acl` still supported; never adopted. |
 
-<<<<<<< HEAD
-## 5. Secret / leak classes (must not reach readonly)
-
-Readonly owned sessions **must not** obtain any of:
-
-| ID | Class | Typical source if we grant the wrong ACL |
-|----|--------|------------------------------------------|
-| K1 | Wireless PSK / SAE / WEP keys | `uci get wireless`, luci-mod-network, backups |
-| K2 | SSID / mesh ID / BSSID strings | `iwinfo info`, `uci wireless`, `getWirelessDevices` |
-| K3 | VPN / WG / IPSec / OpenVPN / OVPN / WireGuard private keys and PSKs | `uci` of those packages, luci-app-wireguard, backups |
-| K4 | UNIX password hashes, `root` password, dropbear keys | `file read` `/etc/shadow`, luci-mod-system backup |
-| K5 | Feed/opkg signing material, usrmanage secrets | file ACL, luci-app-opkg |
-| K6 | Full UCI dump / configuration backup | `luci-base` file list + cgi-io backup |
-| K7 | Syslog / dmesg (credentials, tokens, client IDs) | `luci-mod-status-logs` |
-| K8 | usrmanage **write** (mint admins, passwd, policy) | `luci-app-usrmanage` write |
-
-**Allowed (health):** board/model, hostname, OpenWrt release, uptime, load, memory/flash used (no mount secrets), WAN/LAN **carrier/up** and **address-family up** without dumping firewall rules, wifi **radio up/down + associated station count** with **no SSID/BSSID/keys**, optional **DHCP lease count** with **no** MAC/hostname/IP list.
-
-DHCP client identifiers and wifi station MACs are **PII**. Default: **omit**. Do not grant `getDHCPLeases` or `iwinfo assoclist`.
-
-## 6. Why not stock LuCI ACL groups
-
-Granting `luci-mod-status-*` or `luci-base` to readonly fails closed on paper and open in practice:
-
-| Stock group | Why forbidden for readonly |
-|-------------|----------------------------|
-| `luci-base` | `uci get`; filesystem `list` of `/`; **write** is full UCI |
-| `luci-base-network-status` | `uci` read **`wireless`** (K1/K2) |
-| `luci-mod-status-index` | includes **`uci` write `dhcp`** |
-| `luci-mod-status-index-wifi` | **write** `hostapd.*` (`del_client`, WPS) |
-| `luci-mod-status-logs` | K7 |
-| `luci-mod-status-processes` write | `kill` |
-| `*` | everything |
-
-Readonly must **never** receive `*`, `luci-base`, or stock groups on the **write** list. Diagnostic grants selected stock status/network ACL **names on `list read` only** so Interfaces/Overview remain non-mutating (rpcd applies a group’s internal write block only when the group is on the login write list). Health redacted RPC remains for Device health. Logs/processes/`luci-base` stay forbidden.
-
-**Product-lock change for admin:** enabling owned LuCI for admin **is** `read *` + `write *` (`usrmanage_scope=full`). Demote must drop `*` immediately (rewrite then revoke). Upgrade/sync rewrites legacy admin `app` → `full`.
-
-## 7. ACL matrix (owned logins)
-=======
 ## 5. ACL matrix (owned logins)
->>>>>>> a91894c (docs(concise): trim readonly observer, archive incident docs, DRY install)
 
 Constants (names are normative for tests):
 
@@ -126,7 +85,7 @@ Never put `*` on readonly. Parser must treat readonly + `*` as **tampered**.
 ## 7. UI
 
 - Health page: stock LuCI classes, `_()` strings, no hardcoded hex (existing theme tests).
-- Readonly: no mutator buttons, no policy editor, no user table. Health view imports only `view`/`rpc`/`ui`; whole-object `expect: { '': { … } }`; never `luci.network` / `iwinfo`.
+- Readonly: no mutator buttons, no policy editor. Health page has no user table. View-only User Management still lists users via `usrmanage.list`. Health view imports only `view`/`rpc`/`ui`; whole-object `expect: { '': { … } }`; never `luci.network` / `iwinfo`.
 - Admin full scope: Full LuCI (all menus).
 - Banner copy: readonly web login is for **device health**, not account admin.
 
