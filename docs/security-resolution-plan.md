@@ -164,7 +164,7 @@ changes staging paths — reordering is the minimal fix aligned with existing
 | Class | Artifact |
 |-------|----------|
 | `host` | Workflow-order grep in `tests/test_sdk_matrix_digests.sh` (or sibling) |
-| `manual` | First `v*` tag publish after merge: confirm Actions job never mounts keys during build cells |
+| `manual` | First `v*` tag publish after merge: make sure that the Actions job never mounts keys during build cells |
 
 ### PR checklist (#159)
 
@@ -175,7 +175,7 @@ changes staging paths — reordering is the minimal fix aligned with existing
 - [ ] `/review-security` (branch changes)
 - [ ] `docs/security-review.md` updated (including stale #148–#150 cleanup in open table)
 - [ ] Mark Ready → CodeRabbit round complete
-- [ ] Merge; verify issue auto-closes
+- [ ] Merge; make sure that the issue auto-closes
 - [ ] Record manual proof on next tag publish in audit history
 
 ---
@@ -204,7 +204,7 @@ Both PRs touch `docs/security-review.md` — **#160 merged first**; rebase #161 
 - Open `security` issue count returns to **zero** (#158 and #159 closed).
 - `docs/security-review.md` open findings table empty; #148–#150 only in resolved/history.
 - Every merged PR has: host smoke green, luna/grok + Bugbot + security review on head, CodeRabbit round completed before merge declaration.
-- #159: next tag publish confirms keys were not on disk during SDK build cells (manual audit history note).
+- #159: next tag publish shows that keys were not on disk during SDK build cells (manual audit history note).
 
 ## Related
 

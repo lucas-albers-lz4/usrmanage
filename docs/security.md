@@ -24,7 +24,7 @@ This package cannot enforce device TLS configuration; operators must.
 
 ## Remote syslog (deployment guidance)
 
-Example (device-side): ensure `logd` / `syslog-ng` / remote relay receives `usrmanage` tagged lines. Exact UCI varies by image; goal is off-box retention of grant/remove/role events.
+Example (device-side): make sure that `logd` / `syslog-ng` / remote relay receives `usrmanage`-tagged lines. Exact UCI varies by image; goal is off-box retention of grant/remove/role events.
 
 ## Password handling
 
@@ -64,7 +64,7 @@ Managed users default to **SSH-only**. Opt-in LuCI logins created by usrmanage:
 
 - Always use `$p$username` (UNIX shadow). Empty or locked (`!`/`*`) shadow hashes are refused — rpcd treats an empty hash as **any password**.
 - Are marked `option usrmanage '1'` and only mutated when marker + registry + `$p$` match.
-- **Readonly owned:** session + health ACL only — Device health menu; no user table, wireless keys, or config backups over ubus.
+- **Readonly owned:** session + health ACL only — Device health menu; no user table, wireless keys, or configuration backups over ubus.
 - **Admin owned (default app scope):** User Management ACL only (same as pre-0.1.7). **Full LuCI (`*`)** only with explicit `--scope full` / admin scope control — never auto-granted on upgrade.
 - Revoke the target user's ubus sessions on disable, role change, delete, and password change (live sessions keep ACLs until destroyed).
 
@@ -97,7 +97,7 @@ BusyBox `flock` has no wait-timeout (`-w`). A stuck holder blocks concurrent man
 
 ## Binary feed trust
 
-Installing from the [signed feed](binary-feed.md) bootstraps trust on first use. The operator downloads the signing public key over HTTPS from the same origin that serves the packages. The key fingerprints are published for out-of-band verification. See the key table in [binary-feed.md](binary-feed.md) and the [README](../README.md) ([#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64), fixed in [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81)). The install snippets verify the SHA-256 before trusting the key. Prefer installing on a network you trust, and keep `ca-bundle` present so the HTTPS fetch is actually validated.
+Installing from the [signed feed](binary-feed.md) bootstraps trust on first use. The operator downloads the signing public key over HTTPS from the same origin that serves the packages. The key fingerprints are published for out-of-band checking. See the key table in [binary-feed.md](binary-feed.md) and the [README](../README.md) ([#64](https://github.com/lucas-albers-lz4/usrmanage/issues/64), fixed in [PR #81](https://github.com/lucas-albers-lz4/usrmanage/pull/81)). The install snippets make sure that the SHA-256 matches before you trust the key. Prefer installing on a network you trust, and keep `ca-bundle` present so the HTTPS fetch is actually validated.
 
 ## Future reviews
 

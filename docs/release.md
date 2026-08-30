@@ -13,7 +13,7 @@ Bump the **third octet** of `PKG_VERSION` for every publishable build (same appr
 
 ## Steps
 
-1. Ensure `./scripts/smoke-host.sh` passes locally — **run it as root** (rpcd mutator paths with `USRMANAGE_DRY_RUN=0` only execute as root; CI runs non-root and can miss regressions).
+1. Make sure that `./scripts/smoke-host.sh` passes locally — **run it as root** (rpcd mutator paths with `USRMANAGE_DRY_RUN=0` only execute as root; CI runs non-root and can miss regressions).
 2. Bump `PKG_VERSION` (third octet) in both Makefiles and mirror `APP_VERSION` in the view, as above.
 3. Commit as a direct `chore: release v0.1.N` commit on `main` (release commits are not PRs) and push.
 4. Create annotated tag:
@@ -29,12 +29,12 @@ git push origin v0.1.5
    - Reproducible double-build on x86-64
    - Signs and deploys feed to `usrmanage-packages`
    - Attaches `.ipk` / `.apk` to the GitHub Release
-6. Verify Pages indexes and install on a lab device (`usrmanage doctor`).
+6. Make sure that the Pages indexes are correct, and install on a lab device (`usrmanage doctor`).
 
 Manual re-run: Actions → publish-packages → workflow_dispatch with a **tag name** matching
 `^v[0-9]` (e.g. `v0.1.5`). Checkout uses `persist-credentials: false` so the job token is
 not present in the SDK bind mount.
 
 See [github-publish-checklist.md](github-publish-checklist.md) and [binary-feed.md](binary-feed.md).
-Before cutting a `v*` tag, re-verify the `peaceiris/actions-gh-pages` SHA in
+Before cutting a `v*` tag, make sure that the `peaceiris/actions-gh-pages` SHA is correct in
 `publish-packages.yml` against the upstream tag (checklist pre-release item).

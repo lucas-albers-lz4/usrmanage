@@ -177,7 +177,7 @@ checking the ACL matrix, so a drifted section counts as "ours".
 grants until logout. **Severity revised down:** establishing the drift requires a root-level
 write to `/etc/config/rpcd` in the first place, so this is hardening of a repair path, not
 a privilege boundary. Reproduced state (`tampered`, non-empty `ours_index`, role
-`readonly`) confirms the branch is reachable.
+`readonly`) shows that the branch is reachable.
 
 **Proposed fix.** Revoke whenever `um_luci_login_sync_acls` actually rewrote rpcd — including
 the same-role branch — and fail closed on revoke failure like the other arms.
@@ -215,7 +215,7 @@ diverges from the documented write discipline.
 - Env-override gate is inert without `USRMANAGE_TEST_OVERRIDES=1`.
 - `um_home_create` / `um_home_remove` refuse symlinks; `um_mut_fail` never removes a
   pre-existing home.
-- Sudoers fragment is static `%wheel` with no NOPASSWD; installed `0440`, verified by `doctor`.
+- Sudoers fragment is static `%wheel` with no NOPASSWD; installed `0440`, checked by `doctor`.
 - CI: all actions SHA-pinned, dispatch input routed via `env:`, no `pull_request_target`.
 - Shadow/passwd/group lookups use `grep -F` in the lib.
 
