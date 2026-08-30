@@ -364,7 +364,7 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 
 **Scope.** From the same zen security pass as #149/#150: `um_password_write` preferred `chpasswd`, which hashes with the BusyBox build-time `CONFIG_FEATURE_DEFAULT_PASSWD_ALGO` (may be md5/des on some images/rebuilds) — the documented D6 control ("chpasswd/passwd -a sha512 fed on stdin only", security-audit-luci-login-2026-08-12:211) was not enforced on the preferred path.
 
-**Fix.** `um_password_write` now makes sure that the stored shadow hash is `$6$` after every write (`um_user_hash_is_sha512`, field-anchored awk). A non-`$6$` result after `chpasswd` falls through to the pinned `passwd -a sha512` path, which is itself checked again; if a weak hash still survives the write fails loudly (`password_hash_unverified`). Password never on argv in either path.
+**Fix.** `um_password_write` now makes sure that the stored shadow hash starts with `$6$` after every write (`um_user_hash_is_sha512`, field-anchored awk). A non-`$6$` result after `chpasswd` falls through to the pinned `passwd -a sha512` path, which is itself checked again; if a weak hash still survives the write fails loudly (`password_hash_unverified`). Password never on argv in either path.
 
 **Proof.** host: `tests/test_password_sha512_pin.sh` (shimmed chpasswd/passwd: `$6$` accepted without fallback; weak `$1$` triggers the pinned fallback with `-a sha512` argv proof; double-weak fails loudly; password absent from tool argv; no-chpasswd environment same discipline). Red on revert (6 assertions). Full `./scripts/smoke-host.sh` green incl. shellcheck. lab: none — no new lab surface.
 

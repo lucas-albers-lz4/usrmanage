@@ -15,12 +15,12 @@ fragmented re-reviews, no findings landing after the gate was declared green.
   starts a new incremental round covering the commits since the last review
   (skipped while auto-review is paused or when the plan/rate limit is hit).
 - Manual commands can be used as manual triggers, even on drafts and
-  regardless of the auto-review configuration, but they consume the same plan/rate-limit
-  allowance as automatic reviews and are subject to availability:
+  regardless of the auto-review configuration. Review commands consume the same
+  plan/rate-limit allowance as automatic reviews and are subject to availability:
   - `@coderabbitai review` — incremental review on demand
   - `@coderabbitai full review` — full re-review from scratch
   - `@coderabbitai pause` / `@coderabbitai resume` — stop / restart auto-reviews
-    (auto-pause kicks in after many reviewed commits)
+    (auto-pause kicks in after many reviewed commits; these do not start a review)
 
 ## The 4 rules
 
