@@ -37,7 +37,7 @@ round.
 | Profile | Stage 2 (reason) | Stage 1 helpers | Validation panel | Notes |
 |---------|------------------|-----------------|------------------|-------|
 | **Fable** (default when available) | Claude Fable 5.1 — medium effort; high only for root/password/ACL chains | Grok (map) + Luna (polish) | Luna + Grok (severity) | Strong on multi-step auth/ACL chains |
-| **GLM** (alternate review process) | GLM-5.3 at **max thinking** | Luna + GLM-5.3 Flash **or** DeepSeek V4 Flash | Luna + the same flash helper (severity) | Use when the orchestrator runs GLM instead of Fable; max thinking is required |
+| **GLM** (alternate review process) | GLM-5.3 at **max thinking** | Luna + GLM-5.3 Flash **or** DeepSeek V4 Flash | Luna + the same flash helper (severity) | Use when the orchestrator runs GLM instead of Fable; max thinking is required — medium/low under-reasons on ACL/commit-scope |
 
 Composer remains Stage 3 (patches) under both profiles. Doc-only PRs do not
 need a frontier reasoner — Luna (+ optional Grok for cross-repo wording) is
