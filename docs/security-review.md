@@ -1,9 +1,9 @@
 # Security audit ledger — usrmanage
 
-> **Status:** 40 controls in force · 5 proven in lab · 2 open findings from this pass (S1 #168, P1 #169).
-> **Last review:** 2026-09-04 (multi-model high-yield CLI+rpcd / Fable 5.1).
-> **Open findings:** [#168](https://github.com/lucas-albers-lz4/usrmanage/issues/168) S1 · [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) P1. Unrelated open: [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166) CI checkout credential hygiene.
-> **Next step:** fix S1 (body-derived SID + lab assert) before treating #149/#158 as live; then dated QEMU lab (readonly diagnostic/full + session revoke) before the next release. Full five-surface pass deferred (no High/Medium expand).
+> **Status:** 40 controls in force · 5 proven in lab · 1 open finding (P1 #169).
+> **Last review:** 2026-09-04 (S1 body-derived SID fix + #166 checkout hygiene).
+> **Open findings:** [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) P1 (`set-policy` unaudited).
+> **Next step:** dated QEMU lab pass (incl. S1 list/show/actor asserts) then cut `v0.1.16`. Full five-surface pass deferred.
 > **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab). Multi-model pass: [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
 
 Record of what was **checked**, **proven**, **fixed**, **accepted**, and **still open** (open items are candidates pending review/fix).
@@ -27,10 +27,10 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
 | CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-09-04 (multi-model high-yield; P1 #169) | P1 #169 |
-| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-09-04 (multi-model high-yield; S1 #168) | S1 #168 |
+| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-09-04 (S1 #168 body SID) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI configuration, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
-| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-08-25 (#159 closed by PR #161) | none |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-09-04 (#166 persist-credentials) | none |
 | Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-25 (#159 closed by PR #161) | none |
 | Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-25 (#159 closed by PR #161) | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
@@ -42,7 +42,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 |---------|----------------|
 | `./scripts/smoke-host.sh` | shellcheck, package layout, link check, validators, mutators-under-lock, rpcd argv (password-safe stub), busybox fallback, luci-login + health schema, theme/i18n/parity |
 | `python3 scripts/z3-verify.py --full` | Formal proof of username / actor grammars (empty, length, deny-list, injection alphabet) |
-| `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → mutators → session revoke → **readonly diagnostic** (page RPCs `network.interface dump` / `uci get`/`changes` allow via diagnostic-rpc; still deny `luci-base` + `getWirelessDevices`; uci write / add / shadow / logs deny; list+health allow) → **admin full** wireless get → `--scope` rejected → demote leftover SID dead → LuCI/ubus |
+| `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → mutators → session revoke → **readonly diagnostic** (page RPCs + deny luci-base/getWirelessDevices) → **S1** admin/readonly `list --all` / `show` / actor attribution → **admin full** → `--scope` rejected → demote leftover SID dead → LuCI/ubus |
 | `gh api --paginate "repos/{owner}/{repo}/code-scanning/alerts"` | CodeQL findings, **including dismissed ones** — check before filing, a finding may already have a decision |
 
 Notes:
@@ -75,7 +75,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 | Interactive CLI password echo | `stty -echo` fail-closed when `stty` exists; else ash/bash `read -s` (no `stty` applet on stock OpenWrt; `-s` via `ASH_BASH_COMPAT`) | host | `tests/test_password_prompt_echo.sh` (static + PTY; fail-closed stty PTY when bash present) |
 | Audit field injection (actor/src) | Whitelist + 64-char cap (`um_actor_resolve`, `sanitize_actor`); audit tokens may contain `=` but never a space, so no new field can be introduced | host | #3 C1 · Z3 P2 |
 | Unquoted argv rpcd → CLI | Explicit argv per ubus method | host | #3 C2 · `tests/test_mutators.sh` |
-| View → manage escalation | Split rpcd ACL (`luci-app-usrmanage-session` / `-health` / app); server authoritative. `list --all` / `show` additionally gated by `session_has_write_acl` (fail-closed). **S1 #168:** production SID delivery broken (env unset) so the admin positive path is inert until fixed; deny path still holds | host (gate logic) · lab pending after S1 | `acl.d/luci-app-usrmanage.json` · `tests/test_health.sh` · `tests/test_rpcd_list_acl.sh` · `tests/test_rpcd_show_acl.sh` |
+| View → manage escalation | Split rpcd ACL (`luci-app-usrmanage-session` / `-health` / app); server authoritative. `list --all` / `show` gated by `session_has_write_acl` using **body** `ubus_rpc_session` (32-hex; S1 #168) | host + lab | `acl.d/luci-app-usrmanage.json` · `tests/test_health.sh` · `tests/test_rpcd_list_acl.sh` · `tests/test_rpcd_show_acl.sh` · `tests/test_rpcd_session_sid.sh` · `scripts/qemu-smoke-usrmanage.sh` (S1 asserts) |
 | Non-root mutators | `um_require_root` before manage commands | host | `tests/test_validators.sh` |
 | XSS via username / audit text in LuCI | DOM via LuCI `E()`; no `innerHTML` | manual | Manual review of `usrmanage.js` |
 
@@ -129,12 +129,9 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 | Issue | ID | Area | Severity | Notes |
 |-------|----|------|----------|-------|
-| [#168](https://github.com/lucas-albers-lz4/usrmanage/issues/168) | S1 | rpcd ACL / actor | Low | `RPC_SESSION` env never set by rpcd exec plugins; write-ACL positive path + LuCI actor inert (fail-closed). Host tests shim env → false green on #149/#158. |
 | [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) | P1 | CLI policy audit | Low | `set-policy` never `um_audit`s success or `invalid_policy` denial. |
 
-Unrelated open (not from this pass): [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166) CI checkout credential hygiene.
-
-`#148`–`#150` closed 2026-08-21; `#158` merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160); `#159` closed by [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) (2026-08-25). I3 remains an accepted residual.
+`#148`–`#150` closed 2026-08-21; `#158` merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160); `#159` closed by [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) (2026-08-25). S1 #168 and #166 closed 2026-09-04. I3 remains an accepted residual.
 
 ## Resolved findings
 
@@ -142,6 +139,8 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
+| [#168](https://github.com/lucas-albers-lz4/usrmanage/issues/168) | rpcd ACL / actor | S1 — body `ubus_rpc_session` (32-hex) for write-ACL gate + actor; host tests + qemu-smoke asserts |
+| [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166) | CI hygiene | `persist-credentials: false` on all `usrmanage-test.yml` checkouts |
 | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) | publish / supply chain | [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) — feed signing keys written only after SDK build cells and the reproducible-build gate |
 | [#158](https://github.com/lucas-albers-lz4/usrmanage/issues/158) | rpcd ACL | [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160) — `show` requires write ACL; readonly fails closed with `access_denied` (no CLI / no existence oracle) |
 | [#150](https://github.com/lucas-albers-lz4/usrmanage/issues/150) | LuCI login | merged 2026-08-21 — tampered owned login auto-revoke + doctor `luci_tampered` error |
@@ -424,6 +423,16 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Non-findings reconfirmed.** Password never on argv; explicit rpcd argv; username/actor grammars (Z3); flock 0600 + tx modes; SHA-512 pin; multi-line/control reject; last-admin; health body ignore + frozen schema; #162 no-echo traps do not collide with `um_tx_exit_hook`; accepted residuals / #3 won't-fix unchanged.
 
 **Full-pass expand:** NO. Next: S1 fix + lab assert; then dated QEMU lab before release.
+
+### 2026-09-04 — S1 body-derived SID + #166 checkout hygiene
+
+**Scope.** Fix [#168](https://github.com/lucas-albers-lz4/usrmanage/issues/168) S1 and [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166).
+
+**S1 Fix.** rpcd plugin `session_sid` reads `ubus_rpc_session` from the request body after `read_input`, pins exactly 32 hex chars, and drives `session_has_write_acl` + `session_actor`. Env `RPC_SESSION` / `RPC_SESSION_USERNAME` no longer consulted. `health` stays body-agnostic.
+
+**Proof.** `host`: `tests/test_rpcd_list_acl.sh` / `test_rpcd_show_acl.sh` (body SID / missing / short / malformed) · `tests/test_rpcd_session_sid.sh` (actor from `session get`) · full `./scripts/smoke-host.sh`. `lab`: `scripts/qemu-smoke-usrmanage.sh` S1 block (admin `--all` sees unmanaged UID≥1000; readonly strips; admin `show` ok; readonly `access_denied`; ubus mutator `actor=<login>`) — dated run recorded when executed pre-release.
+
+**#166.** `persist-credentials: false` on `host-smoke` / `z3-verify` / `actionlint` checkouts (match `zizmor`).
 
 ## Review procedure
 
