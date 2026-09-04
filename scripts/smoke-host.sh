@@ -43,6 +43,7 @@ if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	"$ROOT/tests/test_health.sh"
 	"$ROOT/tests/test_rpcd_list_acl.sh"
 	"$ROOT/tests/test_rpcd_show_acl.sh"
+	"$ROOT/tests/test_rpcd_session_sid.sh"
 	# Diagnostic page RPC coverage vs stock LuCI ACL fixtures (#156).
 	if need python3 diagnostic-page-rpc-contract "install python3"; then
 		python3 "$ROOT/tests/test_diagnostic_page_rpc_contract.py"

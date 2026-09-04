@@ -1,12 +1,11 @@
 #!/bin/sh
-# Host tests for the rpcd `show` write-ACL gate (issue #158).
+# Host tests for the rpcd `show` write-ACL gate (issue #158 / S1 #168).
 #
 # `usrmanage show` reveals uid/gid/home/shell for any existing user and
 # distinguishes existence via not_found. Read ACL grants `show` to
 # diagnostic/readonly sessions, so the method must run ONLY for sessions
 # holding the usrmanage WRITE acl; every other case fails closed without
-# invoking the CLI. Verified behaviorally through the rpcd plugin with
-# shimmed ubus/jsonfilter/CLI.
+# invoking the CLI. SID comes from ubus_rpc_session in the request body.
 set -e
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -55,23 +54,25 @@ chmod +x "$TMP/bin/usrmanage-stub"
 export USRMANAGE_BIN="$TMP/bin/usrmanage-stub"
 export FAKE_CLI_LOG="$TMP/cli-args.log"
 
-SID=0123456789abcdef
+SID=0123456789abcdef0123456789abcdef
+SHORT=0123456789abcdef
 FULLPATH="$TMP/bin:$TMP/jbin:$PATH"
 NOUBUSPATH="$TMP/jbin:/bin"
 
 _out() {
-	FAKE_ACCESS="$1" RPC_SESSION="$2" PATH="$3" \
-		sh "$RPCD" call show '{"name":"root"}'
+	# _out <FAKE_ACCESS> <json-body> [PATH]
+	FAKE_ACCESS="$1" PATH="${3:-$FULLPATH}" \
+		sh "$RPCD" call show "$2"
 }
 
 # 1. Write ACL present -> show forwarded to CLI.
 : > "$FAKE_CLI_LOG"
-_out true "$SID" "$FULLPATH" >/dev/null || true
+_out true "{\"name\":\"root\",\"ubus_rpc_session\":\"${SID}\"}" >/dev/null || true
 grep -q 'show' "$FAKE_CLI_LOG" && ok "write ACL: show forwarded" || bad "write ACL: CLI not invoked"
 
 # 2. Read-only session -> fail closed (no CLI, access_denied).
 : > "$FAKE_CLI_LOG"
-_resp=$(_out false "$SID" "$FULLPATH")
+_resp=$(_out false "{\"name\":\"root\",\"ubus_rpc_session\":\"${SID}\"}")
 [ -s "$FAKE_CLI_LOG" ] && bad "readonly: CLI invoked" || ok "readonly: CLI not invoked"
 printf '%s' "$_resp" | grep -q 'access_denied' && ok "readonly: access_denied" || bad "readonly: missing access_denied ($_resp)"
 
@@ -80,17 +81,28 @@ if PATH="$NOUBUSPATH" command -v ubus >/dev/null 2>&1; then
 	bad "no-ubus: allowlist PATH still resolves ubus"
 fi
 : > "$FAKE_CLI_LOG"
-_resp=$(RPC_SESSION="$SID" PATH="$NOUBUSPATH" \
-	sh "$RPCD" call show '{"name":"root"}')
+_resp=$(_out true "{\"name\":\"root\",\"ubus_rpc_session\":\"${SID}\"}" "$NOUBUSPATH")
 [ -s "$FAKE_CLI_LOG" ] && bad "no-ubus: CLI invoked" || ok "no-ubus: CLI not invoked"
 printf '%s' "$_resp" | grep -q 'access_denied' && ok "no-ubus: access_denied" || bad "no-ubus: missing access_denied ($_resp)"
 
-# 4. Malformed RPC_SESSION -> fail closed.
+# 4. Malformed SID in body -> fail closed.
 : > "$FAKE_CLI_LOG"
-_resp=$(FAKE_ACCESS=true RPC_SESSION=';reboot' PATH="$FULLPATH" \
-	sh "$RPCD" call show '{"name":"root"}')
+_resp=$(_out true '{"name":"root","ubus_rpc_session":";reboot"}')
 [ -s "$FAKE_CLI_LOG" ] && bad "bad sid: CLI invoked" || ok "bad sid: CLI not invoked"
 printf '%s' "$_resp" | grep -q 'access_denied' && ok "bad sid: access_denied" || bad "bad sid: missing access_denied ($_resp)"
+
+# 5. Missing body SID (env alone) -> fail closed.
+: > "$FAKE_CLI_LOG"
+_resp=$(FAKE_ACCESS=true RPC_SESSION="$SID" PATH="$FULLPATH" \
+	sh "$RPCD" call show '{"name":"root"}')
+[ -s "$FAKE_CLI_LOG" ] && bad "no body sid: CLI invoked" || ok "no body sid: CLI not invoked"
+printf '%s' "$_resp" | grep -q 'access_denied' && ok "no body sid: access_denied" || bad "no body sid: missing access_denied ($_resp)"
+
+# 6. Wrong length (16 hex) -> fail closed.
+: > "$FAKE_CLI_LOG"
+_resp=$(_out true "{\"name\":\"root\",\"ubus_rpc_session\":\"${SHORT}\"}")
+[ -s "$FAKE_CLI_LOG" ] && bad "short sid: CLI invoked" || ok "short sid: CLI not invoked"
+printf '%s' "$_resp" | grep -q 'access_denied' && ok "short sid: access_denied" || bad "short sid: missing access_denied ($_resp)"
 
 [ "$fail" = "0" ] || exit 1
 echo "rpcd show ACL gate tests: ok"

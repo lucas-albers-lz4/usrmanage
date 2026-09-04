@@ -276,8 +276,8 @@ STUB
 chmod +x "$TMP/bin/ubus"
 
 rm -f "$USRMANAGE_STUB_LOG"
-FAKE_ACCESS=true RPC_SESSION=0123456789abcdef \
-	sh "$RPCD" call show '{"name":"x --actor root"}' >/dev/null
+# S1 #168: SID must be in the request body (32 hex); env RPC_SESSION is ignored.
+sh "$RPCD" call show '{"name":"x --actor root","ubus_rpc_session":"0123456789abcdef0123456789abcdef"}' >/dev/null
 grep -q 'arg1=show' "$USRMANAGE_STUB_LOG" && ok "rpcd show arg1=show" || bad "rpcd show argv: $(cat "$USRMANAGE_STUB_LOG")"
 grep -q 'arg2=x --actor root' "$USRMANAGE_STUB_LOG" && ok "rpcd show keeps name as one argv" || bad "rpcd show name split"
 grep -q 'arg3=--json' "$USRMANAGE_STUB_LOG" && ok "rpcd show --json" || bad "rpcd show missing --json"
