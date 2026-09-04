@@ -178,7 +178,7 @@ function elChildren(kids) {
 /* Surface CLI/rpcd error tokens in notifications (issue #3 M8). */
 function notifyMutatorFailure(res) {
 	const detail = (res && res.error) ? String(res.error) : 'error';
-	ui.addNotification(null, E('p', {}, _('Failed: %s').format(detail)), 'danger');
+	ui.addNotification(null, E('p', {}, [ _('Failed: %s').format(detail) ]), 'danger');
 }
 
 function notifyRequestFailed() {
@@ -193,7 +193,7 @@ function finishMutator(res, successMsg, view) {
 		return;
 	}
 	if (successMsg)
-		ui.addNotification(null, E('p', {}, successMsg), 'info');
+		ui.addNotification(null, E('p', {}, [ successMsg ]), 'info');
 	return view.refreshView();
 }
 
@@ -231,13 +231,13 @@ function buildDoctorBanner(doctor) {
 
 	const issueRows = [];
 	errors.forEach(function(c) {
-		issueRows.push(E('li', {}, '%s: %s'.format(c.id || 'check', c.msg || '')));
+		issueRows.push(E('li', {}, [ '%s: %s'.format(c.id || 'check', c.msg || '') ]));
 	});
 	incomplete.forEach(function(inc) {
-		issueRows.push(E('li', {}, _('Incomplete operation: %s').format(String(inc))));
+		issueRows.push(E('li', {}, [ _('Incomplete operation: %s').format(String(inc)) ]));
 	});
 	warns.forEach(function(c) {
-		issueRows.push(E('li', {}, '%s: %s'.format(c.id || 'check', c.msg || '')));
+		issueRows.push(E('li', {}, [ '%s: %s'.format(c.id || 'check', c.msg || '') ]));
 	});
 
 	const hasError = errors.length > 0 || incomplete.length > 0;
@@ -249,14 +249,14 @@ function buildDoctorBanner(doctor) {
 		: {};
 	const detailsKids = [
 		E('summary', {}, _('Technical details')),
-		E('pre', {}, JSON.stringify(doctor, null, 2))
+		E('pre', {}, [ JSON.stringify(doctor, null, 2) ])
 	];
 
 	return E('div', {
 		'class': hasError ? 'alert-message error' : 'alert-message warning',
 		'data-testid': 'usrmanage-doctor-banner'
 	}, [
-		E('p', {}, summary),
+		E('p', {}, [ summary ]),
 		E('ul', {}, issueRows),
 		E('details', detailsAttrs, detailsKids)
 	]);
@@ -359,7 +359,7 @@ function buildPasswordPolicyUI(policy, getNameFn, passInput, pass2Input, submitB
 					'class': 'usrmanage-pwcheck-mark',
 					'aria-hidden': 'true'
 				}, c.ok ? '✓' : '✗'),
-				E('span', {}, c.label)
+				E('span', {}, [ c.label ])
 			]);
 		}));
 		const ok = checks.every(function(c) { return c.ok; });
@@ -429,7 +429,7 @@ return view.extend({
 		const policyLabel = policyIn.label || 'OpenWrt';
 		const editorWrap = E('div', { 'class': 'cbi-section', 'hidden': 'hidden' });
 		const stripKids = [
-			E('span', {}, _('Password policy: %s').format(policyLabel))
+			E('span', {}, [ _('Password policy: %s').format(policyLabel) ])
 		];
 		if (manage) {
 			stripKids.push(' ');
@@ -515,26 +515,26 @@ return view.extend({
 			}
 
 			return E('tr', { 'class': 'tr', 'data-testid': 'usrmanage-row-' + (u.name || '') }, [
-				E('td', { 'class': 'td' }, u.name || ''),
-				E('td', { 'class': 'td' }, String(u.uid != null ? u.uid : '')),
-				E('td', { 'class': 'td' }, u.role || ''),
-				E('td', { 'class': 'td' }, u.shell || ''),
-				E('td', { 'class': 'td' }, u.managed ? _('yes') : _('no')),
-				E('td', { 'class': 'td', 'data-testid': 'usrmanage-luci-state' }, luciLabel),
+				E('td', { 'class': 'td' }, [ u.name || '' ]),
+				E('td', { 'class': 'td' }, [ String(u.uid != null ? u.uid : '') ]),
+				E('td', { 'class': 'td' }, [ u.role || '' ]),
+				E('td', { 'class': 'td' }, [ u.shell || '' ]),
+				E('td', { 'class': 'td' }, [ u.managed ? _('yes') : _('no') ]),
+				E('td', { 'class': 'td', 'data-testid': 'usrmanage-luci-state' }, [ luciLabel ]),
 				E('td', { 'class': 'td' }, actions)
 			]);
 		});
 
 		const eventRows = events.map(function(ev) {
 			return E('tr', { 'class': 'tr' }, [
-				E('td', { 'class': 'td' }, ev.ts || ''),
-				E('td', { 'class': 'td' }, ev.action || ''),
-				E('td', { 'class': 'td' }, ev.user || ''),
-				E('td', { 'class': 'td' }, ev.role || ''),
-				E('td', { 'class': 'td' }, ev.actor || ''),
-				E('td', { 'class': 'td' }, ev.src || ''),
-				E('td', { 'class': 'td' }, ev.result || ''),
-				E('td', { 'class': 'td' }, ev.reason || '')
+				E('td', { 'class': 'td' }, [ ev.ts || '' ]),
+				E('td', { 'class': 'td' }, [ ev.action || '' ]),
+				E('td', { 'class': 'td' }, [ ev.user || '' ]),
+				E('td', { 'class': 'td' }, [ ev.role || '' ]),
+				E('td', { 'class': 'td' }, [ ev.actor || '' ]),
+				E('td', { 'class': 'td' }, [ ev.src || '' ]),
+				E('td', { 'class': 'td' }, [ ev.result || '' ]),
+				E('td', { 'class': 'td' }, [ ev.reason || '' ])
 			]);
 		});
 
@@ -636,7 +636,7 @@ return view.extend({
 
 		const minSelect = E('select', { 'class': 'cbi-input-select' },
 			[ 8, 10, 12, 14, 16 ].map(function(n) {
-				return E('option', { 'value': String(n) }, String(n));
+				return E('option', { 'value': String(n) }, [ String(n) ]);
 			})
 		);
 		minSelect.value = String(draft.min_length || 8);
@@ -896,7 +896,7 @@ return view.extend({
 				? _('Removes the usrmanage-owned web login (even if tampered). Allows re-enabling with a fresh configuration.')
 				: _('Removes the usrmanage-owned web login. SSH still works. If this is your current session, you will be logged out.');
 
-		const modalKids = [ E('p', {}, body) ];
+		const modalKids = [ E('p', {}, [ body ]) ];
 		if (isEnable && role === 'readonly')
 			modalKids.push(buildReadonlyLuciBanner());
 		if (isEnable && role === 'admin')
