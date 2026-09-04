@@ -4,7 +4,7 @@
 > **Last review:** 2026-08-25 (interactive CLI password prompt no-echo).
 > **Open findings:** none — last open (#159) closed by PR #161 (merged 2026-08-25).
 > **Next step:** run a dated QEMU lab pass (readonly diagnostic/full + session revoke) before the next release.
-> **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab). Multi-model pass (VVAH-style stages, models, full-pass gate): [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
+> **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab). Multi-model pass: [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
 
 Record of what was **checked**, **proven**, **fixed**, **accepted**, and **still open** (open items are candidates pending review/fix).
 Start here for future security / integrity reviews so prior work is not re-done blindly.
@@ -406,9 +406,8 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 
 ## Review procedure
 
-The multi-model loop (gaps → delta → gated full pass; Grok/Luna/Fable/Composer)
-lives in [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
-This section is what a pass owes the ledger.
+The multi-model loop is in [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
+This section lists the ledger updates that a pass must record.
 
 1. Read this file and [threat-model.md](threat-model.md) first. Do not reopen the #3 won't-fix bucket or the [Accepted residuals](#accepted-residuals) without new evidence.
 2. Pick the surface with the **oldest date in the [coverage map](#surface-coverage-map)**. A pass that only re-reads the CLI is a pass that finds nothing new. **New surfaces start dated on the feature PR** that introduces them — do not leave them undated until a later periodic pass.
