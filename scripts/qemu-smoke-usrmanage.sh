@@ -345,8 +345,17 @@ ok "admin full can uci.get (role-locked full)"
 
 # S1 #168: body-derived SID — admin list --all / show / actor attribution.
 # Unmanaged UID>=1000 row for the --all enumeration oracle (not in registry).
-ssh_guest 'grep -q "^umsysenum:" /etc/passwd && deluser umsysenum 2>/dev/null; true' || true
-ssh_guest 'adduser -u 1999 -D -H -s /bin/false umsysenum 2>/dev/null || useradd -u 1999 -M -s /bin/false umsysenum' \
+# Stock OpenWrt images often lack adduser/useradd; fall back to passwd/group lines.
+ssh_guest 'sed -i "/^umsysenum:/d" /etc/passwd /etc/group 2>/dev/null; true' || true
+ssh_guest 'if command -v adduser >/dev/null 2>&1; then
+	adduser -u 1999 -D -H -s /bin/false umsysenum
+elif command -v useradd >/dev/null 2>&1; then
+	useradd -u 1999 -M -s /bin/false umsysenum
+else
+	echo "umsysenum:x:1999:1999:unmanaged:/:/bin/false" >> /etc/passwd
+	echo "umsysenum:x:1999:" >> /etc/group
+fi
+grep -q "^umsysenum:x:1999:" /etc/passwd' \
 	|| die "create unmanaged umsysenum failed"
 ok "unmanaged umsysenum UID 1999 for list --all oracle"
 
@@ -383,6 +392,7 @@ ok "S1: LuCI/ubus mutator audits actor=umfull"
 
 # Readonly observer must not get --all enumeration or show.
 ssh_guest 'usrmanage del umobs >/dev/null 2>&1 || true'
+ssh_guest 'rm -rf /home/umobs' || true
 printf 'LabObs1!\n' | ssh_guest 'usrmanage add umobs --role readonly --password-fd 0' \
 	|| die "re-add umobs for S1 failed"
 ssh_guest 'usrmanage set-luci-login umobs --enable' \
@@ -405,7 +415,7 @@ printf '%s' "$_ro_show" | grep -qi 'not_found' \
 ok "S1: readonly show access_denied (no not_found oracle)"
 ssh_guest 'usrmanage set-luci-login umobs --disable 2>/dev/null || true'
 ssh_guest 'usrmanage del umobs 2>/dev/null || true'
-ssh_guest 'deluser umsysenum 2>/dev/null || userdel umsysenum 2>/dev/null || true'
+ssh_guest 'deluser umsysenum 2>/dev/null || userdel umsysenum 2>/dev/null || sed -i "/^umsysenum:/d" /etc/passwd /etc/group 2>/dev/null || true'
 ok "S1: cleaned umobs/umsysenum fixtures"
 
 # Demote full → diagnostic: leftover SID dead; new session has diagnostic ACLs.
