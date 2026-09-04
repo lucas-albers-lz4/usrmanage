@@ -138,6 +138,40 @@ um_with_lock um_policy_save
 um_policy_load
 [ "$UM_POL_PRESET" = "openwrt" ] && ok "restored openwrt" || bad "restore got $UM_POL_PRESET"
 
+# --- P1 #169: set-policy audits success and invalid_policy denial ---
+CLI="$ROOT/openwrt-feed/usrmanage/files/usr/sbin/usrmanage"
+# Bypass um_require_root in hermetic host tests.
+cat > "$TMP/bin/id" <<'ID'
+#!/bin/sh
+case "$1" in
+	-u) printf '0\n' ;;
+	-un) printf 'root\n' ;;
+	*) printf 'uid=0(root) gid=0(root)\n' ;;
+esac
+ID
+chmod +x "$TMP/bin/id"
+
+: > "$USRMANAGE_AUDIT"
+if "$CLI" set-policy --preset standard >/dev/null 2>"$TMP/setpol.err"; then
+	grep -q 'policy user=-' "$USRMANAGE_AUDIT" \
+		&& grep -q 'result=ok' "$USRMANAGE_AUDIT" \
+		&& grep -q 'preset=standard' "$USRMANAGE_AUDIT" \
+		&& ok "P1 set-policy success audited" \
+		|| bad "P1 set-policy success audit: $(cat "$USRMANAGE_AUDIT")"
+else
+	bad "P1 set-policy standard failed: $(cat "$TMP/setpol.err")"
+fi
+
+: > "$USRMANAGE_AUDIT"
+if "$CLI" set-policy --preset bogus >/dev/null 2>"$TMP/setpol_bad.err"; then
+	bad "P1 set-policy bogus should fail"
+else
+	grep -q 'denied user=-' "$USRMANAGE_AUDIT" \
+		&& grep -q 'invalid_policy' "$USRMANAGE_AUDIT" \
+		&& ok "P1 set-policy invalid_policy audited" \
+		|| bad "P1 set-policy denial audit: $(cat "$USRMANAGE_AUDIT")"
+fi
+
 if [ "$fail" -ne 0 ]; then
 	echo "test_policy: FAILED" >&2
 	exit 1
