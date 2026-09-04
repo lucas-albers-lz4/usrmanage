@@ -206,6 +206,10 @@ CLI="$ROOT/openwrt-feed/usrmanage/files/usr/sbin/usrmanage"
 grep -q 'um_with_lock um_policy_save' "$CLI" \
 	&& ok "set-policy wraps um_policy_save in um_with_lock" \
 	|| bad "set-policy missing um_with_lock um_policy_save"
+grep -q 'um_audit policy - ok' "$CLI" \
+	&& grep -q 'um_audit denied - denied invalid_policy' "$CLI" \
+	&& ok "set-policy audits success and invalid_policy denial" \
+	|| bad "set-policy missing um_audit success/denied"
 
 # --- rpcd argv: stub CLI ---
 cat > "$TMP/bin/usrmanage-stub" <<'STUB'

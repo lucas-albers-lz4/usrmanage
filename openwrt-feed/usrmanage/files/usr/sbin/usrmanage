@@ -291,11 +291,13 @@ case "$CMD" in
 		[ -n "$SET_PRESET" ] || um_die "usage: usrmanage set-policy --preset openwrt|standard|strict|custom ..."
 		if [ "$SET_PRESET" = "custom" ]; then
 			um_policy_set_fields custom "$SET_MIN" "$SET_REJ" "$SET_LOW" "$SET_UP" "$SET_DIG" "$SET_SPE" \
-				|| um_die "error: invalid_policy"
+				|| { um_audit denied - denied invalid_policy; um_die "error: invalid_policy"; }
 		else
-			um_policy_set_fields "$SET_PRESET" || um_die "error: invalid_policy"
+			um_policy_set_fields "$SET_PRESET" \
+				|| { um_audit denied - denied invalid_policy; um_die "error: invalid_policy"; }
 		fi
 		um_with_lock um_policy_save || um_die "error: policy_save_failed"
+		um_audit policy - ok "preset=${UM_POL_PRESET}"
 		if [ "$JSON_OUT" = "1" ]; then
 			um_policy_json_full
 		else

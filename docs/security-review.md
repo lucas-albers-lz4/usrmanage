@@ -1,9 +1,9 @@
 # Security audit ledger — usrmanage
 
-> **Status:** 40 controls in force · 5 proven in lab · 1 open finding (P1 #169).
-> **Last review:** 2026-09-04 (S1 body SID host+lab; #166 closed; dated QEMU PASS).
-> **Open findings:** [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) P1.
-> **Next step:** P1 #169 (`set-policy` audit) when convenient. Full five-surface pass deferred.
+> **Status:** 40 controls in force · 5 proven in lab · 0 open findings.
+> **Last review:** 2026-09-04 (P1 #169 `set-policy` audit closed).
+> **Open findings:** none.
+> **Next step:** Full five-surface pass deferred (LuCI / on-device / CI / release not covered by 2026-09-04 high-yield).
 > **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab). Multi-model pass: [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
 
 Record of what was **checked**, **proven**, **fixed**, **accepted**, and **still open** (open items are candidates pending review/fix).
@@ -26,8 +26,8 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-09-04 (multi-model high-yield; P1 #169) | P1 #169 |
-| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-09-04 (S1 #168 body SID host+lab) | none (P1 is CLI) |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-09-04 (P1 #169 closed) | none |
+| rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-09-04 (S1 #168 body SID host+lab) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI configuration, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
 | CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-09-04 (#166 persist-credentials) | none |
@@ -129,9 +129,9 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 | Issue | ID | Area | Severity | Notes |
 |-------|----|------|----------|-------|
-| [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) | P1 | CLI policy audit | Low | `set-policy` never `um_audit`s success or `invalid_policy` denial. |
+| — | — | — | — | none |
 
-`#148`–`#150` closed 2026-08-21; `#158` merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160); `#159` closed by [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) (2026-08-25). #166 closed 2026-09-04. #168 closed 2026-09-04 (dated QEMU). I3 remains an accepted residual.
+`#148`–`#150` closed 2026-08-21; `#158` merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160); `#159` closed by [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) (2026-08-25). #166 closed 2026-09-04. #168 closed 2026-09-04 (dated QEMU). #169 closed 2026-09-04 (`set-policy` audit). I3 remains an accepted residual.
 
 ## Resolved findings
 
@@ -139,6 +139,7 @@ Resolved by the audit remediation wave. Close the tracking issue when the fix la
 
 | Issue | Area | Resolved by |
 |-------|------|-------------|
+| [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) | CLI policy audit | P1 — `set-policy` success + `invalid_policy` denial now `um_audit` (host: `tests/test_policy.sh`) |
 | [#168](https://github.com/lucas-albers-lz4/usrmanage/issues/168) | rpcd ACL / actor | [PR #171](https://github.com/lucas-albers-lz4/usrmanage/pull/171) — body `ubus_rpc_session` SID; host + lab 2026-09-04 |
 | [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166) | CI hygiene | `persist-credentials: false` on all `usrmanage-test.yml` checkouts |
 | [#159](https://github.com/lucas-albers-lz4/usrmanage/issues/159) | publish / supply chain | [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) — feed signing keys written only after SDK build cells and the reproducible-build gate |
@@ -409,6 +410,14 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Fix.** Reordered `.github/workflows/publish-packages.yml`: **Write signing keys** + **Validate signing keys** now run after all SDK build cells and the reproducible-build gate, immediately before **Stage signed feed**. Workflow comment documents the invariant.
 
 **Proof.** `host`: `tests/test_sdk_matrix_digests.sh` asserts `feed_keys_write_from_env` follows the last `./scripts/docker-sdk.sh build` and `verify-reproducible-build.sh`, and that `opkg-secret.key` / `apk-secret.rsa` / `feed_keys_write_from_env` do not appear before that SDK window; full `./scripts/smoke-host.sh` green. `manual`: record first `v*` tag publish after merge in this entry.
+
+### 2026-09-04 — P1 `set-policy` audit (#169)
+
+**Scope.** CLI `set-policy` never called `um_audit` on success or on `invalid_policy` denial (C7 / mutator audit parity gap from the 2026-09-04 high-yield pass).
+
+**Fix.** `usrmanage set-policy` audits `denied` / `invalid_policy` before die on `um_policy_set_fields` failure, and `policy` / `ok` with `preset=…` after a successful locked save.
+
+**Proof.** `host`: `tests/test_policy.sh` (CLI success + bogus-preset denial under stubbed `id -u=0`); `tests/test_mutators.sh` static grep; full `./scripts/smoke-host.sh`. `lab`: none — no new lab surface.
 
 ### 2026-09-04 — Multi-model high-yield pass (CLI + rpcd / Fable 5.1)
 
