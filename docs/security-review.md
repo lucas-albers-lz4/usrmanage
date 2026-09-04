@@ -134,7 +134,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 
 Unrelated open (not from this pass): [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166) CI checkout credential hygiene.
 
-#148–#150 closed 2026-08-21; #158 merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160); #159 closed by [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) (2026-08-25). I3 remains an accepted residual.
+`#148`–`#150` closed 2026-08-21; `#158` merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160); `#159` closed by [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) (2026-08-25). I3 remains an accepted residual.
 
 ## Resolved findings
 
