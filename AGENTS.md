@@ -28,7 +28,7 @@ below; testing/release details stay in the linked docs.
 - Prefer `flock` for the op lock; do not leave stale locks on `um_die`.
 - Audit denials (`denied`) on mutator validation failures, not only successes.
 - Release path: no `${{ }}` into workflow `run:` bodies, no unpinned tools executed at release, signing keys mode 0600.
-- Review SoT: [docs/security-review.md](docs/security-review.md) (proof class `host` | `lab` | `manual`). Do not reopen accepted residuals / #3 won't-fix without new evidence. Feature PRs that touch auth/session/password/rpcd/ACL/signing update the ledger in the same PR; `lab`-class locks need qemu-smoke or a release-blocking issue (DRY_RUN/host stubs are not proof). Findings: `security` label + IDs (`S1`, `R1`, `P1`).
+- Review SoT: [docs/security-review.md](docs/security-review.md) (proof class `host` | `lab` | `manual`). The multi-model audit procedure is in [`.cursor/skills/security-audit/SKILL.md`](.cursor/skills/security-audit/SKILL.md). Do not reopen accepted residuals / #3 won't-fix without new evidence. Feature PRs that touch auth/session/password/rpcd/ACL/signing update the ledger in the same PR; `lab`-class locks need qemu-smoke or a release-blocking issue (DRY_RUN/host stubs are not proof). Findings: `security` label + IDs (`S1`, `R1`, `P1`).
 
 ## Testing
 

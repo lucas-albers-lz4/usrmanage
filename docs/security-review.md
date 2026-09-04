@@ -4,12 +4,13 @@
 > **Last review:** 2026-08-25 (interactive CLI password prompt no-echo).
 > **Open findings:** none — last open (#159) closed by PR #161 (merged 2026-08-25).
 > **Next step:** run a dated QEMU lab pass (readonly diagnostic/full + session revoke) before the next release.
-> **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab).
+> **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab). Multi-model pass: [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
 
 Record of what was **checked**, **proven**, **fixed**, **accepted**, and **still open** (open items are candidates pending review/fix).
 Start here for future security / integrity reviews so prior work is not re-done blindly.
 
 Operator guidance: [security.md](security.md). Threat model: [threat-model.md](threat-model.md).
+How to run a pass (including multi-model): [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
 
 ## Three goals
 
@@ -42,7 +43,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | `./scripts/smoke-host.sh` | shellcheck, package layout, link check, validators, mutators-under-lock, rpcd argv (password-safe stub), busybox fallback, luci-login + health schema, theme/i18n/parity |
 | `python3 scripts/z3-verify.py --full` | Formal proof of username / actor grammars (empty, length, deny-list, injection alphabet) |
 | `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → mutators → session revoke → **readonly diagnostic** (page RPCs `network.interface dump` / `uci get`/`changes` allow via diagnostic-rpc; still deny `luci-base` + `getWirelessDevices`; uci write / add / shadow / logs deny; list+health allow) → **admin full** wireless get → `--scope` rejected → demote leftover SID dead → LuCI/ubus |
-| `gh api repos/:owner/:repo/code-scanning/alerts` | CodeQL findings, **including dismissed ones** — check before filing, a finding may already have a decision |
+| `gh api --paginate "repos/{owner}/{repo}/code-scanning/alerts"` | CodeQL findings, **including dismissed ones** — check before filing, a finding may already have a decision |
 
 Notes:
 
@@ -404,6 +405,9 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Proof.** `host`: `tests/test_sdk_matrix_digests.sh` asserts `feed_keys_write_from_env` follows the last `./scripts/docker-sdk.sh build` and `verify-reproducible-build.sh`, and that `opkg-secret.key` / `apk-secret.rsa` / `feed_keys_write_from_env` do not appear before that SDK window; full `./scripts/smoke-host.sh` green. `manual`: record first `v*` tag publish after merge in this entry.
 
 ## Review procedure
+
+The multi-model loop is in [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
+This section lists the ledger updates that a pass must record.
 
 1. Read this file and [threat-model.md](threat-model.md) first. Do not reopen the #3 won't-fix bucket or the [Accepted residuals](#accepted-residuals) without new evidence.
 2. Pick the surface with the **oldest date in the [coverage map](#surface-coverage-map)**. A pass that only re-reads the CLI is a pass that finds nothing new. **New surfaces start dated on the feature PR** that introduces them — do not leave them undated until a later periodic pass.
