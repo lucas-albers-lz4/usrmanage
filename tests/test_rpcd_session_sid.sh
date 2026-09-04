@@ -18,10 +18,18 @@ cat > "$TMP/bin/ubus" <<'STUB'
 #!/bin/sh
 case "$1 $2 $3" in
 	"call session access")
+		case "$4" in
+			*'"ubus_rpc_session":"0123456789abcdef0123456789abcdef"'*) ;;
+			*) echo "unexpected SID in session access: $4" >&2; exit 1 ;;
+		esac
 		printf '%s\n' '{"access":true}'
 		exit 0
 		;;
 	"call session get")
+		case "$4" in
+			*'"ubus_rpc_session":"0123456789abcdef0123456789abcdef"'*) ;;
+			*) echo "unexpected SID in session get: $4" >&2; exit 1 ;;
+		esac
 		printf '%s\n' '{"values":{"username":"adminops"}}'
 		exit 0
 		;;

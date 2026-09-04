@@ -35,6 +35,11 @@ case "$4" in
 	*'"object":"usrmanage"'*'"function":"add"'*) ;;
 	*) echo "unexpected session access payload: $4" >&2; exit 1 ;;
 esac
+# Require the exact body SID in the probe (S1).
+case "$4" in
+	*'"ubus_rpc_session":"0123456789abcdef0123456789abcdef"'*) ;;
+	*) echo "unexpected SID in session access payload: $4" >&2; exit 1 ;;
+esac
 case "$FAKE_ACCESS" in
 	true) printf '%s\n' '{"access":true}' ;;
 	*) printf '%s\n' '{"access":false}' ;;

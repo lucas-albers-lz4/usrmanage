@@ -370,9 +370,9 @@ printf 'LabAct1!\n' | ssh_guest 'usrmanage add umactor --role readonly --passwor
 	|| die "add umactor for S1 actor probe failed"
 ssh_guest "ubus call usrmanage del \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\",\\\"name\\\":\\\"umactor\\\"}\"" \
 	>/dev/null || die "admin del umactor via ubus failed"
-_audit_line="$(ssh_guest 'tail -n 10 /var/log/usrmanage/audit.log 2>/dev/null | grep "actor=umfull" | tail -n 1 || true')"
+_audit_line="$(ssh_guest 'tail -n 20 /var/log/usrmanage/audit.log 2>/dev/null | grep "user=umactor" | grep "actor=umfull" | tail -n 1 || true')"
 [ -n "$_audit_line" ] \
-	|| die "S1: expected actor=umfull in recent audit after ubus del"
+	|| die "S1: expected audit line for user=umactor actor=umfull after ubus del"
 # Confirm umfull SID still alive (del must not have revoked the caller).
 ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\"}\"" >/dev/null \
 	|| die "S1: umfull SID dead after del umactor (unexpected revoke)"
