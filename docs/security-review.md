@@ -1,8 +1,8 @@
 # Security audit ledger — usrmanage
 
-> **Status:** 40 controls in force · 5 proven in lab · 2 open findings (S1 #168, P1 #169).
+> **Status:** 40 controls in force · 5 proven in lab · 2 open findings from this pass (S1 #168, P1 #169).
 > **Last review:** 2026-09-04 (multi-model high-yield CLI+rpcd / Fable 5.1).
-> **Open findings:** [#168](https://github.com/lucas-albers-lz4/usrmanage/issues/168) S1 · [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) P1. Also open (unrelated): [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166) CI checkout credential hygiene.
+> **Open findings:** [#168](https://github.com/lucas-albers-lz4/usrmanage/issues/168) S1 · [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) P1. Unrelated open: [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166) CI checkout credential hygiene.
 > **Next step:** fix S1 (body-derived SID + lab assert) before treating #149/#158 as live; then dated QEMU lab (readonly diagnostic/full + session revoke) before the next release. Full five-surface pass deferred (no High/Medium expand).
 > **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab). Multi-model pass: [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
 
@@ -131,7 +131,8 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 |-------|----|------|----------|-------|
 | [#168](https://github.com/lucas-albers-lz4/usrmanage/issues/168) | S1 | rpcd ACL / actor | Low | `RPC_SESSION` env never set by rpcd exec plugins; write-ACL positive path + LuCI actor inert (fail-closed). Host tests shim env → false green on #149/#158. |
 | [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) | P1 | CLI policy audit | Low | `set-policy` never `um_audit`s success or `invalid_policy` denial. |
-| [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166) | — | CI hygiene | Low | Unrelated to this pass — `usrmanage-test.yml` checkout credential persistence. |
+
+Unrelated open (not from this pass): [#166](https://github.com/lucas-albers-lz4/usrmanage/issues/166) CI checkout credential hygiene.
 
 #148–#150 closed 2026-08-21; #158 merged in [PR #160](https://github.com/lucas-albers-lz4/usrmanage/pull/160); #159 closed by [PR #161](https://github.com/lucas-albers-lz4/usrmanage/pull/161) (2026-08-25). I3 remains an accepted residual.
 
