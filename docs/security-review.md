@@ -3,7 +3,7 @@
 > **Status:** 40 controls in force · 5 proven in lab · 1 open finding (P1 #169).
 > **Last review:** 2026-09-04 (S1 body SID host+lab; #166 closed; dated QEMU PASS).
 > **Open findings:** [#169](https://github.com/lucas-albers-lz4/usrmanage/issues/169) P1.
-> **Next step:** cut `v0.1.16`. P1 remains open (does not block). Full five-surface pass deferred.
+> **Next step:** P1 #169 (`set-policy` audit) when convenient. Full five-surface pass deferred.
 > **How to verify:** `./scripts/smoke-host.sh` (host gates) · `./scripts/qemu-smoke-usrmanage.sh` (lab). Multi-model pass: [`.cursor/skills/security-audit/SKILL.md`](../.cursor/skills/security-audit/SKILL.md).
 
 Record of what was **checked**, **proven**, **fixed**, **accepted**, and **still open** (open items are candidates pending review/fix).
