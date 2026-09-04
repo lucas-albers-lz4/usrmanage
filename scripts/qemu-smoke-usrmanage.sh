@@ -343,6 +343,71 @@ _full_sid="$(printf '%s' "$_full_login" | grep -oE '"ubus_rpc_session":[[:space:
 _assert_allowed "$(_sid_access "$_full_sid" ubus uci get)" "admin full ubus uci.get"
 ok "admin full can uci.get (role-locked full)"
 
+# S1 #168: body-derived SID — admin list --all / show / actor attribution.
+# Unmanaged UID>=1000 row for the --all enumeration oracle (not in registry).
+ssh_guest 'grep -q "^umsysenum:" /etc/passwd && deluser umsysenum 2>/dev/null; true' || true
+ssh_guest 'adduser -u 1999 -D -H -s /bin/false umsysenum 2>/dev/null || useradd -u 1999 -M -s /bin/false umsysenum' \
+	|| die "create unmanaged umsysenum failed"
+ok "unmanaged umsysenum UID 1999 for list --all oracle"
+
+_admin_all="$(ssh_guest "ubus call usrmanage list \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\",\\\"all\\\":true}\"")" \
+	|| die "admin list all:true failed"
+printf '%s' "$_admin_all" | grep -q umsysenum \
+	|| die "admin list --all missing unmanaged umsysenum (got: ${_admin_all})"
+ok "S1: admin list all:true enumerates unmanaged umsysenum"
+
+_admin_show="$(ssh_guest "ubus call usrmanage show \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\",\\\"name\\\":\\\"umkeep\\\"}\"")" \
+	|| die "admin show umkeep failed"
+printf '%s' "$_admin_show" | grep -q umkeep \
+	|| die "admin show missing umkeep (got: ${_admin_show})"
+printf '%s' "$_admin_show" | grep -qi access_denied \
+	&& die "admin show unexpectedly access_denied"
+ok "S1: admin show umkeep allowed"
+
+# Actor attribution: delete a throwaway via ubus (must not revoke umfull SID).
+ssh_guest 'usrmanage del umactor >/dev/null 2>&1 || true'
+printf 'LabAct1!\n' | ssh_guest 'usrmanage add umactor --role readonly --password-fd 0' \
+	|| die "add umactor for S1 actor probe failed"
+_audit_bytes="$(ssh_guest 'wc -c </var/log/usrmanage/audit.log 2>/dev/null || echo 0')"
+_audit_bytes="$(printf '%s' "$_audit_bytes" | tr -dc '0-9')"
+[ -n "$_audit_bytes" ] || _audit_bytes=0
+ssh_guest "ubus call usrmanage del \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\",\\\"name\\\":\\\"umactor\\\"}\"" \
+	>/dev/null || die "admin del umactor via ubus failed"
+_audit_line="$(ssh_guest "tail -c +$((_audit_bytes + 1)) /var/log/usrmanage/audit.log 2>/dev/null | grep \"user=umactor\" | grep \"actor=umfull\" | tail -n 1 || true")"
+[ -n "$_audit_line" ] \
+	|| die "S1: expected new audit line for user=umactor actor=umfull after ubus del"
+# Confirm umfull SID still alive (del must not have revoked the caller).
+ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\"}\"" >/dev/null \
+	|| die "S1: umfull SID dead after del umactor (unexpected revoke)"
+ok "S1: LuCI/ubus mutator audits actor=umfull"
+
+# Readonly observer must not get --all enumeration or show.
+ssh_guest 'usrmanage del umobs >/dev/null 2>&1 || true'
+printf 'LabObs1!\n' | ssh_guest 'usrmanage add umobs --role readonly --password-fd 0' \
+	|| die "re-add umobs for S1 failed"
+ssh_guest 'usrmanage set-luci-login umobs --enable' \
+	|| die "re-enable umobs luci for S1 failed"
+_obs2_login="$(printf '%s' '{"username":"umobs","password":"LabObs1!"}' | ssh_guest 'ubus call session login "$(cat)" 2>/dev/null')" \
+	|| die "re-login umobs for S1 failed"
+_obs2_sid="$(printf '%s' "$_obs2_login" | grep -oE '"ubus_rpc_session":[[:space:]]*"[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}')"
+[[ -n "$_obs2_sid" ]] || die "no umobs sid for S1"
+_ro_all="$(ssh_guest "ubus call usrmanage list \"{\\\"ubus_rpc_session\\\":\\\"${_obs2_sid}\\\",\\\"all\\\":true}\"")" \
+	|| die "readonly list all:true call failed"
+printf '%s' "$_ro_all" | grep -q umsysenum \
+	&& die "readonly list all:true must not enumerate umsysenum (got: ${_ro_all})"
+ok "S1: readonly list all:true strips unmanaged enumeration"
+_ro_show="$(ssh_guest "ubus call usrmanage show \"{\\\"ubus_rpc_session\\\":\\\"${_obs2_sid}\\\",\\\"name\\\":\\\"umkeep\\\"}\"")" \
+	|| true
+printf '%s' "$_ro_show" | grep -q 'access_denied' \
+	|| die "readonly show must access_denied (got: ${_ro_show})"
+printf '%s' "$_ro_show" | grep -qi 'not_found' \
+	&& die "readonly show must not leak not_found oracle"
+ok "S1: readonly show access_denied (no not_found oracle)"
+ssh_guest 'usrmanage set-luci-login umobs --disable 2>/dev/null || true'
+ssh_guest 'usrmanage del umobs 2>/dev/null || true'
+ssh_guest 'deluser umsysenum 2>/dev/null || userdel umsysenum 2>/dev/null || true'
+ok "S1: cleaned umobs/umsysenum fixtures"
+
 # Demote full → diagnostic: leftover SID dead; new session has diagnostic ACLs.
 ssh_guest 'usrmanage set-role umfull --role readonly' || die "demote umfull failed"
 ok "umfull demoted to readonly"

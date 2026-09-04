@@ -1,11 +1,11 @@
 #!/bin/sh
-# Host tests for the rpcd `list` write-ACL gate (issue #149).
+# Host tests for the rpcd `list` write-ACL gate (issue #149 / S1 #168).
 #
 # `usrmanage list --all` enumerates every passwd row >= UID floor. The read
 # ACL grants `list` to diagnostic/readonly sessions, so `all` must be honored
 # ONLY for sessions holding the usrmanage WRITE acl; every other case fails
-# closed to the plain managed-user list. Verified behaviorally through the
-# rpcd plugin with shimmed ubus/jsonfilter/CLI.
+# closed to the plain managed-user list. SID is taken from the request body
+# field ubus_rpc_session (32 hex), not from RPC_SESSION env.
 set -e
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -34,6 +34,11 @@ esac
 case "$4" in
 	*'"object":"usrmanage"'*'"function":"add"'*) ;;
 	*) echo "unexpected session access payload: $4" >&2; exit 1 ;;
+esac
+# Require the exact body SID in the probe (S1).
+case "$4" in
+	*'"ubus_rpc_session":"0123456789abcdef0123456789abcdef"'*) ;;
+	*) echo "unexpected SID in session access payload: $4" >&2; exit 1 ;;
 esac
 case "$FAKE_ACCESS" in
 	true) printf '%s\n' '{"access":true}' ;;
@@ -64,47 +69,63 @@ chmod +x "$TMP/bin/usrmanage-stub"
 export USRMANAGE_BIN="$TMP/bin/usrmanage-stub"
 export FAKE_CLI_LOG="$TMP/cli-args.log"
 
-SID=0123456789abcdef
+# Real OpenWrt SIDs are 32 hex; shorter env-era fixtures must fail closed (S1).
+SID=0123456789abcdef0123456789abcdef
+SHORT=0123456789abcdef
 FULLPATH="$TMP/bin:$TMP/jbin:$PATH"
 # Allowlist PATH for the missing-ubus case (CodeRabbit r2 fold): only the
 # jsonfilter shim + /bin, so the result cannot depend on whether the host
 # happens to have ubus installed. The assertion below makes a leak loud.
 NOUBUSPATH="$TMP/jbin:/bin"
 
-# 1. Write ACL present (access:true) -> all honored (--all passed to CLI).
-FAKE_ACCESS=true RPC_SESSION="$SID" PATH="$FULLPATH" \
-	sh "$RPCD" call list '{"all":true}' >/dev/null || true
+_call_list() {
+	# _call_list <json-body>
+	PATH="$FULLPATH" FAKE_ACCESS="${FAKE_ACCESS:-true}" \
+		sh "$RPCD" call list "$1" >/dev/null || true
+}
+
+# 1. Write ACL present (access:true) + body SID -> all honored.
+: > "$FAKE_CLI_LOG"
+FAKE_ACCESS=true _call_list "{\"all\":true,\"ubus_rpc_session\":\"${SID}\"}"
 grep -q -- '--all' "$FAKE_CLI_LOG" && ok "write ACL: --all honored" || bad "write ACL: --all missing"
 
 # 2. Read-only session (access:false) -> all stripped (no --all).
 : > "$FAKE_CLI_LOG"
-FAKE_ACCESS=false RPC_SESSION="$SID" PATH="$FULLPATH" \
-	sh "$RPCD" call list '{"all":true}' >/dev/null || true
+FAKE_ACCESS=false _call_list "{\"all\":true,\"ubus_rpc_session\":\"${SID}\"}"
 [ -s "$FAKE_CLI_LOG" ] && ok "readonly: plain-list CLI path ran" || bad "readonly: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "readonly: --all still passed" || ok "readonly: --all stripped"
 
-# 3. No ubus on PATH -> fail closed (no --all). The allowlist PATH must
-# genuinely lack ubus (else this silently tests the probe path instead).
+# 3. No ubus on PATH -> fail closed (no --all).
 if PATH="$NOUBUSPATH" command -v ubus >/dev/null 2>&1; then
 	bad "no-ubus: allowlist PATH still resolves ubus"
 fi
 : > "$FAKE_CLI_LOG"
-RPC_SESSION="$SID" PATH="$NOUBUSPATH" \
-	sh "$RPCD" call list '{"all":true}' >/dev/null || true
+FAKE_ACCESS=true PATH="$NOUBUSPATH" \
+	sh "$RPCD" call list "{\"all\":true,\"ubus_rpc_session\":\"${SID}\"}" >/dev/null || true
 [ -s "$FAKE_CLI_LOG" ] && ok "no-ubus: plain-list CLI path ran" || bad "no-ubus: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "no-ubus: --all passed" || ok "no-ubus: fail closed"
 
-# 4. Malformed RPC_SESSION -> fail closed (no --all).
+# 4. Malformed SID in body -> fail closed (no --all).
 : > "$FAKE_CLI_LOG"
-FAKE_ACCESS=true RPC_SESSION=';reboot' PATH="$FULLPATH" \
-	sh "$RPCD" call list '{"all":true}' >/dev/null || true
+FAKE_ACCESS=true _call_list '{"all":true,"ubus_rpc_session":";reboot"}'
 [ -s "$FAKE_CLI_LOG" ] && ok "bad sid: plain-list CLI path ran" || bad "bad sid: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "bad sid: --all passed" || ok "bad sid: fail closed"
 
-# 5. Plain list (all:false) unchanged -> no --all.
+# 5. Missing SID -> fail closed (env RPC_SESSION ignored).
 : > "$FAKE_CLI_LOG"
-FAKE_ACCESS=true RPC_SESSION="$SID" PATH="$FULLPATH" \
-	sh "$RPCD" call list '{"all":false}' >/dev/null || true
+FAKE_ACCESS=true RPC_SESSION="$SID" _call_list '{"all":true}'
+[ -s "$FAKE_CLI_LOG" ] && ok "no body sid: plain-list CLI path ran" || bad "no body sid: CLI never invoked"
+grep -q -- '--all' "$FAKE_CLI_LOG" && bad "no body sid: --all passed (env leak?)" || ok "no body sid: fail closed"
+
+# 6. Wrong length (16 hex) -> fail closed.
+: > "$FAKE_CLI_LOG"
+FAKE_ACCESS=true _call_list "{\"all\":true,\"ubus_rpc_session\":\"${SHORT}\"}"
+[ -s "$FAKE_CLI_LOG" ] && ok "short sid: plain-list CLI path ran" || bad "short sid: CLI never invoked"
+grep -q -- '--all' "$FAKE_CLI_LOG" && bad "short sid: --all passed" || ok "short sid: fail closed"
+
+# 7. Plain list (all:false) unchanged -> no --all.
+: > "$FAKE_CLI_LOG"
+FAKE_ACCESS=true _call_list "{\"all\":false,\"ubus_rpc_session\":\"${SID}\"}"
 [ -s "$FAKE_CLI_LOG" ] && ok "all:false: plain-list CLI path ran" || bad "all:false: CLI never invoked"
 grep -q -- '--all' "$FAKE_CLI_LOG" && bad "all:false: --all passed" || ok "all:false: plain list"
 
