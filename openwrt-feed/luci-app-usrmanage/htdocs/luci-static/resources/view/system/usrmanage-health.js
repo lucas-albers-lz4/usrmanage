@@ -5,7 +5,7 @@
 'require ui';
 
 /* Keep in sync with openwrt-feed/luci-app-usrmanage/Makefile PKG_VERSION */
-const APP_VERSION = '0.1.16';
+const APP_VERSION = '0.1.17';
 
 const callHealth = rpc.declare({
 	object: 'usrmanage',
@@ -51,8 +51,8 @@ function upDown(v) {
 
 function healthRow(label, value) {
 	return E('div', { 'class': 'cbi-value' }, [
-		E('label', { 'class': 'cbi-value-title' }, label),
-		E('div', { 'class': 'cbi-value-field' }, String(value != null ? value : '—'))
+		E('label', { 'class': 'cbi-value-title' }, [ label ]),
+		E('div', { 'class': 'cbi-value-field' }, [ String(value != null ? value : '—') ])
 	]);
 }
 
@@ -88,7 +88,7 @@ return view.extend({
 			return E('div', { 'class': 'cbi-map' }, [
 				E('h2', {}, _('Device health')),
 				E('div', { 'class': 'alert-message error', 'data-testid': 'usrmanage-health-error' }, [
-					E('p', {}, _('Health data is unavailable (%s).').format(err))
+					E('p', {}, [ _('Health data is unavailable (%s).').format(err) ])
 				]),
 				E('div', { 'class': 'cbi-section-node' }, [
 					E('button', {

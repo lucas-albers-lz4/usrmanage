@@ -31,12 +31,12 @@
 		"description": "Grant access to local UNIX user management",
 		"read": {
 			"ubus": {
-				"usrmanage": [ "list", "show", "audit", "doctor", "policy" ]
+				"usrmanage": [ "list", "audit", "doctor", "policy" ]
 			}
 		},
 		"write": {
 			"ubus": {
-				"usrmanage": [ "add", "del", "set_role", "passwd", "get_policy", "set_policy", "set_luci_login" ]
+				"usrmanage": [ "add", "del", "set_role", "passwd", "get_policy", "set_policy", "set_luci_login", "show" ]
 			}
 		}
 	}
