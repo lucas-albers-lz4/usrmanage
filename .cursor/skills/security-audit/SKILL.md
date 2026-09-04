@@ -119,7 +119,7 @@ Stage 2:
 Use the multi-model phase order above. For a full surface pass, start with the
 surface that has the oldest coverage-map date (ledger rule).
 
-```
+```markdown
 - [ ] 0. Multi-model: open issues / honest gaps → delta → gate
 - [ ] 1. CLI + shared library (validators, password path, lock)
 - [ ] 2. rpcd plugin + ACL scope
@@ -134,8 +134,11 @@ surface that has the oldest coverage-map date (ledger rule).
 ./scripts/smoke-host.sh
 rg -n '\$\{\{|uses:' .github/workflows
 rg -n 'eval|chpasswd|password|--password' openwrt-feed/usrmanage openwrt-feed/luci-app-usrmanage
-git check-ignore -v opkg-secret.key apk-secret.rsa public.key '*.tmp' 2>/dev/null || true
-gh api repos/:owner/:repo/code-scanning/alerts --jq '.[] | select(.state!="open") | "\(.number) \(.state) \(.rule.id)"' | head
+# Fail closed: no candidate may be tracked; every candidate must be ignored.
+tracked=$(git ls-files -- opkg-secret.key apk-secret.rsa public.key)
+[ -z "$tracked" ] || { printf 'tracked secret path(s):\n%s\n' "$tracked"; exit 1; }
+git check-ignore -v opkg-secret.key apk-secret.rsa public.key '*.tmp'
+gh api --paginate "repos/{owner}/{repo}/code-scanning/alerts" --jq '.[] | select(.state!="open") | "\(.number) \(.state) \(.rule.id)"'
 ```
 
 ## Severity calibration

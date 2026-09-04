@@ -43,7 +43,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | `./scripts/smoke-host.sh` | shellcheck, package layout, link check, validators, mutators-under-lock, rpcd argv (password-safe stub), busybox fallback, luci-login + health schema, theme/i18n/parity |
 | `python3 scripts/z3-verify.py --full` | Formal proof of username / actor grammars (empty, length, deny-list, injection alphabet) |
 | `./scripts/qemu-smoke-usrmanage.sh` | Live OpenWrt guest: doctor → mutators → session revoke → **readonly diagnostic** (page RPCs `network.interface dump` / `uci get`/`changes` allow via diagnostic-rpc; still deny `luci-base` + `getWirelessDevices`; uci write / add / shadow / logs deny; list+health allow) → **admin full** wireless get → `--scope` rejected → demote leftover SID dead → LuCI/ubus |
-| `gh api repos/:owner/:repo/code-scanning/alerts` | CodeQL findings, **including dismissed ones** — check before filing, a finding may already have a decision |
+| `gh api --paginate "repos/{owner}/{repo}/code-scanning/alerts"` | CodeQL findings, **including dismissed ones** — check before filing, a finding may already have a decision |
 
 Notes:
 
