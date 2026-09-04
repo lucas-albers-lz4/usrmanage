@@ -14,7 +14,7 @@ LUCI_DEPENDS:=+luci-base +usrmanage +sudo
 LUCI_EXTRA_DEPENDS:=usrmanage (>=0.1.15)
 LUCI_PKGARCH:=all
 
-PKG_VERSION:=0.1.15
+PKG_VERSION:=0.1.16
 PKG_RELEASE:=1
 
 ifdef SOURCE_DATE_EPOCH
