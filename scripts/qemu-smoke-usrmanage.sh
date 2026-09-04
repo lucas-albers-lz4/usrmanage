@@ -368,11 +368,14 @@ ok "S1: admin show umkeep allowed"
 ssh_guest 'usrmanage del umactor >/dev/null 2>&1 || true'
 printf 'LabAct1!\n' | ssh_guest 'usrmanage add umactor --role readonly --password-fd 0' \
 	|| die "add umactor for S1 actor probe failed"
+_audit_bytes="$(ssh_guest 'wc -c </var/log/usrmanage/audit.log 2>/dev/null || echo 0')"
+_audit_bytes="$(printf '%s' "$_audit_bytes" | tr -dc '0-9')"
+[ -n "$_audit_bytes" ] || _audit_bytes=0
 ssh_guest "ubus call usrmanage del \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\",\\\"name\\\":\\\"umactor\\\"}\"" \
 	>/dev/null || die "admin del umactor via ubus failed"
-_audit_line="$(ssh_guest 'tail -n 20 /var/log/usrmanage/audit.log 2>/dev/null | grep "user=umactor" | grep "actor=umfull" | tail -n 1 || true')"
+_audit_line="$(ssh_guest "tail -c +$((_audit_bytes + 1)) /var/log/usrmanage/audit.log 2>/dev/null | grep \"user=umactor\" | grep \"actor=umfull\" | tail -n 1 || true")"
 [ -n "$_audit_line" ] \
-	|| die "S1: expected audit line for user=umactor actor=umfull after ubus del"
+	|| die "S1: expected new audit line for user=umactor actor=umfull after ubus del"
 # Confirm umfull SID still alive (del must not have revoked the caller).
 ssh_guest "ubus call session get \"{\\\"ubus_rpc_session\\\":\\\"${_full_sid}\\\"}\"" >/dev/null \
 	|| die "S1: umfull SID dead after del umactor (unexpected revoke)"
