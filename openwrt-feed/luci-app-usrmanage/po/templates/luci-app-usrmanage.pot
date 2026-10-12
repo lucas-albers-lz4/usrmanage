@@ -423,6 +423,10 @@ msgid "View only — you can list users and audit events, but not add, change ro
 msgstr ""
 
 #: htdocs/luci-static/resources/view/system/usrmanage.js
+msgid "Password policy details are unavailable; account changes are disabled. Refresh to retry."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/system/usrmanage.js
 msgid "Full LuCI (all menus)"
 msgstr ""
 

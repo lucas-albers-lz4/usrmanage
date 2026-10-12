@@ -13,41 +13,37 @@ const callList = rpc.declare({
 	object: 'usrmanage',
 	method: 'list',
 	params: [ 'all' ],
-	expect: { '': { users: [] } }
+	expect: { '': {} },
+	reject: true
 });
 
 const callAudit = rpc.declare({
 	object: 'usrmanage',
 	method: 'audit',
 	params: [ 'last' ],
-	expect: { '': { events: [] } }
+	expect: { '': {} },
+	reject: true
 });
 
 const callDoctor = rpc.declare({
 	object: 'usrmanage',
 	method: 'doctor',
-	expect: { '': { ok: true, checks: [], incomplete: [] } }
+	expect: { '': {} },
+	reject: true
 });
 
 const callPolicyName = rpc.declare({
 	object: 'usrmanage',
 	method: 'policy',
-	expect: { '': { preset: 'openwrt', label: 'OpenWrt' } }
+	expect: { '': {} },
+	reject: true
 });
 
 const callGetPolicy = rpc.declare({
 	object: 'usrmanage',
 	method: 'get_policy',
-	expect: { '': {
-		preset: 'openwrt',
-		label: 'OpenWrt',
-		min_length: 8,
-		reject_username: true,
-		require_lower: false,
-		require_upper: false,
-		require_digit: false,
-		require_special: false
-	} }
+	expect: { '': {} },
+	reject: true
 });
 
 const callSetPolicy = rpc.declare({
@@ -57,42 +53,48 @@ const callSetPolicy = rpc.declare({
 		'preset', 'min_length', 'reject_username',
 		'require_lower', 'require_upper', 'require_digit', 'require_special'
 	],
-	expect: { '': { ok: true } }
+	expect: { '': {} },
+	reject: true
 });
 
 const callAdd = rpc.declare({
 	object: 'usrmanage',
 	method: 'add',
 	params: [ 'name', 'role', 'password', 'luci_login' ],
-	expect: { '': { ok: true } }
+	expect: { '': {} },
+	reject: true
 });
 
 const callDel = rpc.declare({
 	object: 'usrmanage',
 	method: 'del',
 	params: [ 'name', 'purge_home' ],
-	expect: { '': { ok: true } }
+	expect: { '': {} },
+	reject: true
 });
 
 const callSetRole = rpc.declare({
 	object: 'usrmanage',
 	method: 'set_role',
 	params: [ 'name', 'role' ],
-	expect: { '': { ok: true } }
+	expect: { '': {} },
+	reject: true
 });
 
 const callSetLuciLogin = rpc.declare({
 	object: 'usrmanage',
 	method: 'set_luci_login',
 	params: [ 'name', 'mode' ],
-	expect: { '': { ok: true } }
+	expect: { '': {} },
+	reject: true
 });
 
 const callPasswd = rpc.declare({
 	object: 'usrmanage',
 	method: 'passwd',
 	params: [ 'name', 'password' ],
-	expect: { '': { ok: true } }
+	expect: { '': {} },
+	reject: true
 });
 
 const PRESET_VALUES = {
@@ -149,6 +151,34 @@ function wireLuciRoleExtras(roleSelect, luciCheck, readonlyBanner, adminBanner) 
 	sync();
 }
 
+function isRecord(value) {
+	return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validPolicyNameReply(policy) {
+	return isRecord(policy) && typeof policy.preset === 'string' && typeof policy.label === 'string';
+}
+
+function validFullPolicyReply(policy) {
+	return validPolicyNameReply(policy)
+		&& /^(openwrt|standard|strict|custom)$/.test(policy.preset)
+		&& Number.isInteger(policy.min_length)
+		&& typeof policy.reject_username === 'boolean'
+		&& typeof policy.require_lower === 'boolean'
+		&& typeof policy.require_upper === 'boolean'
+		&& typeof policy.require_digit === 'boolean'
+		&& typeof policy.require_special === 'boolean';
+}
+
+function validBaseReplies(data) {
+	return Array.isArray(data)
+		&& isRecord(data[0]) && Array.isArray(data[0].users)
+		&& isRecord(data[1]) && Array.isArray(data[1].events)
+		&& isRecord(data[2]) && typeof data[2].ok === 'boolean'
+		&& Array.isArray(data[2].checks) && Array.isArray(data[2].incomplete)
+		&& validPolicyNameReply(data[3]);
+}
+
 function hasWriteAcl() {
 	try {
 		if (typeof L.hasACLScope === 'function') {
@@ -188,7 +218,7 @@ function notifyRequestFailed() {
 /* Shared mutator result handling: close modal, surface failure, toast + refresh on success. */
 function finishMutator(res, successMsg, view) {
 	ui.hideModal();
-	if (res && res.ok === false) {
+	if (!res || res.ok !== true) {
 		notifyMutatorFailure(res);
 		return;
 	}
@@ -389,9 +419,11 @@ return view.extend({
 			callDoctor(),
 			callPolicyName()
 		]).then(function(base) {
-			/* Prefer full policy when write ACL allows; never fail the page for read-only. */
+			if (!validBaseReplies(base))
+				throw new Error('Invalid usrmanage RPC reply');
+			/* A readonly session is expected to be denied get_policy. */
 			return callGetPolicy().then(function(full) {
-				return base.concat([ full ]);
+				return base.concat([ validFullPolicyReply(full) ? full : null ]);
 			}).catch(function() {
 				return base.concat([ null ]);
 			});
@@ -399,29 +431,22 @@ return view.extend({
 	},
 
 	render: function(data) {
-		const users = (data[0] && data[0].users) ? data[0].users : [];
-		const events = (data[1] && data[1].events) ? data[1].events : [];
-		const doctor = (data[2] && typeof data[2] === 'object')
-			? data[2]
-			: { ok: true, checks: [], incomplete: [] };
-		const policyName = (data[3] && typeof data[3] === 'object')
-			? data[3]
-			: { preset: 'openwrt', label: 'OpenWrt' };
-		const policyFull = (data[4] && typeof data[4] === 'object' && data[4].min_length != null)
-			? Object.assign({}, PRESET_VALUES.openwrt, data[4])
+		if (!validBaseReplies(data))
+			return E('div', { 'class': 'alert-message error' }, [ _('Request failed') ]);
+		const users = data[0].users;
+		const events = data[1].events;
+		const doctor = data[2];
+		const policyName = data[3];
+		const policyFull = validFullPolicyReply(data[4])
+			? Object.assign({}, data[4])
 			: null;
 		const writeAclHint = hasWriteAcl();
-		/* Prefer get_policy success as write signal when client ACL APIs are inconclusive (issue #3 minor). */
-		const writeAcl = (writeAclHint === true) || (writeAclHint !== false && !!policyFull);
+		/* Never enable mutations without the complete current policy. */
+		const writeAcl = writeAclHint !== false && !!policyFull;
+		const policyUnavailable = writeAclHint === true && !policyFull;
 		const manage = writeAcl;
 		const self = this;
-		/* Full policy for checklists; fall back to OpenWrt defaults if get_policy failed but write ACL is present. */
-		const policyForForms = policyFull || (writeAcl
-			? Object.assign({}, PRESET_VALUES.openwrt, {
-				preset: policyName.preset || 'openwrt',
-				label: policyName.label || 'OpenWrt'
-			})
-			: null);
+		const policyForForms = policyFull;
 		const policyIn = policyFull || policyName;
 
 		const doctorBanner = buildDoctorBanner(doctor);
@@ -586,12 +611,16 @@ return view.extend({
 				E('br'),
 				_('Admin role grants wheel + sudo (full root after password). Write ACL on this app is root-equivalent. Audit log is operational (local + syslog), not compliance-grade evidence.')
 			]),
-			!manage ? E('div', {
+			!manage && !policyUnavailable ? E('div', {
 				'class': 'alert-message notice',
 				'data-testid': 'usrmanage-view-only-banner'
 			}, [
 				E('p', {}, _('View only — you can list users and audit events, but not add, change roles, passwords, policy, or LuCI login.'))
 			]) : null,
+			policyUnavailable ? E('div', {
+				'class': 'alert-message error',
+				'data-testid': 'usrmanage-policy-unavailable'
+			}, [ E('p', {}, _('Password policy details are unavailable; account changes are disabled. Refresh to retry.')) ]) : null,
 			doctorBanner,
 			policyStrip,
 			editorWrap,
@@ -723,7 +752,7 @@ return view.extend({
 								payload.require_digit,
 								payload.require_special
 							).then(function(res) {
-								if (res && res.ok === false) {
+								if (!res || res.ok !== true) {
 									notifyMutatorFailure(res);
 									return;
 								}
