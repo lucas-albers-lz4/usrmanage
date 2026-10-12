@@ -1337,17 +1337,20 @@ um_shadow_entry_del() {
 
 um_group_entry_del() {
 	# Remove private group named after user; bail if other members present.
+	# Supplementary-group cleanup must still run when no private group exists.
 	_u=$1
-	_line=$(grep -m1 "^${_u}:" "$USRMANAGE_GROUP" 2>/dev/null) || return 0
-	_members=$(printf '%s' "$_line" | cut -d: -f4)
-	_others=
-	if [ -n "$_members" ]; then
-		_others=$(printf '%s' "$_members" | tr ',' '\n' | grep -vx '' | grep -vx "$_u" || true)
-	fi
-	if [ -n "$_others" ]; then
-		um_audit "denied" "$_u" "fail" "group_has_members" || true
-		um_err "error: group_has_members"
-		return 1
+	_line=$(grep -m1 "^${_u}:" "$USRMANAGE_GROUP" 2>/dev/null) || _line=
+	if [ -n "$_line" ]; then
+		_members=$(printf '%s' "$_line" | cut -d: -f4)
+		_others=
+		if [ -n "$_members" ]; then
+			_others=$(printf '%s' "$_members" | tr ',' '\n' | grep -vx '' | grep -vx "$_u" || true)
+		fi
+		if [ -n "$_others" ]; then
+			um_audit "denied" "$_u" "fail" "group_has_members" || true
+			um_err "error: group_has_members"
+			return 1
+		fi
 	fi
 	# Strip user from other groups' member lists, then drop private group.
 	# shellcheck disable=SC2016
@@ -2186,8 +2189,8 @@ um_mut_passwd() {
 			um_audit denied "$_name" denied password_hash_unverified "$_role"
 			um_die "error: password_hash_unverified"
 		fi
-		um_audit fail "$_name" fail password
-		um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+		um_audit fail "$_name" fail password_write_failed "$_role"
+		um_die "error: password_write_failed"
 	}
 	um_tx_commit
 	um_incomplete_clear

@@ -26,7 +26,7 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-09-04 (P1 #169 closed) | none |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-10-11 (#174–#177 narrow host regressions; full security pass deferred) | none |
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-09-04 (S1 #168 body SID host+lab) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI configuration, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
@@ -71,7 +71,7 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 |----------------|-------|-------|-------|
 | Shell / command injection via username | Strict charset (`a-z0-9_-`, 1–32, deny-list) gates mutators and `show` | host | `tests/test_validators.sh` · Z3 P1 |
 | Passwd/shadow line confusion via suffix username | Field-anchored awk `$1 == user` in `um_passwd_line` / `um_user_locked` ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L10) | host | `tests/test_mutators.sh` (ntp/tp, daemon/n) |
-| Password in argv / `ps` / logs | `--password-fd` or stdin; rpcd pipes fd 0; never audit/syslog | host | `tests/test_mutators.sh` stub argv |
+| Password in argv / `ps` / logs | `--password-fd` or stdin; rpcd pipes fd 0; never audit/syslog. Failed password-tool writes are distinct from policy rejection and retain the prior hash | host | `tests/test_mutators.sh` stub argv · `tests/test_password_control.sh` (#177 write-failure hash/audit assertions) |
 | Interactive CLI password echo | `stty -echo` fail-closed when `stty` exists; else ash/bash `read -s` (no `stty` applet on stock OpenWrt; `-s` via `ASH_BASH_COMPAT`) | host | `tests/test_password_prompt_echo.sh` (static + PTY; fail-closed stty PTY when bash present) |
 | Audit field injection (actor/src) | Whitelist + 64-char cap (`um_actor_resolve`, `sanitize_actor`); audit tokens may contain `=` but never a space, so no new field can be introduced | host | #3 C1 · Z3 P2 |
 | Unquoted argv rpcd → CLI | Explicit argv per ubus method | host | #3 C2 · `tests/test_mutators.sh` |
