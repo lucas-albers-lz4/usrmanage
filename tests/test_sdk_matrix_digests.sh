@@ -192,7 +192,7 @@ make_apk_fixture() {
 		"$name" "$version" "$arch" > "${output}.metadata.json"
 }
 # ShellCheck cannot see this override invoked indirectly from the validator.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 sdk_matrix_read_apk_metadata() {
 	cat "${1}.metadata.json"
 }
