@@ -14,42 +14,49 @@ TARGET="${OWRT_VERIFY_TARGET:-x86-64}"
 VERSIONS=(24.10 25.12)
 
 usage() {
-	sed -n '1,10p' "$0"
+	sed -n '1,10p' "${BASH_SOURCE[0]}"
 }
 
-while [[ $# -gt 0 ]]; do
-	case "$1" in
-		--version) VERSIONS=("${2:?}"); shift 2 ;;
-		--target) TARGET="${2:?}"; shift 2 ;;
-		-h | --help) usage; exit 0 ;;
-		*) echo "unknown arg: $1" >&2; usage >&2; exit 1 ;;
-	esac
-done
+parse_args() {
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--version) VERSIONS=("${2:?}"); shift 2 ;;
+			--target) TARGET="${2:?}"; shift 2 ;;
+			-h | --help) usage; exit 0 ;;
+			*) echo "unknown arg: $1" >&2; usage >&2; return 1 ;;
+		esac
+	done
+}
 
 artifact_shas() {
-	# Print "sha256 path" lines for all packages in a version out dir
+	# Validate and hash both mandatory packages from the selected build arch.
 	local version_label="$1"
-	local dir="${ROOT}/out/x86_64/${version_label}/usrmanage"
+	local dir="${ROOT}/out/${SDK_MATRIX_PACKAGE_ARCH}/${version_label}/usrmanage"
 	local f
+	local -a files=()
+	sdk_matrix_validate_package_dir "$dir" "$SDK_MATRIX_VERSION" || return 1
 	shopt -s nullglob
-	local files=(
-		"${dir}"/usrmanage_*_all.ipk
-		"${dir}"/luci-app-usrmanage_*_all.ipk
-		"${dir}"/usrmanage-*.apk
-		"${dir}"/luci-app-usrmanage-*.apk
-	)
+	case "$SDK_MATRIX_VERSION" in
+		24.10 | 24.10.8)
+			files=("${dir}"/usrmanage_*_all.ipk "${dir}"/luci-app-usrmanage_*_all.ipk)
+			;;
+		25.12 | 25.12.5)
+			files=("${dir}"/usrmanage-*.apk "${dir}"/usrmanage_*.apk \
+				"${dir}"/luci-app-usrmanage-*.apk "${dir}"/luci-app-usrmanage_*.apk)
+			;;
+	esac
 	shopt -u nullglob
-	[[ ${#files[@]} -ge 1 ]] || return 1
+	[[ ${#files[@]} -eq 2 ]] || return 1
 	for f in "${files[@]}"; do
-		sha256sum "$f"
+		sha256sum "$f" || return 1
 	done | sort -k2
 }
 
 verify_one() {
 	local version_key="$1" label map1 map2
-	sdk_matrix_validate_version "$version_key"
-	sdk_matrix_validate_target "$TARGET"
-	sdk_matrix_resolve "$TARGET" "$version_key"
+	sdk_matrix_validate_version "$version_key" || return 1
+	sdk_matrix_validate_target "$TARGET" || return 1
+	sdk_matrix_resolve "$TARGET" "$version_key" || return 1
 	label="$SDK_MATRIX_VERSION_LABEL"
 
 	export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(sdk_matrix_source_date_epoch)}"
@@ -57,11 +64,14 @@ verify_one() {
 
 	if ! sdk_matrix_feeds_ready 2>/dev/null; then
 		echo "→ initial build (feeds setup)..." >&2
-		"${ROOT}/scripts/docker-sdk.sh" build --target "$TARGET" --version "$version_key"
+		"${ROOT}/scripts/docker-sdk.sh" build --target "$TARGET" --version "$version_key" || {
+			echo "initial build failed for ${version_key}" >&2
+			return 1
+		}
 	else
 		echo "→ build pass 1..." >&2
-		sdk_matrix_make
-		sdk_matrix_copy_out
+		sdk_matrix_make || { echo "build pass 1 failed for ${version_key}" >&2; return 1; }
+		sdk_matrix_copy_out || { echo "copy-out pass 1 failed for ${version_key}" >&2; return 1; }
 	fi
 
 	map1="$(artifact_shas "$label")" || {
@@ -74,9 +84,9 @@ verify_one() {
 	done <<< "$map1" >&2
 
 	echo "→ clean + build pass 2..." >&2
-	sdk_matrix_clean_package
-	sdk_matrix_make
-	sdk_matrix_copy_out
+	sdk_matrix_clean_package || { echo "clean failed for ${version_key}" >&2; return 1; }
+	sdk_matrix_make || { echo "build pass 2 failed for ${version_key}" >&2; return 1; }
+	sdk_matrix_copy_out || { echo "copy-out pass 2 failed for ${version_key}" >&2; return 1; }
 
 	map2="$(artifact_shas "$label")" || {
 		echo "no artifacts after pass 2 for ${label}" >&2
@@ -97,11 +107,14 @@ verify_one() {
 
 main() {
 	local v fail=0
+	parse_args "$@" || return 1
 	for v in "${VERSIONS[@]}"; do
 		verify_one "$v" || fail=1
 	done
-	[[ $fail -eq 0 ]] || exit 1
+	[[ $fail -eq 0 ]] || return 1
 	echo "All requested versions are reproducible." >&2
 }
 
-main
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	main "$@"
+fi

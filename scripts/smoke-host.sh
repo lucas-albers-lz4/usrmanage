@@ -64,6 +64,7 @@ if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	"$ROOT/tests/test_password_prompt_echo.sh"
 	"$ROOT/tests/test_sdk_matrix_digests.sh"
 	"$ROOT/tests/test_sdk_matrix_release_inputs.sh"
+	"$ROOT/tests/test_reproducible_build_contract.sh"
 	"$ROOT/tests/test_download_gzip_gate.sh"
 	"$ROOT/tests/test_qemu_net_seed.sh"
 	"$ROOT/tests/test_qemu_smoke_contract.sh"
