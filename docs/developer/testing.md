@@ -20,6 +20,14 @@ PR CI stays **host-only** (`usrmanage-test.yml` → `smoke-host.sh`) so merge ga
 ./scripts/smoke-host.sh
 ```
 
+Each command invoked by the host smoke runner writes timestamped `START`/`END`
+markers, exit status, available disk space, and Linux available/swap memory to
+`${USRMANAGE_TEST_ACTIVITY_LOG:-/tmp/usrmanage-test-activity.log}`. The log
+intentionally excludes test output and command arguments. A missing `END`
+marker identifies the last command active at an abrupt stop; it does not by
+itself prove that command caused a system crash. Keep the log outside the
+checkout and inspect previous-boot system logs separately after a reset.
+
 Runs shellcheck, link check, package layout, validators, mutators, and (if `node` is present) theme + i18n + parity checks.
 
 ### Host prerequisites
