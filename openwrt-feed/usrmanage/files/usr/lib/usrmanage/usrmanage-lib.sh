@@ -1741,6 +1741,11 @@ um_emit_user_json() {
 		"$_nu" "$_uid" "$_gid" "$_role" "$_ns" "$_nh" "$_managed" "$_locked" "$_nl"
 }
 
+um_cli_require_readable() {
+	# Read commands must not turn inaccessible state into empty/truncated output.
+	[ -f "$1" ] && [ -r "$1" ] || um_die "error: read_failed"
+}
+
 um_cmd_list() {
 	_all=0
 	_json=0
@@ -1750,6 +1755,9 @@ um_cmd_list() {
 			--json) _json=1 ;;
 		esac
 	done
+	um_cli_require_readable "$USRMANAGE_PASSWD"
+	um_cli_require_readable "$USRMANAGE_SHADOW"
+	um_cli_require_readable "$USRMANAGE_REGISTRY"
 	_first=1
 	if [ "$_json" = "1" ]; then
 		printf '{"users":['
@@ -1801,6 +1809,9 @@ um_cmd_show() {
 		esac
 	done
 	[ -n "$_name" ] || um_die "usage: usrmanage show <user> [--json]"
+	um_cli_require_readable "$USRMANAGE_PASSWD"
+	um_cli_require_readable "$USRMANAGE_SHADOW"
+	um_cli_require_readable "$USRMANAGE_REGISTRY"
 	um_validate_username "$_name" || um_die "error: invalid_username"
 	um_user_exists "$_name" || um_die "error: not_found"
 	if [ "$_json" = "1" ]; then
@@ -1829,14 +1840,21 @@ um_cmd_audit() {
 				;;
 		esac
 	done
-	um_ensure_dirs
+	# Avoid chmod/touch side effects on an existing audit file during a read.
+	if [ ! -e "$USRMANAGE_AUDIT" ] && [ ! -L "$USRMANAGE_AUDIT" ]; then
+		um_ensure_dirs
+	fi
+	um_cli_require_readable "$USRMANAGE_AUDIT"
 	case "$_last" in
 		''|*[!0-9]*) _last=50 ;;
 	esac
 	if [ "$_json" = "1" ]; then
+		# Read the complete selection before emitting JSON, so tail failure
+		# cannot turn into a successful empty or partial events array.
+		_audit_lines=$(tail -n "$_last" "$USRMANAGE_AUDIT") || um_die "error: read_failed"
 		printf '{"events":['
 		_first=1
-		tail -n "$_last" "$USRMANAGE_AUDIT" 2>/dev/null | while IFS= read -r _line || [ -n "$_line" ]; do
+		printf '%s\n' "$_audit_lines" | while IFS= read -r _line || [ -n "$_line" ]; do
 			[ -n "$_line" ] || continue
 			# Parse compact line into JSON object (best-effort)
 			_ts=$(printf '%s' "$_line" | awk '{print $1}')
@@ -1869,7 +1887,7 @@ um_cmd_audit() {
 		done
 		printf ']}\n'
 	else
-		tail -n "$_last" "$USRMANAGE_AUDIT" 2>/dev/null || true
+		tail -n "$_last" "$USRMANAGE_AUDIT" || um_die "error: read_failed"
 	fi
 }
 
