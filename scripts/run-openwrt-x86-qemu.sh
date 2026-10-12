@@ -44,20 +44,91 @@ OWRT_QEMU_PIDFILE="${OWRT_QEMU_PIDFILE:-${ROOT}/lab/qemu-x86.pid}"
 
 die() { echo "error: $*" >&2; exit 1; }
 
-stop_qemu() {
+qemu_process_pids() {
+	ps -eo pid=,stat=,args= | awk '
+		$2 !~ /^Z/ && $3 ~ /(^|\/)qemu-system-x86_64$/ { print $1 }
+	'
+}
+
+qemu_pid_managed() {
+	local pid="$1" owner args
+	owner=
 	if [[ -f "${OWRT_QEMU_PIDFILE}" ]]; then
-		local pid
-		pid="$(cat "${OWRT_QEMU_PIDFILE}" 2>/dev/null || true)"
-		if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-			kill "$pid" 2>/dev/null || true
-			sleep 1
-			kill -9 "$pid" 2>/dev/null || true
-			echo "Stopped QEMU pid ${pid}."
-		fi
-		rm -f "${OWRT_QEMU_PIDFILE}"
+		owner="$(<"${OWRT_QEMU_PIDFILE}")"
 	fi
-	if pkill -f 'qemu-system-x86_64.*openwrt-x86-64' 2>/dev/null; then
-		echo "Stopped running x86 QEMU instance(s)."
+	[[ "$pid" == "$owner" ]] && return 0
+	args="$(ps -p "$pid" -o args=)" || return 2
+	[[ -n "$OWRT_IMG" && "$args" == *"$OWRT_IMG"* ]]
+}
+
+qemu_pids() {
+	local pids pid rc
+	pids="$(qemu_process_pids)" || return 1
+	while IFS= read -r pid; do
+		[[ -n "$pid" ]] || continue
+		if qemu_pid_managed "$pid"; then
+			printf '%s\n' "$pid"
+		else
+			rc=$?
+			[[ "$rc" -eq 1 ]] || return "$rc"
+		fi
+	done <<<"$pids"
+}
+
+qemu_pid_running() {
+	local pids
+	pids="$(qemu_pids)" || return 2
+	grep -Fx "$1" <<<"$pids" >/dev/null
+}
+
+stop_qemu() {
+	local pid attempt stopped=0 rc pids
+	pids="$(qemu_pids)" || die "cannot inspect QEMU processes; refusing image preparation"
+	while IFS= read -r pid; do
+		[[ -n "$pid" ]] || continue
+		stopped=1
+		kill -TERM "$pid" 2>/dev/null || true
+		for ((attempt = 0; attempt < 10; attempt++)); do
+			rc=0
+			qemu_pid_running "$pid" || rc=$?
+			case "$rc" in
+				0) sleep 1 ;;
+				1) break ;;
+				*) die "cannot verify QEMU pid ${pid}; refusing image preparation" ;;
+			esac
+		done
+		rc=0
+		qemu_pid_running "$pid" || rc=$?
+		case "$rc" in
+			0)
+				kill -KILL "$pid" 2>/dev/null || true
+				for ((attempt = 0; attempt < 10; attempt++)); do
+					rc=0
+					qemu_pid_running "$pid" || rc=$?
+					case "$rc" in
+						0) sleep 1 ;;
+						1) break ;;
+						*) die "cannot verify QEMU pid ${pid}; refusing image preparation" ;;
+					esac
+				done
+				;;
+			1) ;;
+			*) die "cannot verify QEMU pid ${pid}; refusing image preparation" ;;
+		esac
+		rc=0
+		qemu_pid_running "$pid" || rc=$?
+		case "$rc" in
+			0) die "QEMU pid ${pid} is still running; refusing image preparation" ;;
+			1) ;;
+			*) die "cannot verify QEMU pid ${pid}; refusing image preparation" ;;
+		esac
+	done <<<"$pids"
+
+	pids="$(qemu_pids)" || die "cannot verify QEMU shutdown; refusing image preparation"
+	[[ -z "$pids" ]] || die "an OpenWrt x86 QEMU process is still running; refusing image preparation"
+	rm -f "${OWRT_QEMU_PIDFILE}"
+	if [[ "$stopped" == 1 ]]; then
+		echo "Stopped and verified x86 QEMU instance(s)."
 	else
 		echo "No x86 QEMU instance was running."
 	fi

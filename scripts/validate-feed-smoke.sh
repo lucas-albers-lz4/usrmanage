@@ -45,6 +45,9 @@ IMG="${ROOT}/lab/images/openwrt-x86-64-${IMG_RELEASE}.img"
 echo "== feed smoke: ${VERSION} feed=${FEED_URL} ==" >&2
 
 # Prepare if network.lan is still static (idempotent-ish).
+# Stop before loop-mounting the backing image; an active QEMU process can
+# otherwise keep stale block-device state while preparation mutates it.
+OWRT_X86_IMG="$IMG" "${ROOT}/scripts/run-openwrt-x86-qemu.sh" --stop >/dev/null
 if ! sudo -n true 2>/dev/null; then
 	echo "note: may prompt for sudo to prepare image" >&2
 fi
@@ -55,7 +58,6 @@ export OWRT_X86_IMG="$IMG"
 export OWRT_QEMU_DAEMON=1
 export USRMANAGE_FEED_BASE_URL="$FEED_URL"
 
-"${ROOT}/scripts/run-openwrt-x86-qemu.sh" --stop >/dev/null 2>&1 || true
 OWRT_RELEASE="$IMG_RELEASE" OWRT_X86_IMG="$IMG" OWRT_QEMU_DAEMON=1 \
 	"${ROOT}/scripts/run-openwrt-x86-qemu.sh"
 

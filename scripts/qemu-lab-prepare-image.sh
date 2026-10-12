@@ -21,6 +21,9 @@ LAB_MASK="${OWRT_LAB_SUBNET#*/}"
 [[ -f "$IMG" ]] || { echo "missing image: $IMG" >&2; exit 1; }
 [[ "$(id -u)" -eq 0 ]] || { echo "run as root (needs loop mount)" >&2; exit 1; }
 
+# Never mutate an image while QEMU may still hold its partitions open. The
+# runner returns failure unless its process check confirms shutdown.
+OWRT_X86_IMG="$IMG" "${ROOT}/scripts/run-openwrt-x86-qemu.sh" --stop >/dev/null
 LOOP="$(losetup -fP --show "$IMG")"
 cleanup() {
 	umount "$MNT" 2>/dev/null || true
