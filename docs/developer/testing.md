@@ -20,7 +20,17 @@ PR CI stays **host-only** (`usrmanage-test.yml` → `smoke-host.sh`) so merge ga
 ./scripts/smoke-host.sh
 ```
 
+Each test invoked by the host smoke runner writes timestamped `START`/`END`
+markers, exit status, available disk space, and Linux available/swap memory to
+`${USRMANAGE_TEST_ACTIVITY_LOG:-${TMPDIR:-/tmp}/usrmanage-test-activity.log}`.
+The log intentionally excludes test output and command arguments. A missing
+`END` marker identifies the last test active at an abrupt stop; it does not by
+itself prove that test caused a system crash. Keep the log outside the checkout
+and inspect previous-boot system logs separately after a reset.
+
 Runs shellcheck, link check, package layout, validators, mutators, and (if `node` is present) theme + i18n + parity checks.
+
+`tests/usrmanage-rpc-contract.test.js` is a static LuCI declaration guard, not a runtime simulation. The 24.10 SDK `rpc.js` status path was inspected: `reject: true` is passed to `req.raise`, whose nonzero-ubus check rejects before success-shaped `expect` defaults are applied. There is no checked-in host fixture for LuCI `rpc.js`; this is SDK-source proof, not live-device/browser proof.
 
 ### Host prerequisites
 
@@ -31,7 +41,7 @@ Runs shellcheck, link check, package layout, validators, mutators, and (if `node
 | `node` | theme / i18n / parity tests (skipped with a warning if absent) | `brew install node` |
 | `python3` + `z3` | `scripts/z3-verify.py` | `pip install -r requirements-z3.txt` / `apt install python3-z3` |
 
-On stock macOS, `smoke-host.sh` stops at the first missing tool, so install `flock` before you trust a green run. Two stages previously failed on macOS: `test_phase1_foundation.sh` (GNU `stat -c`) and `test_mutators-busybox-fallback.sh` (its pinned `PATH=/usr/bin:/bin` hides Homebrew binaries). [PR #84](https://github.com/lucas-albers-lz4/usrmanage/pull/84) fixed both with a portable stat helper, a flock absolute-path shim, and explicit skip reasons ([#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66)). With all host prerequisites installed, the full gate runs on macOS. Without Node.js, the theme, i18n, and parity checks still skip with a warning. Linux CI runs all stages.
+On stock macOS, `smoke-host.sh` stops at the first missing tool, so install `flock` before you trust a green run. Two stages previously failed on macOS: `test_phase1_foundation.sh` (GNU `stat -c`) and `test_mutators-busybox-fallback.sh` (its pinned `PATH=/usr/bin:/bin` hides Homebrew binaries). [PR #84](https://github.com/lucas-albers-lz4/usrmanage/pull/84) fixed both with a portable stat helper, a flock absolute-path shim, and explicit skip reasons ([#66](https://github.com/lucas-albers-lz4/usrmanage/issues/66)). With all host prerequisites installed, the full gate runs on macOS. Without Node.js, the theme, i18n, and parity checks still skip with a warning. Linux CI runs all host stages as a non-root runner; the root-only rpcd→CLI password pipeline in `tests/test_password_control.sh` is conditional and explicitly reported as skipped. A green non-root host run is not proof of that subtest.
 
 The shell stages and `smoke-host.sh` export `USRMANAGE_TEST_OVERRIDES=1` — the **test-only gate** that enables the `USRMANAGE_*` path overrides in the lib (issue #72 / #65). Outside the harness those overrides are inert.
 
@@ -46,6 +56,16 @@ Prepare and boot an x86 image, install packages, then:
 Defaults: SSH `127.0.0.1:2222`, LuCI `http://127.0.0.1:8080`, root with **empty** password on prepared images. Smoke may create fixture users such as `umadmin` — those are **test fixtures**, not product defaults.
 
 See [README](../../README.md#qemu-lab-x86_64) and `scripts/qemu-*.sh`.
+
+## Manual User Management gallery
+
+Refresh the committed WebP gallery only against a prepared, already-running QEMU lab:
+
+```sh
+npm run test:ui
+```
+
+The script never boots QEMU, requires `cwebp` or `ffmpeg` with libwebp, refuses an unexpected managed-user/audit allowlist or saved policy, creates only the documented `docuser` fixture using a random password over SSH stdin, and removes it in `finally`. Playwright tracing is not started. See [`docs/user/assets/capture-screenshots.md`](../user/assets/capture-screenshots.md); inspect every image before commit. This lab-only capture is not PR CI.
 
 ## Playwright MCP (agents)
 
