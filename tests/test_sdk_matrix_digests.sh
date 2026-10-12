@@ -159,6 +159,241 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+
+# #194: only supported release keys and their pinned point versions validate.
+for version in 24.10 24.10.8 25.12 25.12.5; do
+	sdk_matrix_validate_version "$version" || bad "supported version rejected: $version"
+done
+for version in 23.05 snapshot nonsense 25.12.99 24.10.7; do
+	if sdk_matrix_validate_version "$version" >/dev/null 2>&1; then
+		bad "unsupported version accepted: $version"
+	else
+		ok "unsupported version rejected: $version"
+	fi
+done
+
+make_ipk_fixture() {
+	local name="$1" version="$2" arch="$3" output="$4" stage
+	stage="$TMP/ipk-$name"
+	rm -rf "$stage"
+	mkdir -p "$stage/control"
+	printf 'Package: %s\nVersion: %s\nArchitecture: %s\n' "$name" "$version" "$arch" > "$stage/control/control"
+	[ -z "${5:-}" ] || printf 'Description: %s\n' "$5" >> "$stage/control/control"
+	tar -czf "$stage/control.tar.gz" -C "$stage/control" .
+	printf '2.0\n' > "$stage/debian-binary"
+	tar -czf "$output" -C "$stage" debian-binary control.tar.gz
+}
+make_apk_fixture() {
+	local name="$1" version="$2" arch="$3" output="$4"
+	# The real ADB binary format is decoded by the pinned SDK apk tool. Host
+	# unit tests stub that boundary and exercise the identity validation.
+	printf 'ADBd host fixture\n' > "$output"
+	printf '{"info":{"name":"%s","version":"%s","arch":"%s"}}\n' \
+		"$name" "$version" "$arch" > "${output}.metadata.json"
+}
+# ShellCheck cannot see this override invoked indirectly from the validator.
+# shellcheck disable=SC2329
+sdk_matrix_read_apk_metadata() {
+	cat "${1}.metadata.json"
+}
+
+# #185/#186: identity, version, architecture, package format, and complete set.
+grep -q 'adbdump --format json' "$ROOT/scripts/lib/sdk-matrix.sh" \
+	&& ok "APK validation uses the SDK ADB metadata reader" \
+	|| bad "APK validation must use apk adbdump, not tar/.PKGINFO assumptions"
+_ipk_dir="$TMP/pkg-ipk"
+mkdir -p "$_ipk_dir"
+_expected_usr="$(sdk_matrix_expected_package_version usrmanage)"
+_expected_luci="$(sdk_matrix_expected_package_version luci-app-usrmanage)"
+make_ipk_fixture usrmanage "$_expected_usr" all "$_ipk_dir/usrmanage_${_expected_usr}_all.ipk"
+make_ipk_fixture luci-app-usrmanage "$_expected_luci" all "$_ipk_dir/luci-app-usrmanage_${_expected_luci}_all.ipk"
+sdk_matrix_validate_package_dir "$_ipk_dir" 24.10 \
+	&& ok "24.10 artifact set validates both opkg packages" \
+	|| bad "24.10 artifact set validation failed"
+make_ipk_fixture usrmanage 0.1.1-r1 all "$_ipk_dir/usrmanage_0.1.1-r1_all.ipk"
+if sdk_matrix_validate_package_dir "$_ipk_dir" 24.10 >/dev/null 2>&1; then
+	bad "stale duplicate package version was accepted"
+else
+	ok "stale package duplicate rejected"
+fi
+rm -f "$_ipk_dir/usrmanage_0.1.1-r1_all.ipk" "$_ipk_dir/luci-app-usrmanage_"*.ipk
+if sdk_matrix_validate_package_dir "$_ipk_dir" 24.10 >/dev/null 2>&1; then
+	bad "missing mandatory LuCI package was accepted"
+else
+	ok "missing mandatory package rejected"
+fi
+
+_apk_dir="$TMP/pkg-apk"
+mkdir -p "$_apk_dir"
+make_apk_fixture usrmanage "$_expected_usr" noarch "$_apk_dir/usrmanage-${_expected_usr}.apk"
+make_apk_fixture luci-app-usrmanage "$_expected_luci" noarch "$_apk_dir/luci-app-usrmanage-${_expected_luci}.apk"
+sdk_matrix_validate_package_dir "$_apk_dir" 25.12 \
+	&& ok "25.12 artifact set validates both APK packages" \
+	|| bad "25.12 artifact set validation failed"
+make_apk_fixture usrmanage "$_expected_usr" x86_64 "$_apk_dir/usrmanage-${_expected_usr}.apk"
+if sdk_matrix_validate_package_dir "$_apk_dir" 25.12 >/dev/null 2>&1; then
+	bad "architecture-mismatched APK was accepted"
+else
+	ok "architecture-mismatched APK rejected"
+fi
+
+# #185: SDK copy-out starts from a fresh destination and fails if export fails.
+make_ipk_fixture usrmanage "$_expected_usr" all "$_ipk_dir/usrmanage_${_expected_usr}_all.ipk"
+make_ipk_fixture luci-app-usrmanage "$_expected_luci" all "$_ipk_dir/luci-app-usrmanage_${_expected_luci}_all.ipk"
+_copy_root="$TMP/copy-root"
+mkdir -p "$_copy_root/scripts/lib" "$_copy_root/openwrt-feed/usrmanage" \
+	"$_copy_root/openwrt-feed/luci-app-usrmanage" "$_copy_root/out/x86_64/24.10.8/usrmanage" "$TMP/copy-bin"
+cp "$ROOT/scripts/lib/sdk-matrix.sh" "$_copy_root/scripts/lib/sdk-matrix.sh"
+cp "$ROOT/openwrt-feed/usrmanage/Makefile" "$_copy_root/openwrt-feed/usrmanage/Makefile"
+cp "$ROOT/openwrt-feed/luci-app-usrmanage/Makefile" "$_copy_root/openwrt-feed/luci-app-usrmanage/Makefile"
+cp "$_ipk_dir/usrmanage_${_expected_usr}_all.ipk" "$_copy_root/openwrt-feed/usrmanage-fixture.ipk"
+cp "$_ipk_dir/luci-app-usrmanage_${_expected_luci}_all.ipk" "$_copy_root/openwrt-feed/luci-app-fixture.ipk"
+cat > "$TMP/copy-bin/docker" <<'DOCKER'
+#!/bin/sh
+[ "${COPY_OUT_FAIL:-0}" = 0 ] || exit 42
+_dest="${COPY_OUT_ROOT}/x86_64/24.10.8/usrmanage"
+mkdir -p "$_dest"
+cp "${COPY_OUT_PACKAGES}/usrmanage_${COPY_OUT_VERSION}_all.ipk" "$_dest/"
+cp "${COPY_OUT_PACKAGES}/luci-app-usrmanage_${COPY_OUT_VERSION}_all.ipk" "$_dest/"
+DOCKER
+chmod +x "$TMP/copy-bin/docker"
+mkdir -p "$_copy_root/out/x86_64/24.10.8/usrmanage"
+touch "$_copy_root/out/x86_64/24.10.8/usrmanage/stale.ipk"
+if (
+	# These exports intentionally configure isolated test subshells.
+	# shellcheck disable=SC2030,SC2031
+	export PATH="$TMP/copy-bin:$PATH"
+	# shellcheck disable=SC2030,SC2031
+	export COPY_OUT_ROOT="$_copy_root/out" COPY_OUT_PACKAGES="$_ipk_dir" COPY_OUT_VERSION="$_expected_usr"
+	# shellcheck disable=SC1091
+	source "$_copy_root/scripts/lib/sdk-matrix.sh"
+	sdk_matrix_resolve x86-64 24.10
+	sdk_matrix_copy_out
+	[[ ! -e "$_copy_root/out/x86_64/24.10.8/usrmanage/stale.ipk" ]] || exit 1
+	[[ -f "$_copy_root/out/x86_64/24.10.8/usrmanage/usrmanage_${_expected_usr}_all.ipk" ]] || exit 1
+); then
+	ok "SDK copy-out prunes stale destination and validates fresh output"
+else
+	bad "SDK copy-out did not export a fresh package set"
+fi
+(
+	# These exports intentionally configure an isolated test subshell.
+	# shellcheck disable=SC2030,SC2031
+	export PATH="$TMP/copy-bin:$PATH"
+	# shellcheck disable=SC2030,SC2031
+	export COPY_OUT_ROOT="$_copy_root/out" COPY_OUT_PACKAGES="$_ipk_dir" COPY_OUT_VERSION="$_expected_usr" COPY_OUT_FAIL=1
+	# shellcheck disable=SC1091
+	source "$_copy_root/scripts/lib/sdk-matrix.sh"
+	sdk_matrix_resolve x86-64 24.10
+	sdk_matrix_copy_out
+) >/dev/null 2>&1 && {
+	bad "SDK copy-out accepted failed export"
+} || {
+	[ ! -e "$_copy_root/out/x86_64/24.10.8/usrmanage/usrmanage_${_expected_usr}_all.ipk" ] \
+		&& ok "SDK copy-out fails closed and leaves no stale artifact" \
+		|| bad "SDK copy-out left artifact after failed export"
+}
+
+# #184/#187: failure propagation and hashing must follow the selected target arch.
+_repo_root="$ROOT"
+_sdk_resolve_original="$(declare -f sdk_matrix_resolve)"
+_feeds_ready_original="$(declare -f sdk_matrix_feeds_ready)"
+_make_original="$(declare -f sdk_matrix_make)"
+_clean_original="$(declare -f sdk_matrix_clean_package)"
+_copy_original="$(declare -f sdk_matrix_copy_out)"
+_epoch_original="$(declare -f sdk_matrix_source_date_epoch)"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/verify-reproducible-build.sh"
+VERIFY_ROOT="$TMP/verify-root"
+mkdir -p "$VERIFY_ROOT/out/x86_64/24.10.8/usrmanage" \
+	"$VERIFY_ROOT/out/aarch64_generic/24.10.8/usrmanage" "$VERIFY_ROOT/scripts"
+cp "$_ipk_dir/usrmanage_${_expected_usr}_all.ipk" \
+	"$_ipk_dir/luci-app-usrmanage_${_expected_luci}_all.ipk" \
+	"$VERIFY_ROOT/out/x86_64/24.10.8/usrmanage/"
+cp "$_ipk_dir/usrmanage_${_expected_usr}_all.ipk" \
+	"$_ipk_dir/luci-app-usrmanage_${_expected_luci}_all.ipk" \
+	"$VERIFY_ROOT/out/aarch64_generic/24.10.8/usrmanage/"
+ROOT="$VERIFY_ROOT"
+SDK_MATRIX_VERSION=24.10
+SDK_MATRIX_VERSION_LABEL=24.10.8
+SDK_MATRIX_PACKAGE_ARCH=x86_64
+_x86_before="$(artifact_shas 24.10.8)"
+SDK_MATRIX_PACKAGE_ARCH=aarch64_generic
+_arm_before="$(artifact_shas 24.10.8)"
+make_ipk_fixture usrmanage "$_expected_usr" all "$TMP/arm-changed.ipk" changed-arm-payload
+cp "$TMP/arm-changed.ipk" "$VERIFY_ROOT/out/aarch64_generic/24.10.8/usrmanage/usrmanage_${_expected_usr}_all.ipk"
+_arm_after="$(artifact_shas 24.10.8)"
+SDK_MATRIX_PACKAGE_ARCH=x86_64
+_x86_after="$(artifact_shas 24.10.8)"
+[[ "$_arm_before" != "$_arm_after" && "$_x86_before" == "$_x86_after" ]] \
+	&& ok "repro hashes the selected ARM output, not cached x86" \
+	|| bad "repro architecture selection is incorrect"
+
+# The verifier reads these globals after calling this test override.
+# shellcheck disable=SC2034
+sdk_matrix_resolve() {
+	SDK_MATRIX_TARGET="$1"
+	SDK_MATRIX_VERSION="$2"
+	SDK_MATRIX_VERSION_LABEL=24.10.8
+	case "$1" in
+		armsr-armv8) SDK_MATRIX_PACKAGE_ARCH=aarch64_generic ;;
+		*) SDK_MATRIX_PACKAGE_ARCH=x86_64 ;;
+	esac
+}
+sdk_matrix_source_date_epoch() { printf '1700000000'; }
+sdk_matrix_feeds_ready() { [[ "${VERIFY_FEEDS_READY:-1}" == 1 ]]; }
+VERIFY_FAIL=
+VERIFY_MAKE_COUNT=0
+VERIFY_COPY_COUNT=0
+sdk_matrix_make() {
+	VERIFY_MAKE_COUNT=$((VERIFY_MAKE_COUNT + 1))
+	case "$VERIFY_FAIL:$VERIFY_MAKE_COUNT" in make1:1|make2:2) return 42 ;; esac
+	return 0
+}
+sdk_matrix_clean_package() { [[ "$VERIFY_FAIL" != clean ]]; }
+sdk_matrix_copy_out() {
+	VERIFY_COPY_COUNT=$((VERIFY_COPY_COUNT + 1))
+	case "$VERIFY_FAIL:$VERIFY_COPY_COUNT" in copy1:1|copy2:2) return 43 ;; esac
+	return 0
+}
+run_verify_failure() {
+	VERIFY_FAIL="$1"
+	VERIFY_MAKE_COUNT=0
+	VERIFY_COPY_COUNT=0
+	if verify_one 24.10 >/dev/null 2>&1; then
+		bad "repro verifier accepted injected $1 failure"
+	else
+		ok "repro verifier propagates injected $1 failure"
+	fi
+}
+run_verify_failure make1
+run_verify_failure copy1
+run_verify_failure clean
+run_verify_failure make2
+run_verify_failure copy2
+cat > "$VERIFY_ROOT/scripts/docker-sdk.sh" <<'FAILSDK'
+#!/bin/sh
+exit 41
+FAILSDK
+chmod +x "$VERIFY_ROOT/scripts/docker-sdk.sh"
+VERIFY_FEEDS_READY=0 VERIFY_FAIL=setup
+if verify_one 24.10 >/dev/null 2>&1; then
+	bad "repro verifier accepted failed initial SDK build"
+else
+	ok "repro verifier propagates failed initial SDK build"
+fi
+unset VERIFY_FEEDS_READY
+# Restore SDK helpers and repo state for the existing digest/feed tests below.
+eval "$_sdk_resolve_original"
+eval "$_feeds_ready_original"
+eval "$_make_original"
+eval "$_clean_original"
+eval "$_copy_original"
+eval "$_epoch_original"
+# The verifier re-sources sdk-matrix.sh; restore the host fixture boundary.
+sdk_matrix_read_apk_metadata() { cat "${1}.metadata.json"; }
+ROOT="$_repo_root"
+unset TARGET VERSIONS
 export SDK_MATRIX_DIGEST_CACHE_DIR="$TMP/sdk-digests"
 mkdir -p "$SDK_MATRIX_DIGEST_CACHE_DIR"
 
@@ -209,7 +444,11 @@ ${EXPECT[$key]}"
 done
 
 cells=0
+# These arrays are initialized by the sourced matrix helper and stay in the
+# current shell; earlier verifier tests mutate their state only in subshells.
+# shellcheck disable=SC2031,SC2153
 for t in "${SDK_MATRIX_TARGETS[@]}"; do
+	# shellcheck disable=SC2031,SC2153
 	for v in "${SDK_MATRIX_VERSIONS[@]}"; do
 		got="$(sdk_matrix_image_digest "$t" "$v")"
 		want="${EXPECT["$t/$v"]}"
@@ -293,6 +532,38 @@ for key in "${!EXPECT[@]}"; do
 ${EXPECT[$key]}"
 	MOCK_ABSENT["$(img_ref "$target" "$version")"]=0
 done
+_feed_root="$TMP/feed-root"
+mkdir -p "$_feed_root/out/x86_64/24.10.8/usrmanage" "$_feed_root/out/x86_64/25.12.5/usrmanage"
+make_ipk_fixture usrmanage "$_expected_usr" all "$_ipk_dir/usrmanage_${_expected_usr}_all.ipk"
+make_ipk_fixture luci-app-usrmanage "$_expected_luci" all "$_ipk_dir/luci-app-usrmanage_${_expected_luci}_all.ipk"
+make_apk_fixture usrmanage "$_expected_usr" noarch "$_apk_dir/usrmanage-${_expected_usr}.apk"
+make_apk_fixture luci-app-usrmanage "$_expected_luci" noarch "$_apk_dir/luci-app-usrmanage-${_expected_luci}.apk"
+cp "$_ipk_dir"/*.ipk "$_feed_root/out/x86_64/24.10.8/usrmanage/"
+cp "$_apk_dir"/*.apk "$_feed_root/out/x86_64/25.12.5/usrmanage/"
+cp "$_apk_dir"/*.apk.metadata.json "$_feed_root/out/x86_64/25.12.5/usrmanage/"
+export FEED_PUBLISH_ROOT="$_feed_root"
+_release_stage="$TMP/release-assets"
+feed_publish_stage_release_assets "$_release_stage"
+_release_names="$(for path in "$_release_stage"/*; do [ -f "$path" ] || continue; basename "$path"; done | sort)"
+_release_count="$(printf '%s\n' "$_release_names" | grep -c .)"
+[[ "$_release_count" -eq 4 ]] && ok "release staging has both packages for both versions" || bad "release asset count=$_release_count"
+feed_publish_release_asset_names_match "$_release_stage" "$_release_names" \
+	&& ok "immutable release exact asset-name set matches" \
+	|| bad "immutable release exact asset-name comparison failed"
+_partial_names="$(printf '%s\n' "$_release_names" | head -3)"
+if feed_publish_release_asset_names_match "$_release_stage" "$_partial_names"; then
+	bad "partial immutable release asset set was accepted"
+else
+	ok "partial immutable release asset set rejected"
+fi
+rm -f "$_feed_root/out/x86_64/25.12.5/usrmanage/luci-app-usrmanage-${_expected_luci}.apk"
+if feed_publish_stage_release_assets "$TMP/release-missing" >/dev/null 2>&1; then
+	bad "release staging accepted missing package cell"
+else
+	[ ! -e "$TMP/release-missing" ] && ok "release staging fails before creating partial assets" \
+		|| bad "release staging created partial assets before validation"
+fi
+make_apk_fixture luci-app-usrmanage "$_expected_luci" noarch "$_feed_root/out/x86_64/25.12.5/usrmanage/luci-app-usrmanage-${_expected_luci}.apk"
 stage="$TMP/stage"
 mkdir -p "$stage"
 feed_publish_write_manifest "$stage" "v0.1.9"
@@ -308,8 +579,8 @@ for key in "${!EXPECT[@]}"; do
 	[[ "$got" == "${EXPECT[$key]}" ]] || { bad "manifest digest ${target}/${version}: $got"; allok=0; }
 done
 [[ "$allok" -eq 1 ]] && ok "manifest digests match all 4 cells"
-jq -e '.packages | type == "array"' "$stage/manifest.json" >/dev/null \
-	&& ok "manifest packages array present" || bad "manifest packages array missing"
+jq -e '.packages | type == "array" and length == 4' "$stage/manifest.json" >/dev/null \
+	&& ok "manifest contains all four required package artifacts" || bad "manifest package set missing/partial"
 
 # --- manifest aborts (non-zero) when a cell digest cannot be resolved ---
 rm -rf "${SDK_MATRIX_DIGEST_CACHE_DIR:?}"/*
@@ -375,6 +646,8 @@ export MOCK_CURL_LOG="$TMP/curl.log"
 : > "$MOCK_CURL_LOG"
 rm -f "$cache_dir/ipkg-make-index-24.10.8.sh"   # drop the TOCTOU symlink
 cp "$real_file" "$cache_dir/ipkg-make-index-24.10.8.sh"
+# PATH is scoped only to this command; it must not persist in the test shell.
+# shellcheck disable=SC2031
 got_file="$(PATH="$TMP/bin:$PATH" MOCK_CURL_LOG="$MOCK_CURL_LOG" feed_publish_ipkg_index_script 24.10.8)"
 got_sum="$(sha256sum "$got_file" | awk '{print $1}')"
 refetch_count="$(wc -l < "$MOCK_CURL_LOG" 2>/dev/null | tr -d ' ')"
