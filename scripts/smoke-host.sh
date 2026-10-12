@@ -48,6 +48,7 @@ if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	run_test test_doctor "$ROOT/tests/test_doctor.sh"
 	run_test test_luci_login "$ROOT/tests/test_luci_login.sh"
 	run_test test_health "$ROOT/tests/test_health.sh"
+	run_test test_read_paths "$ROOT/tests/test_read_paths.sh"
 	run_test test_rpcd_list_acl "$ROOT/tests/test_rpcd_list_acl.sh"
 	run_test test_rpcd_show_acl "$ROOT/tests/test_rpcd_show_acl.sh"
 	run_test test_rpcd_session_sid "$ROOT/tests/test_rpcd_session_sid.sh"

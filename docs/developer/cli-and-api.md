@@ -3,7 +3,7 @@
 ## Commands
 
 ```text
-# View (non-root allowed)
+# Read (root or sudo; protected state files are not world-readable)
 usrmanage list [--json] [--all]
 usrmanage show <user> [--json]
 usrmanage audit [--json] [--last N]
@@ -18,6 +18,8 @@ usrmanage del <user> [--purge-home] [--json]
 usrmanage set-policy --preset openwrt|standard|strict|custom [options] [--json]
 ```
 
+CLI read commands require root or `sudo`: the managed-user registry and audit log are root-owned mode `0640`, under a mode `0750` audit directory. An unreadable required file returns `read_failed`; it is never represented as an empty result. LuCI reads are separate rpcd calls governed by the ACL table below.
+
 Environment:
 
 | Variable | Purpose |
@@ -30,11 +32,11 @@ Environment:
 | Method | ACL | Notes |
 |--------|-----|-------|
 | `list` | read | `{ "all": false }` |
-| `show` | read | `{ "name": "…" }` |
+| `show` | write | `{ "name": "…" }` |
 | `audit` | read | `{ "last": 50 }` |
 | `doctor` | read | self-check |
-| `policy` | read | policy name only |
-| `get_policy` | read | full policy (preset + fields) |
+| `policy` | read | policy name/label only |
+| `get_policy` | write | full policy (preset + fields) |
 | `add` | write | `{ "name", "role", "password" }` → password to CLI via fd |
 | `del` | write | `{ "name", "purge_home" }` |
 | `set_role` | write | `{ "name", "role" }` |
