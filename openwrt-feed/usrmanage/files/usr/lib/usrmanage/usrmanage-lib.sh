@@ -1743,7 +1743,10 @@ um_emit_user_json() {
 
 um_cli_require_readable() {
 	# Read commands must not turn inaccessible state into empty/truncated output.
-	[ -f "$1" ] && [ -r "$1" ] || um_die "error: read_failed"
+	if [ -f "$1" ] && [ -r "$1" ]; then
+		return 0
+	fi
+	um_die "error: read_failed"
 }
 
 um_cmd_list() {
