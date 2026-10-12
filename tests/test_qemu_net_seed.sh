@@ -205,4 +205,58 @@ else
 	bad "existing static → static replacement failed: $out"
 fi
 
+# #191: static host forwarding must target the configured guest IP.
+# shellcheck disable=SC1091
+source "$ROOT/scripts/lib/qemu-lab-net.sh"
+OWRT_LAB_NET_MODE=static
+OWRT_LAB_IP=172.30.77.1
+OWRT_LAB_HOST=172.30.77.15
+_nic="$(qemu_lab_nic_user 8080 2222)"
+[[ "$_nic" == *'hostfwd=tcp::8080-172.30.77.1:80'* \
+	&& "$_nic" == *'hostfwd=tcp::2222-172.30.77.1:22'* ]] \
+	&& ok "static QEMU hostfwd targets OWRT_LAB_IP" \
+	|| bad "static hostfwd missing OWRT_LAB_IP: $_nic"
+OWRT_LAB_NET_MODE=dhcp
+_nic="$(qemu_lab_nic_user 8080 2222)"
+[[ "$_nic" == *'hostfwd=tcp::8080-:80'* ]] \
+	&& ok "DHCP QEMU hostfwd retains implicit guest target" \
+	|| bad "DHCP hostfwd changed unexpectedly: $_nic"
+
+# #190: feed smoke stops QEMU before preparing/mounting the image.
+_validate="$ROOT/scripts/validate-feed-smoke.sh"
+_prepare="$ROOT/scripts/qemu-lab-prepare-image.sh"
+_stop_line=$(grep -nF 'run-openwrt-x86-qemu.sh" --stop' "$_validate" | head -1 | cut -d: -f1)
+_prepare_line=$(grep -n '^sudo OWRT_IMG=.*qemu-lab-prepare-image.sh' "$_validate" | head -1 | cut -d: -f1)
+[[ -n "$_stop_line" && -n "$_prepare_line" && "$_stop_line" -lt "$_prepare_line" ]] \
+	&& ok "feed smoke stops QEMU before image prep" \
+	|| bad "feed smoke must stop QEMU before image prep"
+_prepare_stop=$(grep -nF 'run-openwrt-x86-qemu.sh" --stop' "$_prepare" | head -1 | cut -d: -f1)
+_loop_mount=$(grep -n '^LOOP=' "$_prepare" | head -1 | cut -d: -f1)
+[[ -n "$_prepare_stop" && -n "$_loop_mount" && "$_prepare_stop" -lt "$_loop_mount" ]] \
+	&& ok "image preparation stops QEMU before loop mount" \
+	|| bad "image preparation must stop QEMU before loop mount"
+if sed -n "${_stop_line}p" "$_validate" | grep -q '|| true' \
+	|| sed -n "${_prepare_stop}p" "$_prepare" | grep -q '|| true'; then
+	bad "feed smoke must not ignore a failed QEMU stop"
+else
+	ok "feed smoke and image preparation fail closed on stop errors"
+fi
+# A process that remains visible after TERM/KILL must make --stop fail.
+_stop_bin="$TMP/stop-bin"
+mkdir -p "$_stop_bin"
+cat >"$_stop_bin/ps" <<'PS'
+#!/bin/sh
+printf '987654 S qemu-system-x86_64 -drive file=/tmp/custom-openwrt.img\n'
+PS
+cat >"$_stop_bin/sleep" <<'SLEEP'
+#!/bin/sh
+exit 0
+SLEEP
+chmod +x "$_stop_bin/ps" "$_stop_bin/sleep"
+if OWRT_X86_IMG=/tmp/custom-openwrt.img PATH="$_stop_bin:$PATH" "$ROOT/scripts/run-openwrt-x86-qemu.sh" --stop >/dev/null 2>&1; then
+	bad "QEMU --stop accepted a still-running QEMU process"
+else
+	ok "QEMU --stop fails when shutdown cannot be confirmed"
+fi
+
 [[ "$fail" -eq 0 ]] && { echo "ALL PASSED"; exit 0; } || { echo "FAILURES" >&2; exit 1; }

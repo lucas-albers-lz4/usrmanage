@@ -17,11 +17,12 @@ qemu_lab_dhcp_start() {
 }
 
 qemu_lab_hostfwd_rule() {
-	local proto="$1" host_port="$2" guest_port="$3"
+	local proto="$1" host_port="$2" guest_port="$3" guest_addr=
+	[[ "$OWRT_LAB_NET_MODE" != static ]] || guest_addr="$OWRT_LAB_IP"
 	if [[ -n "$OWRT_HOSTFWD_BIND" ]]; then
-		printf '%s:%s:%s-:%s' "$proto" "$OWRT_HOSTFWD_BIND" "$host_port" "$guest_port"
+		printf '%s:%s:%s-%s:%s' "$proto" "$OWRT_HOSTFWD_BIND" "$host_port" "$guest_addr" "$guest_port"
 	else
-		printf '%s::%s-:%s' "$proto" "$host_port" "$guest_port"
+		printf '%s::%s-%s:%s' "$proto" "$host_port" "$guest_addr" "$guest_port"
 	fi
 }
 
