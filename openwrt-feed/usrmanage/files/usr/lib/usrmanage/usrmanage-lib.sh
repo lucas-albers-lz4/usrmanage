@@ -315,14 +315,14 @@ um_policy_load() {
 
 um_policy_save() {
 	command -v uci >/dev/null 2>&1 || return 1
-	uci -q set usrmanage.policy=usrmanage
-	uci -q set usrmanage.policy.preset="$UM_POL_PRESET"
-	uci -q set usrmanage.policy.min_length="$UM_POL_MIN_LENGTH"
-	uci -q set usrmanage.policy.reject_username="$UM_POL_REJECT_USERNAME"
-	uci -q set usrmanage.policy.require_lower="$UM_POL_REQUIRE_LOWER"
-	uci -q set usrmanage.policy.require_upper="$UM_POL_REQUIRE_UPPER"
-	uci -q set usrmanage.policy.require_digit="$UM_POL_REQUIRE_DIGIT"
-	uci -q set usrmanage.policy.require_special="$UM_POL_REQUIRE_SPECIAL"
+	uci -q set usrmanage.policy=usrmanage || return 1
+	uci -q set usrmanage.policy.preset="$UM_POL_PRESET" || return 1
+	uci -q set usrmanage.policy.min_length="$UM_POL_MIN_LENGTH" || return 1
+	uci -q set usrmanage.policy.reject_username="$UM_POL_REJECT_USERNAME" || return 1
+	uci -q set usrmanage.policy.require_lower="$UM_POL_REQUIRE_LOWER" || return 1
+	uci -q set usrmanage.policy.require_upper="$UM_POL_REQUIRE_UPPER" || return 1
+	uci -q set usrmanage.policy.require_digit="$UM_POL_REQUIRE_DIGIT" || return 1
+	uci -q set usrmanage.policy.require_special="$UM_POL_REQUIRE_SPECIAL" || return 1
 	uci -q commit usrmanage
 }
 
@@ -749,7 +749,7 @@ um_tx_restore_one() {
 	_tx_mode=
 	[ -n "$UM_TX_SNAPDIR" ] || return 1
 	if [ -f "${UM_TX_SNAPDIR}/${_tx_label}.missing" ]; then
-		rm -f "$_tx_dst"
+		rm -f "$_tx_dst" || return 1
 		return 0
 	fi
 	[ -f "${UM_TX_SNAPDIR}/${_tx_label}" ] || return 1
