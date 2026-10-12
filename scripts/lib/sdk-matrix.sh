@@ -174,14 +174,15 @@ sdk_matrix_expected_package_version() {
 }
 
 sdk_matrix_read_apk_metadata() {
-	local file="$1" version="$2" root image volume pin
+	local file="$1" version="$2" root image volume pin target
 	root="$(sdk_matrix_root)"
-	pin="$(sdk_matrix_read_digest_cache x86-64 "$version")" || {
-		echo "missing pinned x86-64 SDK image for APK metadata validation ($version)" >&2
+	target="${SDK_MATRIX_TARGET:-x86-64}"
+	pin="$(sdk_matrix_read_digest_cache "$target" "$version")" || {
+		echo "missing pinned ${target} SDK image for APK metadata validation ($version)" >&2
 		return 1
 	}
 	image="$pin"
-	volume="$(sdk_matrix_volume_name x86-64 "$version")"
+	volume="$(sdk_matrix_volume_name "$target" "$version")"
 	file="$(cd "$(dirname "$file")" && printf '%s/%s' "$(pwd)" "$(basename "$file")")" || return 1
 	(
 		cd "$root"
@@ -192,7 +193,7 @@ sdk_matrix_read_apk_metadata() {
 				[ -x "$apk" ] || { echo "missing SDK apk metadata reader: $apk" >&2; exit 1; }
 				exec "$apk" adbdump --format json /tmp/usrmanage-package.apk
 			'
-	)
+	) || return 1
 }
 
 sdk_matrix_read_package_metadata() {

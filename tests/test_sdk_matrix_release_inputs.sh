@@ -10,6 +10,7 @@ ok() { echo "ok: $*"; }
 bad() { echo "FAIL: $*" >&2; fail=1; }
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+export SDK_MATRIX_DIGEST_CACHE_DIR="$TMP/sdk-digests"
 
 for version in 24.10 24.10.8 25.12 25.12.5; do
 	sdk_matrix_validate_version "$version" || bad "supported version rejected: $version"
@@ -40,7 +41,41 @@ make_apk_fixture() {
 		"$name" "$version" "$arch" >"${output}.metadata.json"
 }
 
-# Replace only the SDK metadata reader boundary; no Docker daemon is needed.
+# The APK metadata reader must use the active ARM pin even with no x86 pin.
+_arm_pin='ghcr.io/openwrt/sdk@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+_arm_cache=$(sdk_matrix_digest_cache_path armsr-armv8 25.12)
+mkdir -p "$(dirname "$_arm_cache")"
+printf '%s\n' "$_arm_pin" >"$_arm_cache"
+APK_READER_LOG="$TMP/apk-reader.log"
+export APK_READER_LOG
+# shellcheck disable=SC2329
+docker() {
+	[ "${APK_READER_FAIL:-0}" = 0 ] || return 44
+	printf '%s\n%s\n' "$OWRT_SDK_IMAGE" "$OWRT_SDK_VOLUME" >>"$APK_READER_LOG"
+	printf '{"info":{"name":"usrmanage","version":"0.1.17-r1","arch":"all"}}\n'
+}
+SDK_MATRIX_TARGET=armsr-armv8
+touch "$TMP/arm-package.apk"
+if _arm_metadata=$(sdk_matrix_read_apk_metadata "$TMP/arm-package.apk" 25.12); then
+	if grep -Fxq "$_arm_pin" "$APK_READER_LOG" \
+		&& grep -Fxq 'openwrt_sdk_armsr_armv8_25_12_5' "$APK_READER_LOG"; then
+		ok "APK metadata reader uses the active ARM SDK pin and volume"
+	else
+		bad "APK metadata reader ignored the active SDK target"
+	fi
+else
+	bad "APK metadata reader failed with only the active ARM digest pinned"
+fi
+APK_READER_FAIL=1
+export APK_READER_FAIL
+if sdk_matrix_read_apk_metadata "$TMP/arm-package.apk" 25.12 >/dev/null 2>&1; then
+	bad "APK metadata reader masked Docker failure"
+else
+	ok "APK metadata reader propagates Docker failure"
+fi
+unset APK_READER_FAIL SDK_MATRIX_TARGET
+
+# Replace the SDK metadata reader boundary for the remaining package fixtures.
 # shellcheck disable=SC2329
 sdk_matrix_read_apk_metadata() {
 	cat "${1}.metadata.json"
