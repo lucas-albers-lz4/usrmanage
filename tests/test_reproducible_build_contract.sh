@@ -54,6 +54,29 @@ else
 	bad "repro architecture selection is incorrect"
 fi
 
+# The 25.12 APK glob must hash both required package names as well.
+sdk_matrix_read_apk_metadata() { cat "${1}.metadata.json"; }
+mkdir -p "$VERIFY_ROOT/out/x86_64/25.12.5/usrmanage"
+for package in usrmanage luci-app-usrmanage; do
+	if [ "$package" = usrmanage ]; then version=$expected_usr; else version=$expected_luci; fi
+	apk="$VERIFY_ROOT/out/x86_64/25.12.5/usrmanage/${package}-${version}.apk"
+	printf 'APK fixture %s\n' "$package" >"$apk"
+	printf '{"info":{"name":"%s","version":"%s","arch":"noarch"}}\n' \
+		"$package" "$version" >"${apk}.metadata.json"
+done
+SDK_MATRIX_VERSION=25.12
+SDK_MATRIX_VERSION_LABEL=25.12.5
+SDK_MATRIX_PACKAGE_ARCH=x86_64
+_apk_hashes=$(artifact_shas 25.12.5)
+_apk_count=$(printf '%s\n' "$_apk_hashes" | wc -l | tr -d ' ')
+if [ "$_apk_count" -eq 2 ] \
+	&& printf '%s\n' "$_apk_hashes" | grep -q "usrmanage-${expected_usr}\\.apk" \
+	&& printf '%s\n' "$_apk_hashes" | grep -q "luci-app-usrmanage-${expected_luci}\\.apk"; then
+	ok "25.12 reproducibility hashes both APK packages"
+else
+	bad "25.12 reproducibility did not hash both APK packages"
+fi
+
 # Override the expensive build boundaries; keep verifier control flow real.
 # shellcheck disable=SC2034
 TARGET=x86-64

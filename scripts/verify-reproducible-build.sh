@@ -32,8 +32,8 @@ artifact_shas() {
 	# Validate and hash both mandatory packages from the selected build arch.
 	local version_label="$1"
 	local dir="${ROOT}/out/${SDK_MATRIX_PACKAGE_ARCH}/${version_label}/usrmanage"
-	local f
-	local -a files=()
+	local f digest_line
+	local -a files=() hashes=()
 	sdk_matrix_validate_package_dir "$dir" "$SDK_MATRIX_VERSION" || return 1
 	shopt -s nullglob
 	case "$SDK_MATRIX_VERSION" in
@@ -48,8 +48,10 @@ artifact_shas() {
 	shopt -u nullglob
 	[[ ${#files[@]} -eq 2 ]] || return 1
 	for f in "${files[@]}"; do
-		sha256sum "$f" || return 1
-	done | sort -k2
+		digest_line=$(sha256sum "$f") || return 1
+		hashes+=("$digest_line")
+	done
+	printf '%s\n' "${hashes[@]}" | sort -k2
 }
 
 verify_one() {
