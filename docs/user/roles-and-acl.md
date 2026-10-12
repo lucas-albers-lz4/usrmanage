@@ -14,8 +14,8 @@ Readonly on the web is **diagnostic** scope: look, don’t touch configuration, 
 | Tier | ubus methods | Who |
 |------|--------------|-----|
 | **health** | `health` | readonly diagnostic (`luci-app-usrmanage-health`) |
-| **view** | `list`, `show`, `audit`, `doctor`, `policy` | diagnostic read + SSH / Full LuCI |
-| **manage** | `add`, `del`, `set_role`, `passwd`, `set_luci_login`, `get_policy`, `set_policy` | Full LuCI (`*`) / SSH admin / root CLI |
+| **view** | `list`, `audit`, `doctor`, `policy` (name/label only) | diagnostic read + Full LuCI |
+| **manage** | `show`, `get_policy`, `add`, `del`, `set_role`, `passwd`, `set_luci_login`, `set_policy` | Full LuCI (`*`) / SSH admin / root CLI |
 
 **Write ACL is root-equivalent:** a web session with `luci-app-usrmanage` write (or `*`) can create admins and change passwords (same blast radius as SSH admin + sudo).
 
@@ -38,7 +38,7 @@ Legacy `usrmanage_scope 'app'` normalizes to **diagnostic** and is rewritten on 
 
 Package upgrade rewrites owned logins to the role-locked matrices (readonly→diagnostic, admin→full) and revokes sessions whose ACLs changed.
 
-States in `list`/`show`: `luci_login` = `none` | `owned` | `foreign` | `tampered`.
+States in `list`/`show`: `luci_login` = `none` | `owned` | `foreign` | `tampered`. Direct CLI reads require root or `sudo` because registry/audit data remains root-only; this does not change the LuCI read ACL.
 
 ## Manual wiring (still supported)
 

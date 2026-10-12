@@ -319,6 +319,9 @@ msgstr "Verwendet dasselbe UNIX-Passwort. Standardmäßig aus. Macht dieses Pass
 msgid "View only — you can list users and audit events, but not add, change roles, passwords, policy, or LuCI login."
 msgstr "Nur Ansicht — Benutzer und Audit-Ereignisse können aufgelistet werden; Benutzer können nicht hinzugefügt, Rollen und Passwörter nicht geändert, Richtlinien nicht bearbeitet und LuCI-Anmeldungen nicht geändert werden."
 
+msgid "Password policy details are unavailable; account changes are disabled. Refresh to retry."
+msgstr "Details zur Passwortrichtlinie sind nicht verfügbar; Kontoänderungen sind deaktiviert. Aktualisieren Sie die Seite, um es erneut zu versuchen."
+
 msgid "Full LuCI (all menus)"
 msgstr "Vollständiges LuCI (alle Menüs)"
 

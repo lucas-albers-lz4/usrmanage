@@ -26,15 +26,15 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 
 | Surface | Where | Last reviewed | Open findings |
 |---------|-------|---------------|---------------|
-| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-09-04 (P1 #169 closed) | none |
+| CLI + shared library | `openwrt-feed/usrmanage/files/usr/sbin/usrmanage`, `files/usr/lib/usrmanage/usrmanage-lib.sh`, `usrmanage-luci-login.sh`, `usrmanage-health.sh` | 2026-10-11 (#174–#177 narrow host regressions; full security pass deferred) | none |
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-09-04 (S1 #168 body SID host+lab) | none |
-| LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-08-20 (no scope picker; view-only UM) | none (XSS / expect convention re-confirmed) |
-| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI configuration, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
-| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-09-04 (#166 persist-credentials) | none |
-| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-08-25 (#159 closed by PR #161) | none |
-| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-08-25 (#159 closed by PR #161) | none |
+| LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-10-11 (#178 static RPC-result contract only; runtime status behavior not verified) | none (XSS / expect convention re-confirmed) |
+| On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI configuration, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-10-11 (#179 comment-only retry clarification; no executable change) | none |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-10-11 (#185–#188 host contract checks; no release run) | none |
+| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh` | 2026-10-11 (#186/#188 host failure-gate checks; no signed publish run) | none |
+| Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-10-11 (#185/#194 host matrix fixtures; no SDK matrix build) | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
-| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-09-04 (S1 asserts PASS on 24.10.5) | none open (I3 accepted residual) — fixtures remain lab-only by design |
+| QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-10-11 (#15 gallery capture only; #190–#193 host tests, no qemu-smoke proof) | none open (I3 accepted residual) — fixtures remain lab-only by design |
 
 ## How to re-verify (current gates)
 
@@ -71,11 +71,11 @@ Living reference, not a snapshot of one review. A new mutator, rpcd method, file
 |----------------|-------|-------|-------|
 | Shell / command injection via username | Strict charset (`a-z0-9_-`, 1–32, deny-list) gates mutators and `show` | host | `tests/test_validators.sh` · Z3 P1 |
 | Passwd/shadow line confusion via suffix username | Field-anchored awk `$1 == user` in `um_passwd_line` / `um_user_locked` ([#118](https://github.com/lucas-albers-lz4/usrmanage/issues/118) L10) | host | `tests/test_mutators.sh` (ntp/tp, daemon/n) |
-| Password in argv / `ps` / logs | `--password-fd` or stdin; rpcd pipes fd 0; never audit/syslog | host | `tests/test_mutators.sh` stub argv |
+| Password in argv / `ps` / logs | `--password-fd` or stdin; rpcd pipes fd 0; never audit/syslog. Failed password-tool writes are distinct from policy rejection and retain the prior hash | host | `tests/test_mutators.sh` stub argv · `tests/test_password_control.sh` (#177 write-failure hash/audit assertions) |
 | Interactive CLI password echo | `stty -echo` fail-closed when `stty` exists; else ash/bash `read -s` (no `stty` applet on stock OpenWrt; `-s` via `ASH_BASH_COMPAT`) | host | `tests/test_password_prompt_echo.sh` (static + PTY; fail-closed stty PTY when bash present) |
 | Audit field injection (actor/src) | Whitelist + 64-char cap (`um_actor_resolve`, `sanitize_actor`); audit tokens may contain `=` but never a space, so no new field can be introduced | host | #3 C1 · Z3 P2 |
 | Unquoted argv rpcd → CLI | Explicit argv per ubus method | host | #3 C2 · `tests/test_mutators.sh` |
-| View → manage escalation | Split rpcd ACL (`luci-app-usrmanage-session` / `-health` / app); server authoritative. `list --all` / `show` gated by `session_has_write_acl` using **body** `ubus_rpc_session` (32-hex; S1 #168). Actor from `session get` via same SID | host + lab | `acl.d/luci-app-usrmanage.json` · `tests/test_health.sh` · `tests/test_rpcd_list_acl.sh` · `tests/test_rpcd_show_acl.sh` · `tests/test_rpcd_session_sid.sh` · `scripts/qemu-smoke-usrmanage.sh` (2026-09-04 S1 PASS) |
+| View → manage escalation | Split rpcd ACL (`luci-app-usrmanage-session` / `-health` / app); server authoritative. `list --all` / `show` gated by `session_has_write_acl` using **body** `ubus_rpc_session` (32-hex; S1 #168). Actor from `session get` via same SID. LuCI RPC declarations reject failed status and mutators require explicit `ok: true`; this UI contract does not alter server ACLs | host + lab | `acl.d/luci-app-usrmanage.json` · `tests/test_health.sh` · `tests/test_rpcd_list_acl.sh` · `tests/test_rpcd_show_acl.sh` · `tests/test_rpcd_session_sid.sh` · `tests/usrmanage-rpc-contract.test.js` (static only; no rpc.js runtime test) · `scripts/qemu-smoke-usrmanage.sh` (2026-09-04 S1 PASS) |
 | Non-root mutators | `um_require_root` before manage commands | host | `tests/test_validators.sh` |
 | XSS via username / audit text in LuCI | DOM via LuCI `E()`; no `innerHTML` | manual | Manual review of `usrmanage.js` |
 
@@ -410,6 +410,12 @@ Scope: owned LuCI ACL matrix, CLI/rpcd/UI (drop `--scope` picker), migrate, demo
 **Fix.** Reordered `.github/workflows/publish-packages.yml`: **Write signing keys** + **Validate signing keys** now run after all SDK build cells and the reproducible-build gate, immediately before **Stage signed feed**. Workflow comment documents the invariant.
 
 **Proof.** `host`: `tests/test_sdk_matrix_digests.sh` asserts `feed_keys_write_from_env` follows the last `./scripts/docker-sdk.sh build` and `verify-reproducible-build.sh`, and that `opkg-secret.key` / `apk-secret.rsa` / `feed_keys_write_from_env` do not appear before that SDK window; full `./scripts/smoke-host.sh` green. `manual`: record first `v*` tag publish after merge in this entry.
+
+### 2026-10-11 — Issue #199 host regression follow-up (not a full security review)
+
+**Scope.** Narrow implementation follow-up for #174–#198 and #15: transaction/policy failure handling, supplementary-group cleanup, password-write error classification, LuCI RPC failure feedback, read-path behavior, SDK/feed/reproducibility gates, QEMU stop/network/smoke contracts, doctor/docs, and the user-interface screenshot gallery. No rpcd method, ACL grant, password transport, or session lifecycle was added or widened. The uci-defaults change is comment-only.
+
+**Proof.** `host`: `./scripts/smoke-host.sh` PASS (the root-only rpcd→CLI password pipeline was conditionally skipped under uid 1000); static RPC-contract test checks declarations and `finishMutator`, not LuCI rendering or live ubus status handling. `lab`: `npm run test:ui` captured four gallery images on OpenWrt 24.10.8; this does **not** prove the changed #190–#193 QEMU smoke paths. No signed publish or SDK matrix build was run. This narrow regression follow-up is not the deferred multi-model five-surface audit; no new security finding is claimed, and any `lab`-class proof obligations remain open.
 
 ### 2026-09-04 — P1 `set-policy` audit (#169)
 

@@ -2,10 +2,10 @@
 
 Menus:
 
-- **System → Device health** (`admin/system/usrmanage-health`) — readonly owned LuCI; redacted status via `usrmanage.health`
-- **System → User Management** (`admin/system/usrmanage`) — admin app scope (and full LuCI when `*` is granted)
+- **System → Device health** (`admin/system/usrmanage-health`) — redacted status via `usrmanage.health`; included in the readonly diagnostic profile
+- **System → User Management** (`admin/system/usrmanage`) — view-only for readonly diagnostic logins; admin logins receive Full LuCI
 
-## Device health (readonly observer)
+## Device health (readonly diagnostic profile)
 
 1. Banner: LuCI login is for **device health only**, not account administration
 2. Redacted fields: hostname, release, uptime, load, WAN/LAN up, Wi-Fi radio/station counts, DHCP lease count — no SSIDs, keys, MACs, or user table
@@ -15,11 +15,11 @@ Menus:
 
 ## User Management layout
 
-1. Banner: UNIX/SSH accounts; optional LuCI web login per user (`$p$`); readonly web = Device health; admin = wheel + sudo
+1. Banner: UNIX/SSH accounts; optional LuCI web login per user (`$p$`); readonly LuCI = diagnostic menus plus view-only User Management; admin = Full LuCI (wheel + sudo)
 2. Doctor banner when self-check has **errors** (expanded `alert-message error`) or **warns** only (collapsed `alert-message warning`). No green “OK” strip. Raw JSON stays under Technical details for bug reports. Wheel missing with no live managed users is a warn (created on first add); BusyBox without `stat` uses `find -perm 440` for sudoers mode.
 3. Password policy strip (`Password policy: OpenWrt`) — Configure expands preset/toggles (write ACL); **Save** required; read ACL sees name only. Add/Change password modals use a **quieter** live checklist (circular ✓/✗ via theme `--success-color-*` / `--error-color-*`; see `usrmanage.css`).
 4. User table: Username | UID | Role | Shell | Managed | LuCI | Actions
-5. Manage actions (write ACL only): Add (optional LuCI checkbox; admin scope **app** vs **full** when role=admin), Set role, Password, Enable/Disable LuCI, Remove
+5. Manage actions (write ACL only): Add (optional LuCI checkbox; role fixes scope: readonly = diagnostic, admin = Full), Set role, Password, Enable/Disable LuCI, Remove. There is no scope picker.
 6. Audit panel (read ACL): recent events + Refresh
 
 View-only sessions on User Management see the table and audit; mutator controls hidden when write ACL is absent. **Server ACL is authoritative.**
@@ -31,7 +31,7 @@ View-only sessions on User Management see the table and audit; mutator controls 
 - Inline layout styles should be minimal and neutral
 - Manual check: Bootstrap light + dark; one alternate theme if available
 
-CI: `tests/usrmanage-theme.test.js` guards against forbidden hex in the views and requires `_()` on user-visible strings.
+CI: `tests/usrmanage-theme.test.js` checks forbidden hex colors, JavaScript syntax, and selected theme-friendly classes. It does **not** enforce `_()` on all user-visible strings. `tests/usrmanage-i18n.test.js` checks POT coverage for strings already wrapped in `_()`; it is not an unwrapped-string scanner.
 
 ## Language / i18n
 
@@ -44,4 +44,4 @@ Translator workflow: update view strings → refresh POT → update `.po` → re
 
 ## ACL wiring
 
-See [roles-and-acl](../user/roles-and-acl.md). Readonly owned LuCI → health ACL only; admin app → User Management read+write; admin full → `*`.
+See [roles-and-acl](../user/roles-and-acl.md). Readonly owned LuCI → diagnostic profile (Status/Network diagnostics, Device health, and view-only User Management); admin owned LuCI → Full (`*`). Scope is role-locked; there is no app/full picker.

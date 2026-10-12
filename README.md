@@ -100,8 +100,9 @@ usrmanage doctor
 
 | Doc | Purpose |
 |-----|---------|
-| [docs/user/installation.md](docs/user/installation.md) | End-user install |
+| [docs/user/installation.md](docs/user/installation.md) | End-user install + UI gallery |
 | [docs/user/roles-and-acl.md](docs/user/roles-and-acl.md) | Roles + LuCI ACL |
+| [docs/user/assets/capture-screenshots.md](docs/user/assets/capture-screenshots.md) | Refresh the manual WebP gallery |
 
 ### Release & feed
 

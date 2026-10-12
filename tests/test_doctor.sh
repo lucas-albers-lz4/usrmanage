@@ -18,6 +18,7 @@ export USRMANAGE_PASSWD="$TMP/passwd"
 export USRMANAGE_SHADOW="$TMP/shadow"
 export USRMANAGE_GROUP="$TMP/group"
 export USRMANAGE_SUDOERS="$TMP/sudoers"
+export USRMANAGE_HOME_ROOT="$TMP/home"
 export USRMANAGE_RPCD_CONFIG="$TMP/rpcd"
 export USRMANAGE_SRC=cli
 export USRMANAGE_ACTOR=testhost
@@ -41,16 +42,28 @@ fail=0
 ok() { echo "ok: $*"; }
 bad() { echo "FAIL: $*" >&2; fail=1; }
 
-json_field() {
-	# Tiny extractor for doctor --json (no jq required).
-	printf '%s' "$1" | tr -d '\n'
+doctor_root_is() {
+	# Parse JSON and check only the root-level aggregate, not nested checks.
+	printf '%s' "$1" | python3 -c '
+import json, sys
+obj = json.load(sys.stdin)
+want = sys.argv[1] == "true"
+sys.exit(0 if type(obj.get("ok")) is bool and obj["ok"] is want else 1)
+' "$2"
 }
 
 # --- clean install: wheel warn only, top-level ok true, sudoers ok via find/stat ---
 _doc=$(um_doctor_checks --json 2>/dev/null) || true
-echo "$_doc" | grep -q '"ok":true' \
+doctor_root_is "$_doc" true \
 	&& ok "clean install doctor top-level ok true" \
 	|| bad "clean install ok: $_doc"
+# A mutated root value must fail even when nested checks contain ok:true.
+_doc_mut=$(printf '%s' "$_doc" | python3 -c 'import json,sys; d=json.load(sys.stdin); d["ok"] = not d["ok"]; print(json.dumps(d))')
+if doctor_root_is "$_doc_mut" true; then
+	bad "root-ok mutation was accepted because of nested check values"
+else
+	ok "root-ok mutation is rejected independently of nested checks"
+fi
 echo "$_doc" | grep -q '"id":"wheel","ok":false,"severity":"warn"' \
 	&& ok "clean install wheel is warn" \
 	|| bad "clean install wheel: $_doc"
@@ -63,7 +76,7 @@ printf 'alice:x:1001:1001:alice:%s/alice:/bin/ash\n' "$TMP/home" >> "$USRMANAGE_
 printf 'alice:::0:99999:7:::\n' >> "$USRMANAGE_SHADOW"
 printf 'alice\n' > "$USRMANAGE_REGISTRY"
 _doc=$(um_doctor_checks --json 2>/dev/null) || true
-echo "$_doc" | grep -q '"ok":false' \
+doctor_root_is "$_doc" false \
 	&& echo "$_doc" | grep -q '"id":"wheel","ok":false,"severity":"error"' \
 	&& ok "wheel missing with live user is error" \
 	|| bad "live user wheel: $_doc"
@@ -73,7 +86,7 @@ printf 'root:x:0:0:root:/root:/bin/ash\n' > "$USRMANAGE_PASSWD"
 printf 'root:::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
 printf 'ghost\n' > "$USRMANAGE_REGISTRY"
 _doc=$(um_doctor_checks --json 2>/dev/null) || true
-echo "$_doc" | grep -q '"ok":true' \
+doctor_root_is "$_doc" true \
 	&& echo "$_doc" | grep -q '"id":"wheel","ok":false,"severity":"warn"' \
 	&& ok "stale registry-only keeps wheel warn" \
 	|| bad "stale registry wheel: $_doc"
@@ -129,7 +142,7 @@ EOF
 	. "$LIB"
 	_doc=$(um_doctor_checks --json 2>/dev/null) || true
 	echo "$_doc" | grep -q '"id":"sudoers","ok":true' \
-		&& echo "$_doc" | grep -q '"ok":true' \
+		&& doctor_root_is "$_doc" true \
 		&& ok "stat stub: find -perm 440 accepts 0440" \
 		|| bad "stat stub find: $_doc"
 )
@@ -150,6 +163,7 @@ EOF
 	. "$LIB"
 	_doc=$(um_doctor_checks --json 2>/dev/null) || true
 	echo "$_doc" | grep -q '"id":"sudoers","ok":true' \
+		&& doctor_root_is "$_doc" true \
 		&& ok "garbage stat falls through to find -perm" \
 		|| bad "garbage stat: $_doc"
 )

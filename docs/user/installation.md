@@ -101,3 +101,17 @@ usrmanage add ops --role admin
 
 Wire LuCI for managed users with **Allow LuCI web login** (or `usrmanage set-luci-login`), or manually via `luci-app-acl`. See [roles-and-acl.md](roles-and-acl.md).
 
+## User interface gallery
+
+These screenshots show the empty User Management view, the saved-default policy editor, the Add user dialog with blank password fields, and the documented `docuser` fixture:
+
+![User Management with no managed users and the OpenWrt policy strip](assets/usrmanage-empty.webp)
+
+![Password policy editor with the OpenWrt preset selected](assets/usrmanage-policy-editor.webp)
+
+![Add user dialog with no password entered](assets/usrmanage-add-dialog.webp)
+
+![User Management with the single readonly docuser documentation fixture](assets/usrmanage-one-user.webp)
+
+The lab-only capture script and its strict clean-state/cleanup protocol are documented in [capture-screenshots.md](assets/capture-screenshots.md).
+

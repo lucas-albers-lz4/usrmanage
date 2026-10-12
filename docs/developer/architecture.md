@@ -38,7 +38,7 @@ flowchart TB
   WebView --> ACL
   WebManage --> ACL
   ACL --> Rpcd --> CLI
-  ShellUser -->|"view only"| CLI
+  ShellUser -->|"protected reads require root/sudo"| CLI
   ShellRoot --> CLI
   CLI --> Lock --> Lib
   Lib --> Reg
@@ -49,7 +49,7 @@ flowchart TB
 
 | Role | UNIX | App access |
 |------|------|------------|
-| readonly | UID ≥ 1000, not in `wheel` | View list + audit (LuCI read ACL / non-root CLI) |
+| readonly | UID ≥ 1000, not in `wheel` | LuCI view methods via read ACL; direct CLI reads require root or `sudo` because state files are protected |
 | admin | in `wheel` + sudo | Full manage (LuCI write ACL / root CLI) |
 
 **Admin = full root via sudo** by design (`%wheel ALL=(ALL:ALL) ALL`, no NOPASSWD).
@@ -68,6 +68,10 @@ Only users listed in the registry are managed. Mutators refuse unmanaged targets
 6. Delete account (`userdel`; home kept unless `--purge-home`)
 7. Registry update
 8. Audit `remove` / `fail` / `denied`
+
+## Package migrations
+
+Owned LuCI ACL migrations run from `/etc/uci-defaults/` scripts. A nonzero migration status leaves the defaults script for a later retry, but OpenWrt package `default_postinst()` can ignore that status; successful package installation alone does not prove the migration completed. Do not move this work into a package post-install hook to force failure. When investigating a pending upgrade, check whether the relevant script remains under `/etc/uci-defaults/` and inspect `usrmanage doctor` for ACL-state errors.
 
 ## Passwords
 
