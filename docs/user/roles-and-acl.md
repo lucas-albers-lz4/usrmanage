@@ -1,5 +1,7 @@
 # Roles and LuCI ACL
 
+Visual walkthrough of User Management: [using-the-ui.md](using-the-ui.md).
+
 ## Device roles (UNIX)
 
 | Role | Meaning |

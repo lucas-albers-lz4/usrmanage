@@ -18,7 +18,7 @@
 
 ## Open follow-ups
 
-- [ ] #15 docs WebP screenshots (clean lab; WIP branch `feat/15-docs-screenshots`)
+- [x] #15 docs WebP screenshots (clean lab; Playwright gallery)
 - [ ] Release tag after lab acceptance (`docs/release.md`)
 
 ## Later

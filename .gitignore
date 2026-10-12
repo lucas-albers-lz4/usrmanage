@@ -46,5 +46,8 @@ playwright/.cache/
 # Cursor / Playwright MCP
 .cursor/browser-output/
 
+# Screenshot capture failure dump (#15)
+docs/user/assets/usrmanage-debug.webp
+
 # Wave working checkouts (sibling pattern; not tracked)
 /wave/

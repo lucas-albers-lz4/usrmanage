@@ -11,6 +11,7 @@ How usrmanage is tested locally and in CI. Passwords never appear on argv, in au
 | **Device integration** | Real `useradd`/wheel/ubus/HTTP page on guest; live LuCI session revoke | `scripts/qemu-smoke-usrmanage.sh` | Local (QEMU lab); not PR CI |
 | **Playwright MCP** | Agent navigate/snapshot/click against live LuCI | `.cursor/mcp.json` → `@playwright/mcp` | Local with lab up |
 | **E2E UI** | Committed LuCI user flows | `tests/e2e/` + `./scripts/playwright-luci.sh` | Local with lab up; not PR CI |
+| **Docs gallery** | Playwright WebP screenshots of User Management | `scripts/capture-usrmanage-screenshots.mjs` (`npm run test:ui`) | Local with lab up; not PR CI |
 
 PR CI stays **host-only** (`usrmanage-test.yml` → `smoke-host.sh`) so merge gates stay fast.
 
@@ -88,6 +89,17 @@ Environment:
 | `OPENWRT_SSH_PORT` | `2222` | Guest SSH port |
 
 Specs use unique usernames (`pwflow_*`) and clean up via SSH/`usrmanage del` when possible. English UI only for v1 e2e. Stable controls use `data-testid` (`usrmanage-add-user`, `usrmanage-add-username`, …) in the LuCI view.
+
+## Docs screenshot gallery (#15)
+
+Committed WebP shots under `docs/user/assets/` come from Playwright against the same lab. Not PR CI.
+
+```sh
+# lab already prepared, booted, packages installed (do not leave smoke users)
+npm run test:ui
+```
+
+The script deletes unmanaged leftovers (including a lab-only last-admin unwind), resets OpenWrt policy, and refuses to write if `umadmin` / `pwflow_*` / other smoke names are visible. Passwords are never typed into screenshot fields. Recapture notes: [capture-screenshots.md](../user/assets/capture-screenshots.md).
 
 ### LuCI login matrix (role × opt-in)
 

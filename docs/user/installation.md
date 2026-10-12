@@ -44,7 +44,7 @@ usrmanage doctor
 usrmanage list
 ```
 
-LuCI: **System → User Management**.
+LuCI: **System → User Management**. Visual walkthrough: [using-the-ui.md](using-the-ui.md).
 
 More detail: [binary-feed.md](../binary-feed.md).
 
