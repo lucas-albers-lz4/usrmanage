@@ -9,6 +9,7 @@
 . /usr/lib/usrmanage/usrmanage-lib.sh
 
 command -v um_luci_login_migrate_observer >/dev/null 2>&1 || exit 0
-# Fail the postinst (uci-defaults retries) rather than leaving elevated ACLs.
+# Return failure so uci-defaults keeps this migration for retry. OpenWrt's
+# default_postinst may still report package success despite this script failing.
 um_with_lock um_luci_login_migrate_observer || exit 1
 exit 0

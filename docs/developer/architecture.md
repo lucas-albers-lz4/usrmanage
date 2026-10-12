@@ -69,6 +69,10 @@ Only users listed in the registry are managed. Mutators refuse unmanaged targets
 7. Registry update
 8. Audit `remove` / `fail` / `denied`
 
+## Package migrations
+
+Owned LuCI ACL migrations run from `/etc/uci-defaults/` scripts. A nonzero migration status leaves the defaults script for a later retry, but OpenWrt package `default_postinst()` can ignore that status; successful package installation alone does not prove the migration completed. Do not move this work into a package post-install hook to force failure. When investigating a pending upgrade, check whether the relevant script remains under `/etc/uci-defaults/` and inspect `usrmanage doctor` for ACL-state errors.
+
 ## Passwords
 
 - CLI: TTY or `--password-fd` (never argv)

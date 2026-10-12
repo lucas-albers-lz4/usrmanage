@@ -5,6 +5,7 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
 skipped=0
+test_skipped=0
 
 # Hermetic shell test stages rely on USRMANAGE_* path overrides; those
 # overrides are honored only when the test-only gate is set (issue #72 / #65).
@@ -50,7 +51,15 @@ if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	fi
 	"$ROOT/tests/test_phase1_foundation.sh"
 	"$ROOT/tests/test_mutators-busybox-fallback.sh"
-	"$ROOT/tests/test_password_control.sh"
+	_password_log=$(mktemp)
+	_password_rc=0
+	"$ROOT/tests/test_password_control.sh" >"$_password_log" 2>&1 || _password_rc=$?
+	cat "$_password_log"
+	if grep -q '^skip: rpcd->CLI' "$_password_log"; then
+		test_skipped=$((test_skipped + 1))
+	fi
+	rm -f "$_password_log"
+	[ "$_password_rc" -eq 0 ] || exit "$_password_rc"
 	"$ROOT/tests/test_password_sha512_pin.sh"
 	"$ROOT/tests/test_password_prompt_echo.sh"
 	"$ROOT/tests/test_sdk_matrix_digests.sh"
@@ -66,8 +75,8 @@ if need node theme-i18n-parity "install node"; then
 fi
 
 echo ""
-if [ "$skipped" -gt 0 ]; then
-	echo "Host smoke passed ($skipped stage(s) skipped for missing host tools)."
+if [ "$skipped" -gt 0 ] || [ "$test_skipped" -gt 0 ]; then
+	echo "Host smoke passed ($skipped stage(s) skipped for missing host tools; $test_skipped conditional test(s) skipped)."
 else
 	echo "Host smoke passed."
 fi
