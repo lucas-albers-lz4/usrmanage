@@ -22,7 +22,7 @@ PR CI stays **host-only** (`usrmanage-test.yml` → `smoke-host.sh`) so merge ga
 
 Each test invoked by the host smoke runner writes timestamped `START`/`END`
 markers, exit status, available disk space, and Linux available/swap memory to
-`${USRMANAGE_TEST_ACTIVITY_LOG:-${TMPDIR:-/tmp}/usrmanage-test-activity.log}`.
+`${USRMANAGE_TEST_ACTIVITY_LOG:-/tmp/usrmanage-test-activity.log}`.
 The log intentionally excludes test output and command arguments. A missing
 `END` marker identifies the last test active at an abrupt stop; it does not by
 itself prove that test caused a system crash. Keep the log outside the checkout

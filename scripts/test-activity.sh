@@ -9,7 +9,7 @@ if [ "$#" -lt 2 ]; then
 fi
 label=$1
 shift
-log=${USRMANAGE_TEST_ACTIVITY_LOG:-${TMPDIR:-/tmp}/usrmanage-test-activity.log}
+log=${USRMANAGE_TEST_ACTIVITY_LOG:-/tmp/usrmanage-test-activity.log}
 
 stamp() { date '+%Y-%m-%dT%H:%M:%S%z'; }
 {
