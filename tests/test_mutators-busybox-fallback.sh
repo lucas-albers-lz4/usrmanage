@@ -106,5 +106,14 @@ um_lock_account mix || bad "lock mixed"
 um_user_locked mix && ok "mixed lock" || bad "mixed not locked"
 um_delete_account mix 1 || bad "delete mixed"
 grep -q '^mix:' "$USRMANAGE_PASSWD" && bad "mix still in passwd" || ok "mixed delete"
+# #176: no private group named after the user, but supplementary membership
+# must still be removed by the manual delete fallback.
+printf 'root:x:0:0:root:/root:/bin/sh\nerin:x:1030:1030:erin:%s/erin:/bin/sh\n' "$USRMANAGE_HOME_ROOT" > "$USRMANAGE_PASSWD"
+printf 'root:::0:99999:7:::\nerin:!::0:99999:7:::\n' > "$USRMANAGE_SHADOW"
+printf 'root:x:0:\nwheel:x:10:\nstaff:x:1030:erin\n' > "$USRMANAGE_GROUP"
+mkdir -p "$USRMANAGE_HOME_ROOT/erin"
+um_delete_account erin 0 || bad "delete erin without private group"
+grep -q '^erin:' "$USRMANAGE_PASSWD" && bad "erin still in passwd" || ok "#176 deleted passwd entry"
+grep -q '^staff:x:1030:erin$' "$USRMANAGE_GROUP" && bad "#176 stale supplementary membership remains" || ok "#176 supplementary membership removed without private group"
 [ "$fail" -eq 0 ] || { echo "busybox-fallback tests FAILED" >&2; exit 1; }
 echo "busybox-fallback tests OK"

@@ -130,6 +130,22 @@ else
 fi
 grep -q '\$6\$testmark\$fakehash' "$USRMANAGE_SHADOW" && ok "valid password hash written" || bad "valid password hash not written"
 
+# #177: a valid password whose write tool fails is not a policy failure.
+mkdir -p "$TMP/failbin"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/failbin/passwd"
+chmod +x "$TMP/failbin/passwd"
+_orig=$(shadow_hash)
+: > "$USRMANAGE_AUDIT"
+if printf 'ValidPass123\n' | ( PATH="$TMP/failbin:$TMP/bin:/usr/bin:/bin" um_with_lock um_mut_passwd ops 0 ) >"$TMP/writefail.out" 2>"$TMP/writefail.err"; then
+	bad "failed password write should fail"
+else
+	ok "failed password write is reported"
+fi
+grep -q 'password_write_failed' "$TMP/writefail.err" && ok "#177 password_write_failed token" || bad "#177 error: $(cat "$TMP/writefail.err")"
+grep -q 'password_policy' "$TMP/writefail.err" && bad "#177 write failure mislabeled as policy" || ok "#177 write failure is not a policy error"
+[ "$(shadow_hash)" = "$_orig" ] && ok "#177 failed write preserves shadow hash" || bad "#177 failed write changed shadow hash"
+grep -q 'reason=password_write_failed' "$USRMANAGE_AUDIT" && ok "#177 write failure audited distinctly" || bad "#177 audit: $(cat "$USRMANAGE_AUDIT")"
+
 # --- rpcd -> real CLI pipeline (root only) ---
 if [ "$(id -u)" = "0" ]; then
 	# Reset the account hash so the rpcd assertions below are meaningful.
@@ -215,7 +231,7 @@ UBUS
 	rm -f "$TMP/bin/ubus" "$USRMANAGE_REVOKE_MARKER"
 	unset USRMANAGE_REVOKE_MARKER
 else
-	echo "skip: rpcd->CLI pipeline test (needs root; CI runs non-root)"
+	echo "skip: rpcd->CLI password pipeline (root required; running uid=$(id -u))"
 fi
 
 [ "$fail" = "0" ] || exit 1

@@ -49,6 +49,9 @@ case "$1" in
 		key=${pair%%=*}
 		val=${pair#*=}
 		# Section type assign (usrmanage.policy=usrmanage) — ignore value shape.
+		if [ "${UCI_FAIL_KEY:-}" = "$key" ]; then
+			exit 1
+		fi
 		_tmp=$(mktemp)
 		awk -F= -v k="$key" -v v="$val" '
 			$1==k { next }
@@ -56,7 +59,7 @@ case "$1" in
 			END { print k "=" v }
 		' "$store" > "$_tmp" && mv "$_tmp" "$store"
 		;;
-	commit) ;;
+	commit) : > "$TMP/uci/committed" ;;
 	changes) ;;
 	*) exit 0 ;;
 esac
@@ -107,6 +110,21 @@ for _cell in 'standard:10:1:1:1:0' 'strict:12:1:1:1:1' 'openwrt:8:0:0:0:0'; do
 		strict) [ "$(um_policy_label "$_p")" = "Strict" ] && ok "label Strict" || bad "label $(um_policy_label "$_p")" ;;
 	esac
 done
+
+# #175: fail closed on each UCI write; a failed field must not reach commit.
+um_policy_apply_preset_values standard
+rm -f "$TMP/uci/committed"
+if UCI_FAIL_KEY=usrmanage.policy.require_upper um_policy_save; then
+	bad "policy save should fail when a UCI field write fails"
+else
+	ok "policy save propagates failed UCI field write"
+fi
+[ ! -f "$TMP/uci/committed" ] && ok "failed UCI write does not commit" || bad "failed UCI write still committed"
+unset UCI_FAIL_KEY
+um_policy_apply_preset_values openwrt
+um_with_lock um_policy_save || bad "save openwrt after failed set"
+um_policy_load
+[ "$UM_POL_PRESET" = "openwrt" ] && ok "policy state restored after failed-set fixture" || bad "post-failure policy state=$UM_POL_PRESET"
 
 # um_policy_set_fields custom → detect
 um_policy_set_fields custom 14 1 1 1 1 0 || bad "set_fields custom"

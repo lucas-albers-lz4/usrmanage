@@ -315,14 +315,14 @@ um_policy_load() {
 
 um_policy_save() {
 	command -v uci >/dev/null 2>&1 || return 1
-	uci -q set usrmanage.policy=usrmanage
-	uci -q set usrmanage.policy.preset="$UM_POL_PRESET"
-	uci -q set usrmanage.policy.min_length="$UM_POL_MIN_LENGTH"
-	uci -q set usrmanage.policy.reject_username="$UM_POL_REJECT_USERNAME"
-	uci -q set usrmanage.policy.require_lower="$UM_POL_REQUIRE_LOWER"
-	uci -q set usrmanage.policy.require_upper="$UM_POL_REQUIRE_UPPER"
-	uci -q set usrmanage.policy.require_digit="$UM_POL_REQUIRE_DIGIT"
-	uci -q set usrmanage.policy.require_special="$UM_POL_REQUIRE_SPECIAL"
+	uci -q set usrmanage.policy=usrmanage || return 1
+	uci -q set usrmanage.policy.preset="$UM_POL_PRESET" || return 1
+	uci -q set usrmanage.policy.min_length="$UM_POL_MIN_LENGTH" || return 1
+	uci -q set usrmanage.policy.reject_username="$UM_POL_REJECT_USERNAME" || return 1
+	uci -q set usrmanage.policy.require_lower="$UM_POL_REQUIRE_LOWER" || return 1
+	uci -q set usrmanage.policy.require_upper="$UM_POL_REQUIRE_UPPER" || return 1
+	uci -q set usrmanage.policy.require_digit="$UM_POL_REQUIRE_DIGIT" || return 1
+	uci -q set usrmanage.policy.require_special="$UM_POL_REQUIRE_SPECIAL" || return 1
 	uci -q commit usrmanage
 }
 
@@ -749,7 +749,7 @@ um_tx_restore_one() {
 	_tx_mode=
 	[ -n "$UM_TX_SNAPDIR" ] || return 1
 	if [ -f "${UM_TX_SNAPDIR}/${_tx_label}.missing" ]; then
-		rm -f "$_tx_dst"
+		rm -f "$_tx_dst" || return 1
 		return 0
 	fi
 	[ -f "${UM_TX_SNAPDIR}/${_tx_label}" ] || return 1
@@ -1337,17 +1337,20 @@ um_shadow_entry_del() {
 
 um_group_entry_del() {
 	# Remove private group named after user; bail if other members present.
+	# Supplementary-group cleanup must still run when no private group exists.
 	_u=$1
-	_line=$(grep -m1 "^${_u}:" "$USRMANAGE_GROUP" 2>/dev/null) || return 0
-	_members=$(printf '%s' "$_line" | cut -d: -f4)
-	_others=
-	if [ -n "$_members" ]; then
-		_others=$(printf '%s' "$_members" | tr ',' '\n' | grep -vx '' | grep -vx "$_u" || true)
-	fi
-	if [ -n "$_others" ]; then
-		um_audit "denied" "$_u" "fail" "group_has_members" || true
-		um_err "error: group_has_members"
-		return 1
+	_line=$(grep -m1 "^${_u}:" "$USRMANAGE_GROUP" 2>/dev/null) || _line=
+	if [ -n "$_line" ]; then
+		_members=$(printf '%s' "$_line" | cut -d: -f4)
+		_others=
+		if [ -n "$_members" ]; then
+			_others=$(printf '%s' "$_members" | tr ',' '\n' | grep -vx '' | grep -vx "$_u" || true)
+		fi
+		if [ -n "$_others" ]; then
+			um_audit "denied" "$_u" "fail" "group_has_members" || true
+			um_err "error: group_has_members"
+			return 1
+		fi
 	fi
 	# Strip user from other groups' member lists, then drop private group.
 	# shellcheck disable=SC2016
@@ -1738,6 +1741,11 @@ um_emit_user_json() {
 		"$_nu" "$_uid" "$_gid" "$_role" "$_ns" "$_nh" "$_managed" "$_locked" "$_nl"
 }
 
+um_cli_require_readable() {
+	# Read commands must not turn inaccessible state into empty/truncated output.
+	[ -f "$1" ] && [ -r "$1" ] || um_die "error: read_failed"
+}
+
 um_cmd_list() {
 	_all=0
 	_json=0
@@ -1747,6 +1755,9 @@ um_cmd_list() {
 			--json) _json=1 ;;
 		esac
 	done
+	um_cli_require_readable "$USRMANAGE_PASSWD"
+	um_cli_require_readable "$USRMANAGE_SHADOW"
+	um_cli_require_readable "$USRMANAGE_REGISTRY"
 	_first=1
 	if [ "$_json" = "1" ]; then
 		printf '{"users":['
@@ -1798,6 +1809,9 @@ um_cmd_show() {
 		esac
 	done
 	[ -n "$_name" ] || um_die "usage: usrmanage show <user> [--json]"
+	um_cli_require_readable "$USRMANAGE_PASSWD"
+	um_cli_require_readable "$USRMANAGE_SHADOW"
+	um_cli_require_readable "$USRMANAGE_REGISTRY"
 	um_validate_username "$_name" || um_die "error: invalid_username"
 	um_user_exists "$_name" || um_die "error: not_found"
 	if [ "$_json" = "1" ]; then
@@ -1826,14 +1840,21 @@ um_cmd_audit() {
 				;;
 		esac
 	done
-	um_ensure_dirs
+	# Avoid chmod/touch side effects on an existing audit file during a read.
+	if [ ! -e "$USRMANAGE_AUDIT" ] && [ ! -L "$USRMANAGE_AUDIT" ]; then
+		um_ensure_dirs
+	fi
+	um_cli_require_readable "$USRMANAGE_AUDIT"
 	case "$_last" in
 		''|*[!0-9]*) _last=50 ;;
 	esac
 	if [ "$_json" = "1" ]; then
+		# Read the complete selection before emitting JSON, so tail failure
+		# cannot turn into a successful empty or partial events array.
+		_audit_lines=$(tail -n "$_last" "$USRMANAGE_AUDIT") || um_die "error: read_failed"
 		printf '{"events":['
 		_first=1
-		tail -n "$_last" "$USRMANAGE_AUDIT" 2>/dev/null | while IFS= read -r _line || [ -n "$_line" ]; do
+		printf '%s\n' "$_audit_lines" | while IFS= read -r _line || [ -n "$_line" ]; do
 			[ -n "$_line" ] || continue
 			# Parse compact line into JSON object (best-effort)
 			_ts=$(printf '%s' "$_line" | awk '{print $1}')
@@ -1866,7 +1887,7 @@ um_cmd_audit() {
 		done
 		printf ']}\n'
 	else
-		tail -n "$_last" "$USRMANAGE_AUDIT" 2>/dev/null || true
+		tail -n "$_last" "$USRMANAGE_AUDIT" || um_die "error: read_failed"
 	fi
 }
 
@@ -2186,8 +2207,8 @@ um_mut_passwd() {
 			um_audit denied "$_name" denied password_hash_unverified "$_role"
 			um_die "error: password_hash_unverified"
 		fi
-		um_audit fail "$_name" fail password
-		um_die "error: password_policy:${UM_POL_FAIL_REASON:-failed}"
+		um_audit fail "$_name" fail password_write_failed "$_role"
+		um_die "error: password_write_failed"
 	}
 	um_tx_commit
 	um_incomplete_clear
