@@ -75,6 +75,7 @@ if need flock host-tests "brew install flock (Linux: util-linux)"; then
 	run_test test_download_gzip_gate "$ROOT/tests/test_download_gzip_gate.sh"
 	run_test test_qemu_net_seed "$ROOT/tests/test_qemu_net_seed.sh"
 	run_test test_qemu_smoke_contract "$ROOT/tests/test_qemu_smoke_contract.sh"
+	run_test test_docs_screenshot_contract "$ROOT/tests/test_docs_screenshot_contract.sh"
 fi
 
 if need node theme-i18n-parity "install node"; then

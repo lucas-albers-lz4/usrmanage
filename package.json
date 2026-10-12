@@ -4,7 +4,8 @@
   "description": "Dev dependencies for usrmanage LuCI Playwright e2e (not shipped on router)",
   "scripts": {
     "test:host": "./scripts/smoke-host.sh",
-    "test:e2e": "./scripts/playwright-luci.sh"
+    "test:e2e": "./scripts/playwright-luci.sh",
+    "test:ui": "node scripts/capture-usrmanage-screenshots.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.60.0"

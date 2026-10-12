@@ -101,6 +101,7 @@ usrmanage doctor
 | Doc | Purpose |
 |-----|---------|
 | [docs/user/installation.md](docs/user/installation.md) | End-user install |
+| [docs/user/using-the-ui.md](docs/user/using-the-ui.md) | User Management gallery |
 | [docs/user/roles-and-acl.md](docs/user/roles-and-acl.md) | Roles + LuCI ACL |
 
 ### Release & feed
@@ -131,6 +132,8 @@ With a running QEMU lab (LuCI on `:8080`), LuCI e2e:
 npm install && npx playwright install chromium
 ./scripts/playwright-luci.sh
 ```
+
+User-doc WebP gallery (same lab, clean table): `npm run test:ui` — [capture-screenshots.md](docs/user/assets/capture-screenshots.md).
 
 See [docs/developer/testing.md](docs/developer/testing.md).
 

@@ -19,7 +19,8 @@ shellcheck -s sh \
 	"$ROOT/openwrt-feed/luci-app-usrmanage/root/etc/uci-defaults/92-usrmanage-diagnostic-rpc" \
 	"$ROOT/openwrt-feed/usrmanage/files/etc/uci-defaults/91-usrmanage-diagnostic-rpc" \
 	"$ROOT/scripts/smoke-package-layout.sh" \
-	"$ROOT/scripts/smoke-host.sh"
+	"$ROOT/scripts/smoke-host.sh" \
+	"$ROOT/scripts/lib/capture-guest-reset.sh"
 
 # Bash SDK/publish helpers (blocking — no || true; P1 / #117)
 # SC1091: sourced helpers use runtime paths shellcheck cannot follow without -x graph.
