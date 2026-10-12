@@ -14,8 +14,8 @@ sdk_matrix_root() {
 
 sdk_matrix_version_patch() {
 	case "$1" in
-		25.12 | 25.12.*) printf '%s' '25.12.5' ;;
-		24.10 | 24.10.*) printf '%s' '24.10.8' ;;
+		25.12 | 25.12.5) printf '%s' '25.12.5' ;;
+		24.10 | 24.10.8) printf '%s' '24.10.8' ;;
 		*) printf '%s' "$1" ;;
 	esac
 }
@@ -48,6 +48,8 @@ sdk_matrix_volume_name() {
 
 sdk_matrix_resolve() {
 	local target="${1:-x86-64}" version="${2:-24.10}"
+	sdk_matrix_validate_target "$target" || return 1
+	sdk_matrix_validate_version "$version" || return 1
 	SDK_MATRIX_TARGET="$target"
 	SDK_MATRIX_VERSION="$version"
 	SDK_MATRIX_VERSION_LABEL="$(sdk_matrix_version_label "$version")"
@@ -150,15 +152,102 @@ sdk_matrix_validate_target() {
 }
 
 sdk_matrix_validate_version() {
-	local v
-	for v in "${SDK_MATRIX_VERSIONS[@]}"; do
-		[[ "$1" == "$v" || "$1" == "$(sdk_matrix_version_patch "$1")" ]] && return 0
-	done
 	case "$1" in
-		25.12.* | 24.10.*) return 0 ;;
+		24.10 | 24.10.8 | 25.12 | 25.12.5) return 0 ;;
 	esac
-	echo "invalid --version $1 (choose: ${SDK_MATRIX_VERSIONS[*]})" >&2
+	echo "invalid --version $1 (choose: ${SDK_MATRIX_VERSIONS[*]} or pinned patches 24.10.8 / 25.12.5)" >&2
 	return 1
+}
+
+sdk_matrix_expected_package_version() {
+	local package="$1" makefile version release
+	case "$package" in
+		usrmanage | luci-app-usrmanage) ;;
+		*) echo "unknown usrmanage package: $package" >&2; return 1 ;;
+	esac
+	makefile="$(sdk_matrix_root)/openwrt-feed/${package}/Makefile"
+	[[ -f "$makefile" ]] || { echo "missing package Makefile: $makefile" >&2; return 1; }
+	version="$(sed -n 's/^PKG_VERSION:=//p' "$makefile" | head -1)"
+	release="$(sed -n 's/^PKG_RELEASE:=//p' "$makefile" | head -1)"
+	[[ -n "$version" && -n "$release" ]] || { echo "missing package version/release: $makefile" >&2; return 1; }
+	printf '%s-r%s' "$version" "$release"
+}
+
+sdk_matrix_read_apk_metadata() {
+	local file="$1" version="$2" root image volume pin
+	root="$(sdk_matrix_root)"
+	pin="$(sdk_matrix_read_digest_cache x86-64 "$version")" || {
+		echo "missing pinned x86-64 SDK image for APK metadata validation ($version)" >&2
+		return 1
+	}
+	image="$pin"
+	volume="$(sdk_matrix_volume_name x86-64 "$version")"
+	file="$(cd "$(dirname "$file")" && printf '%s/%s' "$(pwd)" "$(basename "$file")")" || return 1
+	(
+		cd "$root"
+		OWRT_SDK_IMAGE="$image" OWRT_SDK_VOLUME="$volume" \
+			docker compose run --rm --no-deps --network none \
+				-v "${file}:/tmp/usrmanage-package.apk:ro" sdk-export sh -ec '
+				apk=/builder/staging_dir/host/bin/apk
+				[ -x "$apk" ] || { echo "missing SDK apk metadata reader: $apk" >&2; exit 1; }
+				exec "$apk" adbdump --format json /tmp/usrmanage-package.apk
+			'
+	)
+}
+
+sdk_matrix_read_package_metadata() {
+	local file="$1" version="${2:-24.10}" metadata
+	case "$file" in
+		*.ipk)
+			metadata="$(tar -xOzf "$file" ./control.tar.gz 2>/dev/null \
+				| tar -xzOf - ./control 2>/dev/null)" || metadata="$(tar -xOzf "$file" control.tar.gz 2>/dev/null \
+				| tar -xzOf - ./control 2>/dev/null)" || return 1
+			printf '%s' "$metadata"
+			;;
+		*.apk)
+			sdk_matrix_read_apk_metadata "$file" "$version"
+			;;
+		*) return 1 ;;
+	esac
+}
+
+sdk_matrix_validate_package_dir() {
+	local dir="$1" version="${2:-${SDK_MATRIX_VERSION:-24.10}}" format pkg expected metadata name actual_version arch file
+	local -a files
+	sdk_matrix_validate_version "$version" || return 1
+	case "$version" in
+		24.10 | 24.10.8) format=ipk ;;
+		25.12 | 25.12.5) format=apk ;;
+	esac
+	[[ -d "$dir" ]] || { echo "missing package output directory: $dir" >&2; return 1; }
+	for pkg in usrmanage luci-app-usrmanage; do
+		expected="$(sdk_matrix_expected_package_version "$pkg")" || return 1
+		shopt -s nullglob
+		files=("${dir}/${pkg}_"*.ipk "${dir}/${pkg}-"*.apk "${dir}/${pkg}_"*.apk)
+		shopt -u nullglob
+		if [[ ${#files[@]} -ne 1 || "${files[0]}" != *".${format}" ]]; then
+			echo "expected exactly one .${format} artifact for ${pkg} in ${dir}; found ${#files[@]}" >&2
+			return 1
+		fi
+		file="${files[0]}"
+		metadata="$(sdk_matrix_read_package_metadata "$file" "$version")" || {
+			echo "cannot read package metadata: $file" >&2
+			return 1
+		}
+		if [[ "$format" == ipk ]]; then
+			name="$(printf '%s\n' "$metadata" | sed -n 's/^Package: //p' | head -1)"
+			actual_version="$(printf '%s\n' "$metadata" | sed -n 's/^Version: //p' | head -1)"
+			arch="$(printf '%s\n' "$metadata" | sed -n 's/^Architecture: //p' | head -1)"
+		else
+			name="$(printf '%s\n' "$metadata" | jq -er '.info.name | select(type == "string" and length > 0)')" || return 1
+			actual_version="$(printf '%s\n' "$metadata" | jq -er '.info.version | select(type == "string" and length > 0)')" || return 1
+			arch="$(printf '%s\n' "$metadata" | jq -er '.info.arch | select(type == "string" and length > 0)')" || return 1
+		fi
+		if [[ "$name" != "$pkg" || "$actual_version" != "$expected" || ( "$arch" != all && "$arch" != noarch ) ]]; then
+			echo "package identity mismatch in $file (name=$name version=$actual_version arch=$arch; expected $pkg $expected all/noarch)" >&2
+			return 1
+		fi
+	done
 }
 
 sdk_matrix_cache_dirs() {
@@ -377,9 +466,14 @@ sdk_matrix_copy_out() {
 	root="$(sdk_matrix_root)"
 	# Normalize cache vars so the direct `sdk` compose run below binds the same
 	# absolute cache paths as the build path (luna r6).
-	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL"
+	sdk_matrix_cache_dirs "$root" "$SDK_MATRIX_VERSION_LABEL" || {
+		echo "failed to initialize SDK caches" >&2
+		return 1
+	}
 	out_mount="${root}/out"
-	mkdir -p "${out_mount}/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}"
+	local dest="${out_mount}/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}"
+	rm -rf "$dest" || return 1
+	mkdir -p "$dest" || return 1
 	(
 		cd "$root"
 		OWRT_SDK_IMAGE="$SDK_MATRIX_IMAGE" \
@@ -388,16 +482,15 @@ sdk_matrix_copy_out() {
 		OWRT_SDK_FEEDS_CACHE="$SDK_MATRIX_FEEDS_CACHE" \
 		docker compose run --rm --user root -v "${out_mount}:/out" sdk sh -ec "
 			dest=/out/${SDK_MATRIX_PACKAGE_ARCH}/${SDK_MATRIX_VERSION_LABEL}
+			src=/builder/bin/packages/${SDK_MATRIX_PACKAGE_ARCH}/usrmanage
+			[ -d \"\$src\" ] || { echo \"missing package output: \$src\" >&2; exit 1; }
+			rm -rf \"\$dest\"
 			mkdir -p \"\$dest\"
-			if [ -d /builder/bin/packages/${SDK_MATRIX_PACKAGE_ARCH}/usrmanage ]; then
-				cp -a /builder/bin/packages/${SDK_MATRIX_PACKAGE_ARCH}/usrmanage \"\$dest/\"
-			else
-				cp -a /builder/bin/packages/${SDK_MATRIX_PACKAGE_ARCH}/. \"\$dest/\" 2>/dev/null || true
-			fi
+			cp -a \"\$src\" \"\$dest/usrmanage\"
 			chmod -R a+rX /out
-			ls -la \"\$dest\"/usrmanage/* 2>/dev/null || ls -la \"\$dest\" 2>/dev/null || true
 		"
-	)
+	) || return 1
+	sdk_matrix_validate_package_dir "${dest}/usrmanage" "$SDK_MATRIX_VERSION" || return 1
 	echo "Packages under: ${SDK_MATRIX_OUT_DIR}/" >&2
 }
 
