@@ -10,17 +10,8 @@ const APP_VERSION = '0.1.17';
 const callHealth = rpc.declare({
 	object: 'usrmanage',
 	method: 'health',
-	expect: { '': {
-		ok: true,
-		hostname: '',
-		release: '',
-		uptime_s: 0,
-		load: [],
-		wan: { up: false, ipv4: false, ipv6: false },
-		lan: { up: false },
-		wifi: { radios_up: 0, radios_total: 0, assoc_count: 0 },
-		dhcp_lease_count: 0
-	} }
+	expect: { '': {} },
+	reject: true
 });
 
 function formatUptime(sec) {
@@ -62,7 +53,7 @@ function mountView(self, data) {
 		return;
 	const node = self.render(data);
 	const old = self.rootNode ||
-		vp.querySelector('[data-testid^="usrmanage-health-"]');
+		vp.querySelector('[data-testid="usrmanage-health-root"]');
 	self.rootNode = node;
 	if (old && old.parentNode)
 		old.parentNode.replaceChild(node, old);
@@ -83,9 +74,9 @@ return view.extend({
 		const self = this;
 		const h = (data && typeof data === 'object') ? data : { ok: false };
 
-		if (h.ok === false) {
+		if (h.ok !== true) {
 			const err = (h.error != null) ? String(h.error) : 'health_unavailable';
-			return E('div', { 'class': 'cbi-map' }, [
+			return E('div', { 'class': 'cbi-map', 'data-testid': 'usrmanage-health-root' }, [
 				E('h2', {}, _('Device health')),
 				E('div', { 'class': 'alert-message error', 'data-testid': 'usrmanage-health-error' }, [
 					E('p', {}, [ _('Health data is unavailable (%s).').format(err) ])
@@ -104,7 +95,7 @@ return view.extend({
 		const lan = (h.lan && typeof h.lan === 'object') ? h.lan : {};
 		const wifi = (h.wifi && typeof h.wifi === 'object') ? h.wifi : {};
 
-		return E('div', { 'class': 'cbi-map', 'data-testid': 'usrmanage-health-map' }, [
+		return E('div', { 'class': 'cbi-map', 'data-testid': 'usrmanage-health-root' }, [
 			E('h2', {}, _('Device health')),
 			E('div', { 'class': 'cbi-map-descr' }, [
 				_('Redacted device status for observer logins. Wireless keys, user accounts, and configuration secrets are not shown here.')
@@ -115,7 +106,7 @@ return view.extend({
 			}, [
 				E('p', {}, _('This LuCI login is for device health only, not account administration.'))
 			]),
-			E('div', { 'class': 'cbi-section' }, [
+			E('div', { 'class': 'cbi-section', 'data-testid': 'usrmanage-health-map' }, [
 				healthRow(_('Hostname'), h.hostname || '—'),
 				healthRow(_('OpenWrt release'), h.release || '—'),
 				healthRow(_('Uptime'), formatUptime(h.uptime_s)),
