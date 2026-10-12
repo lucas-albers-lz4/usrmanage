@@ -184,6 +184,36 @@ rm -rf "$_snap_keep" "$TMP/failbin"
 UM_TX_ACTIVE=0
 UM_TX_SNAPDIR=
 UM_TX_COMMITTED=0
+# #174: removal of a file that was absent at snapshot time must propagate failure
+# so the transaction snapshot remains available for recovery.
+_saved_rpcd=$USRMANAGE_RPCD_CONFIG
+USRMANAGE_RPCD_CONFIG="$TMP/absent-rpcd"
+rm -f "$USRMANAGE_RPCD_CONFIG"
+um_tx_begin
+_snap_keep=$UM_TX_SNAPDIR
+touch "$USRMANAGE_RPCD_CONFIG"
+mkdir -p "$TMP/fail-rm-bin"
+_rm_abs=$(command -v rm)
+cat > "$TMP/fail-rm-bin/rm" <<'RM'
+#!/bin/sh
+if [ "$1" = "-f" ] && [ "$2" = "${FAIL_RM_TARGET:-}" ]; then
+	exit 1
+fi
+exec "$REAL_RM" "$@"
+RM
+chmod +x "$TMP/fail-rm-bin/rm"
+if ( PATH="$TMP/fail-rm-bin:$PATH" REAL_RM="$_rm_abs" FAIL_RM_TARGET="$USRMANAGE_RPCD_CONFIG" um_tx_rollback ) >/dev/null 2>&1; then
+	bad "#174 rollback should fail when removing an originally absent file fails"
+else
+	ok "#174 rollback propagates failed removal"
+fi
+[ -f "$USRMANAGE_RPCD_CONFIG" ] && ok "#174 failed removal leaves new file for recovery" || bad "#174 new file unexpectedly removed"
+[ -d "$_snap_keep" ] && ok "#174 failed removal keeps snapdir" || bad "#174 failed removal discarded snapdir"
+rm -rf "$_snap_keep" "$TMP/fail-rm-bin" "$USRMANAGE_RPCD_CONFIG"
+USRMANAGE_RPCD_CONFIG=$_saved_rpcd
+UM_TX_ACTIVE=0
+UM_TX_SNAPDIR=
+UM_TX_COMMITTED=0
 # Reset passwd after failed restore left torn content.
 printf 'root:x:0:0:root:/root:/bin/ash\nops:x:1000:1000:ops:/home/ops:/bin/ash\n' > "$USRMANAGE_PASSWD"
 chmod 0644 "$USRMANAGE_PASSWD"
