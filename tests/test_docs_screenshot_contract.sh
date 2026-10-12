@@ -32,7 +32,7 @@ grep -q 'usrmanage-debug.webp' "$GITIGNORE" || fail "debug screenshot must be gi
 for f in usrmanage-empty.webp usrmanage-add-dialog.webp usrmanage-policy-editor.webp usrmanage-one-user.webp; do
 	[[ -s "$ASSETS/$f" ]] || fail "missing or empty gallery asset $f"
 done
-if [[ -e "$ASSETS/usrmanage-debug.webp" ]]; then
+if git -C "$ROOT" ls-files --error-unmatch docs/user/assets/usrmanage-debug.webp >/dev/null 2>&1; then
 	fail "debug screenshot must not be committed"
 fi
 

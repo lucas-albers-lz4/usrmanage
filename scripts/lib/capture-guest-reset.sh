@@ -3,17 +3,23 @@
 # Run on the QEMU guest via: ssh ... ash -s -- [allowlist...] < this file
 #
 # Deletes managed users that are not in the allowlist. last_admin is unwound
-# with a registry + UNIX delete so empty-table shots are possible. Resets
-# OpenWrt password policy and truncates the audit log so smoke names cannot
-# appear in the gallery. Not a product CLI.
+# with a UNIX delete then registry strip so empty-table shots are possible.
+# Resets OpenWrt password policy and truncates the audit log so smoke names
+# cannot appear in the gallery. Not a product CLI.
 set -e
 
 ALLOW="$*"
 
 in_allow() {
 	_want=$1
-	for _a in $ALLOW; do
-		[ "$_want" = "$_a" ] && return 0
+	_rest=$ALLOW
+	while [ -n "$_rest" ]; do
+		_a=${_rest%% *}
+		case "$_rest" in
+			*' '*) _rest=${_rest#* } ;;
+			*) _rest= ;;
+		esac
+		[ "$_a" = "$_want" ] && return 0
 	done
 	return 1
 }
@@ -38,6 +44,18 @@ safe() {
 lab_unwind() {
 	name=$1
 	safe "$name" || return 1
+	deluser "$name" wheel >/dev/null 2>&1 || true
+	if command -v userdel >/dev/null 2>&1; then
+		userdel -r "$name" >/dev/null 2>&1 || userdel "$name" >/dev/null 2>&1 || true
+	elif command -v deluser >/dev/null 2>&1; then
+		deluser --remove-home "$name" >/dev/null 2>&1 || deluser "$name" >/dev/null 2>&1 || true
+	fi
+	delgroup "$name" >/dev/null 2>&1 || true
+	rm -rf "/home/${name:?}" 2>/dev/null || true
+	if id "$name" >/dev/null 2>&1; then
+		echo "lab_unwind: $name still exists after delete" >&2
+		return 1
+	fi
 	reg=/etc/usrmanage/users
 	tmp="${reg}.tmp.$$"
 	umask 077
@@ -47,14 +65,6 @@ lab_unwind() {
 		chown 0:0 "$tmp" 2>/dev/null || true
 		mv "$tmp" "$reg"
 	fi
-	deluser "$name" wheel >/dev/null 2>&1 || true
-	if command -v userdel >/dev/null 2>&1; then
-		userdel -r "$name" >/dev/null 2>&1 || userdel "$name" >/dev/null 2>&1 || true
-	elif command -v deluser >/dev/null 2>&1; then
-		deluser --remove-home "$name" >/dev/null 2>&1 || deluser "$name" >/dev/null 2>&1 || true
-	fi
-	delgroup "$name" >/dev/null 2>&1 || true
-	rm -rf "/home/${name:?}" 2>/dev/null || true
 }
 
 command -v usrmanage >/dev/null || {
@@ -65,7 +75,7 @@ command -v usrmanage >/dev/null || {
 usrmanage set-policy --preset openwrt >/dev/null
 
 names=$(usrmanage list 2>/dev/null | awk '{print $1}')
-for name in $names; do
+while IFS= read -r name || [ -n "$name" ]; do
 	[ -n "$name" ] || continue
 	case "$name" in
 		\#*) continue ;;
@@ -77,7 +87,9 @@ for name in $names; do
 		continue
 	fi
 	lab_unwind "$name"
-done
+done <<EOF
+$names
+EOF
 
 : > /var/log/usrmanage/audit.log
 rm -f /var/log/usrmanage/audit.log.1
