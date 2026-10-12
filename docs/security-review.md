@@ -30,8 +30,8 @@ Every reviewable surface, where it lives, and when it was last looked at. **Upda
 | rpcd plugin + ACL | `openwrt-feed/luci-app-usrmanage/root/usr/libexec/rpcd/usrmanage`, `root/usr/share/rpcd/acl.d/` | 2026-09-04 (S1 #168 body SID host+lab) | none |
 | LuCI view | `openwrt-feed/luci-app-usrmanage/htdocs/luci-static/resources/view/system/usrmanage.js` | 2026-10-11 (#178 static RPC-result contract only; runtime status behavior not verified) | none (XSS / expect convention re-confirmed) |
 | On-device install surface | package Makefiles, `files/etc/` (sudoers, uci-defaults, UCI configuration, registry), luci-app `91-usrmanage-readonly-observer` / `92-usrmanage-diagnostic-rpc`, usrmanage `91-usrmanage-diagnostic-rpc` | 2026-08-22 (migrate → diagnostic 9-set) | none |
-| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-09-04 (#166 persist-credentials) | none |
-| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh`, `scripts/verify-reproducible-build.sh` | 2026-10-12 (#184/#187 host failure/target-arch contracts; no build run) | none |
+| CI workflows | `.github/workflows/`, `.github/dependabot.yml` | 2026-10-12 (#185–#188 host release-contract checks; no release run) | none |
+| Release + signing | `scripts/publish-packages.sh`, `scripts/lib/feed-keys.sh`, `scripts/lib/feed-publish.sh`, `scripts/validate-feed-keys.sh`, `scripts/verify-reproducible-build.sh` | 2026-10-12 (#186/#188 host failure-gate checks; no signed publish run) | none |
 | Build inputs (SDK, feeds) | `scripts/lib/sdk-matrix.sh`, `scripts/feeds.lock/`, `docker-compose.yml` | 2026-10-12 (#185/#194 SDK fixtures + #184/#187 target-arch tests; no SDK matrix build) | none |
 | Operator trust bootstrap | `docs/binary-feed.md`, `packages-repo/README.md`, published feed keys | 2026-08-12 (#117) | none |
 | QEMU lab + e2e | `scripts/qemu-*.sh`, `tests/e2e/`, `playwright.config.js` | 2026-09-04 (S1 asserts PASS on 24.10.5) | none open (I3 accepted residual) — fixtures remain lab-only by design |
