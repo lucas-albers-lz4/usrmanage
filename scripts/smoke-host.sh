@@ -60,6 +60,8 @@ fi
 
 if need node theme-i18n-parity "install node"; then
 	node "$ROOT/tests/usrmanage-theme.test.js"
+	node "$ROOT/tests/usrmanage-rpc-contract.test.js"
+	node "$ROOT/tests/usrmanage-health-refresh.test.js"
 	node "$ROOT/tests/usrmanage-i18n.test.js"
 	node "$ROOT/tests/usrmanage-parity.test.js"
 fi
