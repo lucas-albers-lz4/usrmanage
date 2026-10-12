@@ -219,11 +219,19 @@ jobs:
             draft="$(gh release view "$tag" --json isDraft -q '.isDraft')"
             asset_count="$(gh release view "$tag" --json assets -q '.assets | length')"
             if [[ "$immutable" == "true" && "$draft" == "false" ]]; then
-              if [[ "$asset_count" -gt 0 ]]; then
-                echo "Release $tag already published with ${asset_count} asset(s); skipping upload." >&2
+              existing_asset_names="$(gh release view "$tag" --json assets -q '.assets[].name')" || {
+                echo "Could not read existing release asset names for $tag" >&2
+                exit 1
+              }
+              if feed_publish_release_asset_names_match "$staging" "$existing_asset_names"; then
+                echo "Release $tag already has the expected package assets; skipping upload." >&2
                 exit 0
               fi
-              echo "Release $tag is published (immutable) with no assets." >&2
+              echo "Release $tag is immutable but its asset set does not match the expected build." >&2
+              echo "Expected:" >&2
+              for path in "$staging"/*; do [ -f "$path" ] || continue; basename "$path"; done | sort >&2
+              echo "Existing:" >&2
+              printf '%s\n' "$existing_asset_names" | sort >&2
               exit 1
             fi
             if [[ "$asset_count" -eq 0 ]]; then

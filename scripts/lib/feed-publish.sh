@@ -39,11 +39,12 @@ feed_publish_feed_dir() {
 }
 
 feed_publish_find_artifacts() {
-	# Print all usrmanage + luci-app-usrmanage artifacts for a version label (one per line).
+	# Print both current, metadata-verified packages for a version label.
 	local version_label="$1"
 	local root dir
 	root="$(feed_publish_root)"
 	dir="${root}/out/x86_64/${version_label}/usrmanage"
+	sdk_matrix_validate_package_dir "$dir" "$version_label" || return 1
 	shopt -s nullglob
 	local candidates=(
 		"${dir}"/usrmanage_*_all.ipk
@@ -54,7 +55,10 @@ feed_publish_find_artifacts() {
 		"${dir}"/luci-app-usrmanage_*.apk
 	)
 	shopt -u nullglob
-	[[ ${#candidates[@]} -ge 1 ]] || return 1
+	[[ ${#candidates[@]} -eq 2 ]] || {
+		echo "expected exactly two usrmanage artifacts for ${version_label} in ${dir}" >&2
+		return 1
+	}
 	printf '%s\n' "${candidates[@]}" | sort -u
 }
 
@@ -81,21 +85,28 @@ feed_publish_release_asset_basename() {
 	ver_label="$(basename "$(dirname "$(dirname "$path")")")"
 	base="$(basename "$path")"
 	key="$(feed_publish_release_key "$ver_label")"
-	if [[ "$base" == *.ipk ]]; then
-		printf '%s' "${base/_all.ipk/_${key}_all.ipk}"
-	else
-		printf '%s' "$base"
-	fi
+	case "$base" in
+		*.ipk) printf '%s' "${base/_all.ipk/_${key}_all.ipk}" ;;
+		*.apk) printf '%s' "${base%.apk}_${key}.apk" ;;
+		*) printf '%s' "$base" ;;
+	esac
 }
 
 # Copy built artifacts into a flat dir with unique release asset names.
 feed_publish_stage_release_assets() {
 	local dest="$1"
-	local ver ver_label path name
-	mkdir -p "$dest"
-	find "$dest" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+	local root ver ver_label path name artifacts count=0
+	root="$(feed_publish_root)"
+	# Validate every release cell before creating any staged asset.
 	for ver in 24.10 25.12; do
 		ver_label="$(sdk_matrix_version_label "$ver")"
+		sdk_matrix_validate_package_dir "${root}/out/x86_64/${ver_label}/usrmanage" "$ver" || return 1
+	done
+	mkdir -p "$dest" || return 1
+	find "$dest" -mindepth 1 -maxdepth 1 -exec rm -rf {} + || return 1
+	for ver in 24.10 25.12; do
+		ver_label="$(sdk_matrix_version_label "$ver")"
+		artifacts="$(feed_publish_find_artifacts "$ver_label")" || return 1
 		while IFS= read -r path; do
 			[[ -n "$path" ]] || continue
 			name="$(feed_publish_release_asset_basename "$path")"
@@ -103,9 +114,21 @@ feed_publish_stage_release_assets() {
 				echo "duplicate release asset name: ${name} (${path})" >&2
 				return 1
 			fi
-			cp -a "$path" "${dest}/${name}"
-		done < <(feed_publish_find_artifacts "$ver_label" 2>/dev/null || true)
+			cp -a "$path" "${dest}/${name}" || return 1
+			count=$((count + 1))
+		done <<< "$artifacts"
 	done
+	[[ "$count" -eq 4 ]] || {
+		echo "release staging expected 4 package assets, got ${count}" >&2
+		return 1
+	}
+}
+
+feed_publish_release_asset_names_match() {
+	local staging="$1" remote_names="$2" expected actual
+	expected="$(for path in "$staging"/*; do [ -f "$path" ] || continue; basename "$path"; done | sort)" || return 1
+	actual="$(printf '%s\n' "$remote_names" | sed '/^$/d' | sort)" || return 1
+	[[ -n "$expected" && "$expected" == "$actual" ]]
 }
 
 # Pinned usign revision for host-side opkg feed signing (no fixed /tmp path; fresh build per call).
@@ -335,17 +358,20 @@ feed_publish_stage_opkg_sdk() {
 
 feed_publish_stage_opkg() {
 	local version_key="$1" staging="$2"
-	local ver_label feed_dir artifact pkg_dir count=0
+	local ver_label feed_dir artifact pkg_dir count=0 artifacts
+	sdk_matrix_validate_version "$version_key" || return 1
 	ver_label="$(sdk_matrix_version_label "$version_key")"
+	feed_publish_find_artifacts "$ver_label" >/dev/null || return 1
+	artifacts="$(feed_publish_find_artifacts "$ver_label")" || return 1
 	feed_dir="${staging}/$(feed_publish_feed_dir "$version_key")"
-	mkdir -p "$feed_dir"
+	mkdir -p "$feed_dir" || return 1
 	while IFS= read -r artifact; do
 		[[ -n "$artifact" ]] || continue
-		cp -a "$artifact" "$feed_dir/"
+		cp -a "$artifact" "$feed_dir/" || return 1
 		count=$((count + 1))
-	done < <(feed_publish_find_artifacts "$ver_label" 2>/dev/null || true)
-	[[ "$count" -ge 1 ]] || {
-		echo "missing built ipk for ${ver_label} under out/x86_64/${ver_label}/usrmanage/" >&2
+	done <<< "$artifacts"
+	[[ "$count" -eq 2 ]] || {
+		echo "expected both built packages for ${ver_label}, got ${count}" >&2
 		return 1
 	}
 	[[ -n "${OPKG_FEED_SECRET_KEY:-}" ]] || {
@@ -365,17 +391,20 @@ feed_publish_stage_opkg() {
 
 feed_publish_stage_apk() {
 	local version_key="$1" staging="$2"
-	local ver_label feed_dir artifact pkg_dir count=0
+	local ver_label feed_dir artifact pkg_dir count=0 artifacts
+	sdk_matrix_validate_version "$version_key" || return 1
 	ver_label="$(sdk_matrix_version_label "$version_key")"
+	feed_publish_find_artifacts "$ver_label" >/dev/null || return 1
+	artifacts="$(feed_publish_find_artifacts "$ver_label")" || return 1
 	feed_dir="${staging}/$(feed_publish_feed_dir "$version_key")/all"
-	mkdir -p "$feed_dir"
+	mkdir -p "$feed_dir" || return 1
 	while IFS= read -r artifact; do
 		[[ -n "$artifact" ]] || continue
-		cp -a "$artifact" "$feed_dir/"
+		cp -a "$artifact" "$feed_dir/" || return 1
 		count=$((count + 1))
-	done < <(feed_publish_find_artifacts "$ver_label" 2>/dev/null || true)
-	[[ "$count" -ge 1 ]] || {
-		echo "missing built apk for ${ver_label} under out/x86_64/${ver_label}/usrmanage/" >&2
+	done <<< "$artifacts"
+	[[ "$count" -eq 2 ]] || {
+		echo "expected both built packages for ${ver_label}, got ${count}" >&2
 		return 1
 	}
 	[[ -n "${APK_FEED_SECRET_KEY:-}" ]] || {
@@ -463,8 +492,13 @@ feed_publish_copy_keys() {
 
 feed_publish_write_manifest() {
 	local staging="$1" git_tag="${2:-unknown}"
-	local manifest ver artifact ver_label sum
+	local manifest ver artifact ver_label sum artifacts root count=0
 	local target image digest
+	root="$(feed_publish_root)"
+	for ver in 24.10 25.12; do
+		ver_label="$(sdk_matrix_version_label "$ver")"
+		sdk_matrix_validate_package_dir "${root}/out/x86_64/${ver_label}/usrmanage" "$ver" || return 1
+	done
 	manifest="${staging}/manifest.json"
 	: > "$manifest"
 	printf '{\n  "git_tag": "%s",\n  "sdk_images": [\n' "${git_tag//\"/\\\"}" >> "$manifest"
@@ -486,13 +520,17 @@ feed_publish_write_manifest() {
 	first=1
 	for ver in 24.10 25.12; do
 		ver_label="$(sdk_matrix_version_label "$ver")"
+		artifacts="$(feed_publish_find_artifacts "$ver_label")" || return 1
 		while IFS= read -r artifact; do
 			[[ -n "$artifact" ]] || continue
-			sum="$(sha256sum "$artifact" | awk '{print $1}')"
+			sum="$(sha256sum "$artifact" | awk '{print $1}')" || return 1
+			[[ -n "$sum" ]] || return 1
 			[[ $first -eq 1 ]] || printf ',\n' >> "$manifest"
 			first=0
 			printf '    {"openwrt": "%s", "file": "%s", "sha256": "%s"}' "$ver" "$(basename "$artifact")" "$sum" >> "$manifest"
-		done < <(feed_publish_find_artifacts "$ver_label" 2>/dev/null || true)
+			count=$((count + 1))
+		done <<< "$artifacts"
 	done
+	[[ "$count" -eq 4 ]] || { echo "manifest expected 4 package entries, got ${count}" >&2; return 1; }
 	printf '\n  ]\n}\n' >> "$manifest"
 }
