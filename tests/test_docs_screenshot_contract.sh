@@ -23,6 +23,8 @@ grep -q 'hideLabNags' "$SRC" || fail "lab root-password nag must be stripped fro
 grep -q 'capture-guest-reset.sh' "$SRC" || fail "capture script must use the guest reset helper"
 [[ -f "$ROOT/scripts/lib/capture-guest-reset.sh" ]] || fail "missing guest reset helper"
 grep -q 'lab_unwind' "$ROOT/scripts/lib/capture-guest-reset.sh" || fail "guest reset missing last_admin unwind"
+grep -q 'usrmanage list failed' "$ROOT/scripts/lib/capture-guest-reset.sh" || fail "guest reset must fail closed if list fails"
+grep -q 'incomplete' "$ROOT/scripts/lib/capture-guest-reset.sh" || fail "guest reset must clear leftover incomplete marker"
 
 grep -q '"test:ui"' "$PKG" || fail "package.json missing test:ui"
 grep -q 'capture-usrmanage-screenshots.mjs' "$PKG" || fail "test:ui must run the capture script"

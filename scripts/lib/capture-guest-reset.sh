@@ -74,7 +74,11 @@ command -v usrmanage >/dev/null || {
 
 usrmanage set-policy --preset openwrt >/dev/null
 
-names=$(usrmanage list 2>/dev/null | awk '{print $1}')
+list_out=$(usrmanage list) || {
+	echo "usrmanage list failed" >&2
+	exit 1
+}
+names=$(printf '%s\n' "$list_out" | awk '{print $1}')
 while IFS= read -r name || [ -n "$name" ]; do
 	[ -n "$name" ] || continue
 	case "$name" in
@@ -90,6 +94,8 @@ while IFS= read -r name || [ -n "$name" ]; do
 done <<EOF
 $names
 EOF
+
+rm -f /etc/usrmanage/incomplete
 
 : > /var/log/usrmanage/audit.log
 rm -f /var/log/usrmanage/audit.log.1

@@ -97,8 +97,11 @@ function guestAddFixture() {
 }
 
 function guestListNames() {
-	const r = requireOk(guestAsh('usrmanage list | awk \'{print $1}\'\n'), 'usrmanage list');
-	return (r.stdout || '').split(/\s+/).map((s) => s.trim()).filter(Boolean);
+	const r = requireOk(guestAsh('usrmanage list\n'), 'usrmanage list');
+	return (r.stdout || '')
+		.split('\n')
+		.map((line) => line.trim().split(/\s+/)[0])
+		.filter(Boolean);
 }
 
 function assertAllowlist(allowlist) {
