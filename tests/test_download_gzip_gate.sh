@@ -6,7 +6,8 @@
 #   - output must be non-empty ([[ -s ]])
 #   - gzip exit 2 is accepted ONLY with the "trailing garbage ignored"
 #     warning on stderr (the real OpenWrt .img.gz case)
-#   - gzip exit 0/1 accepted; any other code rejected
+#   - only gzip exit 0 is normally accepted; exit 1 and unexpected codes fail
+#   - rejected partial output is removed
 set -u
 fail=0
 ok() { echo "ok: $*"; }
@@ -32,7 +33,7 @@ run_gate() {
 	local work="$TMP/work-$RANDOM"
 	mkdir -p "$work"
 	: > "$work/img.gz"
-	: > "$work/img.out"
+	printf 'stale-image-data\n' > "$work/img.out"
 	local rc
 	(
 		cd "$work"
@@ -55,6 +56,11 @@ FG
 			bash -c "$GATE" >/dev/null 2>&1
 	)
 	rc=$?
+	if [[ -e "$work/img.out" ]]; then
+		LAST_OUTPUT_STATE=present
+	else
+		LAST_OUTPUT_STATE=absent
+	fi
 	rm -rf "$work"
 	return "$rc"
 }
@@ -66,21 +72,30 @@ else
 	bad "gzip exit 2 with trailing-garbage warning must be accepted (real image case)"
 fi
 
-# 2. exit 2 WITHOUT the warning → rejected (fatal, nonempty partial output)
+# 2. exit 2 WITHOUT the warning → rejected and partial output removed.
 if run_gate 2 "gzip: img.gz: invalid compressed data--format violated"; then
 	bad "gzip exit 2 without warning must be rejected"
 else
-	ok "gzip exit 2 without warning rejected"
+	[[ "$LAST_OUTPUT_STATE" == absent ]] && ok "gzip exit 2 without warning rejected and partial removed" \
+		|| bad "gzip exit 2 failure left partial output"
 fi
 
-# 3. exit 0 → accepted
+# 3. exit 1 is rejected even with nonempty output and removes the partial file.
+if run_gate 1 "gzip: img.gz: decompression warning"; then
+	bad "gzip exit 1 must be rejected"
+else
+	[[ "$LAST_OUTPUT_STATE" == absent ]] && ok "gzip exit 1 rejected and partial removed" \
+		|| bad "gzip exit 1 failure left partial output"
+fi
+
+# 4. exit 0 → accepted
 if run_gate 0 ""; then
 	ok "gzip exit 0 accepted"
 else
 	bad "gzip exit 0 must be accepted"
 fi
 
-# 4. exit 3 → rejected (unexpected code)
+# 5. exit 3 → rejected (unexpected code)
 if run_gate 3 "gzip: something else"; then
 	bad "gzip exit 3 must be rejected"
 else
