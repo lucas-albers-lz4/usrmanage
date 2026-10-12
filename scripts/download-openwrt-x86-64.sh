@@ -97,6 +97,7 @@ echo "Fetching ${IMG_GZ} ..."
 curl -fsSL -o "${OUT}/${IMG_GZ}" "${BASE}/${IMG_GZ}"
 verify_downloaded_sha256 "${OUT}/${IMG_GZ}" "${IMG_GZ}" "${SUM_MANIFEST}" 1
 echo "Decompressing ..."
+rm -f "${OUT}/${IMG_OUT}" "${OUT}/decompress.err"
 set +e
 gzip -dc "${OUT}/${IMG_GZ}" > "${OUT}/${IMG_OUT}" 2> "${OUT}/decompress.err"
 gz_rc=$?
@@ -110,15 +111,19 @@ rm -f "${OUT}/${IMG_GZ}"
 # 126MB output). Accept exit 2 ONLY when stderr carries that exact warning;
 # a fatal gzip error (truncated stream, bad CRC) prints a different message
 # and is rejected. [[ -s ]] additionally proves the stream produced output.
-[[ -s "${OUT}/${IMG_OUT}" ]] || { echo "decompress failed (gzip exit ${gz_rc})" >&2; exit 1; }
+[[ -s "${OUT}/${IMG_OUT}" ]] || {
+	rm -f "${OUT}/${IMG_OUT}" "${OUT}/decompress.err"
+	echo "decompress failed (gzip exit ${gz_rc})" >&2
+	exit 1
+}
 if [[ $gz_rc -eq 2 ]] && ! grep -q "trailing garbage ignored" "${OUT}/decompress.err" 2>/dev/null; then
 	echo "decompress failed: gzip exit 2 without trailing-garbage warning" >&2
-	rm -f "${OUT}/decompress.err"
+	rm -f "${OUT}/${IMG_OUT}" "${OUT}/decompress.err"
 	exit 1
 fi
-if [[ $gz_rc -ne 0 && $gz_rc -ne 1 && $gz_rc -ne 2 ]]; then
+if [[ $gz_rc -ne 0 && $gz_rc -ne 2 ]]; then
 	echo "decompress failed (gzip exit ${gz_rc})" >&2
-	rm -f "${OUT}/decompress.err"
+	rm -f "${OUT}/${IMG_OUT}" "${OUT}/decompress.err"
 	exit 1
 fi
 rm -f "${OUT}/decompress.err"
