@@ -37,11 +37,25 @@ ok "usrmanage doctor"
 ssh_guest 'usrmanage list --json' >/dev/null || die "usrmanage list failed"
 ok "usrmanage list"
 
-# Keep one admin so del of secondary users is allowed (last-admin guard).
-printf 'LabPassAdmin!\n' | ssh_guest 'usrmanage add umadmin --role admin --password-fd 0' \
-	|| die "usrmanage add admin failed"
-ok "add umadmin admin"
+# Keep one stable admin so secondary fixture deletion is permitted (last-admin guard).
+# Reuse it on reruns; promote only if a previous interrupted run demoted it.
+if _admin_json="$(ssh_guest 'usrmanage show umadmin --json' 2>/dev/null)"; then
+	if ! printf '%s' "$_admin_json" | grep -q '"role":"admin"'; then
+		ssh_guest 'usrmanage set-role umadmin --role admin' || die "promote umadmin fixture failed"
+	fi
+	ok "reuse umadmin admin fixture"
+else
+	if ssh_guest 'id umadmin >/dev/null 2>&1'; then
+		die "umadmin exists outside usrmanage; refusing to claim an unmanaged account"
+	fi
+	printf 'LabPassAdmin!\n' | ssh_guest 'usrmanage add umadmin --role admin --password-fd 0' \
+		|| die "usrmanage add admin failed"
+	ok "add umadmin admin"
+fi
 
+# Remove leftovers from an interrupted previous run before recreating the fixture.
+ssh_guest 'usrmanage del umsmoke >/dev/null 2>&1 || true'
+ssh_guest 'rm -rf /home/umsmoke' || die "remove stale umsmoke home failed"
 printf 'LabPass1!\n' | ssh_guest 'usrmanage add umsmoke --role readonly --password-fd 0' \
 	|| die "usrmanage add readonly failed"
 ok "add umsmoke readonly"
@@ -474,9 +488,8 @@ HTTP_CODE="$(printf '%s' "$HTTP_HEADERS" | awk 'toupper($1) ~ /^HTTP/ { print $2
 if [[ -z "$HTTP_CODE" ]]; then
 	die "LuCI page unreachable"
 fi
-case "$HTTP_CODE" in
-	200|302|303) ok "LuCI usrmanage page HTTP ${HTTP_CODE}" ;;
-	*) die "LuCI usrmanage page HTTP ${HTTP_CODE}" ;;
-esac
+[[ "$HTTP_CODE" == 200 ]] \
+	|| die "LuCI usrmanage page expected HTTP 200, got ${HTTP_CODE} (redirect is not page success)"
+ok "LuCI usrmanage page HTTP ${HTTP_CODE}"
 
 echo "== usrmanage QEMU smoke PASSED ==" >&2
